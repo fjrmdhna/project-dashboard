@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: project_dashboard_postgres_dev
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-project_dashboard}
+      POSTGRES_USER: ${POSTGRES_USER:-project_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-projectpassword}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    networks:
+      - project_dashboard_dev_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-project_user} -d ${POSTGRES_DB:-project_dashboard}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: project_dashboard_redis_dev
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data_dev:/data
+    networks:
+      - project_dashboard_dev_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: project_dashboard_app_dev
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-project_user}:${POSTGRES_PASSWORD:-projectpassword}@postgres:5432/${POSTGRES_DB:-project_dashboard}
+      - REDIS_URL=redis://redis:6379
+      - NEXT_PUBLIC_SUPABASE_URL=https://opecotutdvtahsccpqzr.supabase.co
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wZWNvdHV0ZHZ0YWhzY2NwcXpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU1NDU4OTcsImV4cCI6MjA1MTEyMTg5N30.sptjTg-0L1lCep8S_wriw3ixm_sXiTAFX-JiPOQFAEU
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=project_dashboard
+      - POSTGRES_USER=project_user
+      - POSTGRES_PASSWORD=projectpassword
+      - MIGRATION_BATCH_SIZE=100
+      - MIGRATION_TIMEOUT=30000
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - project_dashboard_dev_network
+    command: npm run dev
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:
+
+networks:
+  project_dashboard_dev_network:
+    driver: bridge 

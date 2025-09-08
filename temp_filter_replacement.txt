@@ -1,0 +1,2 @@
+        {/* Filters and Search */}
+        <FilterSection onFiltersChange={handleFiltersChange} />

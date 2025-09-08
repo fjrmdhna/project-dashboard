@@ -1,0 +1,1176 @@
+import { Pool } from 'pg';
+
+// PostgreSQL Pool (reuse from migration-utils)
+const postgresPool = new Pool({
+  host: process.env.POSTGRES_HOST || 'postgres',
+  port: parseInt(process.env.POSTGRES_PORT || '5432'),
+  database: process.env.POSTGRES_DB || 'project_dashboard',
+  user: process.env.POSTGRES_USER || 'project_user',
+  password: process.env.POSTGRES_PASSWORD || 'projectpassword',
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+// Hermes 5G Data Interface
+export interface Hermes5GData {
+  system_key: string;
+  site_id: string;
+  site_name: string;
+  vendor_name: string;
+  site_status: string;
+  region: string;
+  year: string;
+  program_name: string;
+  "SBOQ.project_type": string;
+  vendor_code: string;
+  "5g_readiness_date": string | null;
+  "5g_activation_date": string | null;
+  cx_acceptance_status: string;
+  long: number | null;
+  lat: number | null;
+  created_at: string;
+  site_category?: string;
+  scope_of_work?: string;
+  region_wise?: string;
+  region_circle?: string;
+}
+
+// Pagination Interface
+export interface PaginationParams {
+  page: number;
+  pageSize: number;
+  search?: string;
+  statusFilter?: string;
+  regionFilter?: string;
+  vendorFilter?: string;
+  programFilter?: string;
+  cityFilter?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+// Response Interface
+export interface Hermes5GResponse {
+  status: 'success' | 'error';
+  data: Hermes5GData[];
+  pagination: {
+    currentPage: number;
+    pageSize: number;
+    totalRecords: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+  stats: {
+    total: number;
+    scope: number;
+    caf: number;
+    mos: number;
+    installation: number;
+    fiveGReadiness: number;
+    fiveGActivation: number;
+    rfc: number;
+    endorse: number;
+    hotnews: number;
+    pac: number;
+    clusterAtp: number;
+  };
+  timestamp: string;
+}
+
+// 5G Readiness Chart Data Interface
+export interface ReadinessChartData {
+  location: string;
+  nyReadiness: number;
+  readiness: number;
+}
+
+export interface ReadinessChartResponse {
+  status: 'success' | 'error';
+  data: ReadinessChartData[];
+  timestamp: string;
+}
+
+// 5G Activated Chart Data Interface
+export interface ActivatedChartData {
+  location: string;
+  nyActivated: number;
+  activated: number;
+}
+
+export interface ActivatedChartResponse {
+  status: 'success' | 'error';
+  data: ActivatedChartData[];
+  timestamp: string;
+}
+
+// Progress Curve Data Interface
+export interface ProgressCurveData {
+  period: string;           // "W36-Sep", "W37-Sep", "Oct", "Nov"
+  forecastAccelerate: number;  // Count dari rfs_forecast_lock
+  readiness: number;        // Count dari imp_integ_af NOT NULL
+  activated: number;        // Count dari rfs_af NOT NULL
+}
+
+export interface ProgressCurveResponse {
+  status: 'success' | 'error';
+  data: ProgressCurveData[];
+  timestamp: string;
+}
+
+// Daily Runrate Data Interface
+export interface DailyRunrateData {
+  date: string;             // "12-Sep-25", "13-Sep-25", etc.
+  readiness: number;        // Count dari imp_integ_af NOT NULL
+  activated: number;        // Count dari rfs_af NOT NULL
+}
+
+export interface DailyRunrateResponse {
+  status: 'success' | 'error';
+  data: DailyRunrateData[];
+  timestamp: string;
+  note?: string;
+}
+
+// Data Alignment Chart Data Interface
+export interface DataAlignmentData {
+  caf: number
+  mos: number
+  install: number
+  readiness: number
+  activated: number
+  rfc: number
+  hn: number
+  endorse: number
+}
+
+export interface DataAlignmentResponse {
+  status: 'success' | 'error';
+  data: DataAlignmentData;
+  timestamp: string;
+}
+
+// Top 5 Issue Chart Data Interface
+export interface Top5IssueData {
+  category: string
+  count: number
+  color: string
+}
+
+export interface Top5IssueResponse {
+  status: 'success' | 'error';
+  data: Top5IssueData[];
+  top5Count: number;
+  totalCount: number;
+  timestamp: string;
+}
+
+// Nano Cluster Chart Data Interface
+export interface NanoClusterData {
+  totalClusters: number
+  readinessLess50: number
+  readiness50to80: number
+  readiness80to99: number
+  readiness100: number
+  completed: number
+}
+
+export interface NanoClusterResponse {
+  status: 'success' | 'error';
+  data: NanoClusterData;
+  timestamp: string;
+}
+
+// Filter Options Interface
+export interface FilterOptionsData {
+  vendors: string[]
+  programs: string[]
+  cities: string[]
+}
+
+export interface FilterOptionsResponse {
+  status: 'success' | 'error';
+  data: FilterOptionsData;
+  timestamp: string;
+}
+
+// Get Hermes 5G Data with Pagination
+export async function getHermes5GData(params: PaginationParams): Promise<Hermes5GResponse> {
+  try {
+    const client = await postgresPool.connect();
+    
+    // Build WHERE clause
+    const whereConditions: string[] = [];
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+    
+    // Search filter
+    if (params.search) {
+      whereConditions.push(`(
+        LOWER(site_name) LIKE LOWER($${paramIndex}) OR 
+        LOWER(site_id) LIKE LOWER($${paramIndex}) OR 
+        LOWER(vendor_name) LIKE LOWER($${paramIndex}) OR
+        LOWER(system_key) LIKE LOWER($${paramIndex})
+      )`);
+      queryParams.push(`%${params.search}%`);
+      paramIndex++;
+    }
+    
+    // Status filter
+    if (params.statusFilter && params.statusFilter !== 'all') {
+      whereConditions.push(`LOWER(site_status) = LOWER($${paramIndex})`);
+      queryParams.push(params.statusFilter);
+      paramIndex++;
+    }
+    
+    // Region filter
+    if (params.regionFilter && params.regionFilter !== 'all') {
+      whereConditions.push(`region = $${paramIndex}`);
+      queryParams.push(params.regionFilter);
+      paramIndex++;
+    }
+    
+    // Vendor filter
+    if (params.vendorFilter && params.vendorFilter !== 'all') {
+      whereConditions.push(`LOWER(vendor_code) = LOWER($${paramIndex})`);
+      queryParams.push(params.vendorFilter);
+      paramIndex++;
+    }
+    
+    // Program filter
+    if (params.programFilter && params.programFilter !== 'all') {
+      whereConditions.push(`program_report = $${paramIndex}`);
+      queryParams.push(params.programFilter);
+      paramIndex++;
+    }
+    
+    // City filter (using imp_ttp)
+    if (params.cityFilter && params.cityFilter !== 'all') {
+      whereConditions.push(`imp_ttp = $${paramIndex}`);
+      queryParams.push(params.cityFilter);
+      paramIndex++;
+    }
+    
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    
+    // Get total count
+    const countQuery = `SELECT COUNT(*) FROM site_data_5g
+      ${whereClause}
+      ${whereClause} ${whereClause}`;
+    const countResult = await client.query(countQuery, queryParams);
+    const totalRecords = parseInt(countResult.rows[0].count);
+    
+    // Calculate pagination
+    const totalPages = Math.ceil(totalRecords / params.pageSize);
+    const offset = (params.page - 1) * params.pageSize;
+    
+    // Build ORDER BY clause
+    const sortBy = params.sortBy || 'created_at';
+    const sortOrder = params.sortOrder || 'desc';
+    const orderClause = `ORDER BY "${sortBy}" ${sortOrder.toUpperCase()}`;
+    
+    // Get paginated data
+    const dataQuery = `
+      SELECT 
+        system_key,
+        site_id,
+        site_name,
+        vendor_name,
+        COALESCE(site_status, 'Unknown') as site_status,
+        region,
+        year,
+        program_name,
+        "SBOQ.project_type",
+        vendor_code,
+        "5g_readiness_date",
+        "5g_activation_date",
+        COALESCE(cx_acceptance_status, 'Unknown') as cx_acceptance_status,
+        long,
+        lat,
+        created_at,
+        site_category,
+        scope_of_work,
+        region_wise,
+        region_circle,
+        imp_ttp,
+        imp_integ_af,
+        rfs_af,
+        caf_approved,
+        mos_af,
+        ic_000040_af,
+        rfc_approved,
+        hotnews_af,
+        endorse_af,
+        pac_accepted_af,
+        cluster_acceptance_af,
+        issue_category,
+        nano_cluster,
+        rfs_forecast_lock
+      FROM site_data_5g
+      ${whereClause} 
+      ${whereClause}
+      ${orderClause}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+    
+    const dataParams = [...queryParams, params.pageSize, offset];
+    const dataResult = await client.query(dataQuery, dataParams);
+    
+    client.release();
+    
+    // Calculate stats
+    const stats = await getHermes5GStats({ search: params.search, statusFilter: params.statusFilter, regionFilter: params.regionFilter, vendorFilter: params.vendorFilter, programFilter: params.programFilter, cityFilter: params.cityFilter });
+    
+    return {
+      status: 'success',
+      data: dataResult.rows,
+      pagination: {
+        currentPage: params.page,
+        pageSize: params.pageSize,
+        totalRecords,
+        totalPages,
+        hasNext: params.page < totalPages,
+        hasPrev: params.page > 1
+      },
+      stats,
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    console.error('Error fetching Hermes 5G data:', error);
+    throw error;
+  }
+}
+
+// Get Hermes 5G Statistics
+export async function getHermes5GStats(filters?: { search?: string; statusFilter?: string; regionFilter?: string; vendorFilter?: string; programFilter?: string; cityFilter?: string; }) {
+  try {
+    const client = await postgresPool.connect();
+    
+    
+    // Build WHERE clause for stats
+    const whereConditions = [];
+    const queryParams = [];
+    let paramIndex = 1;
+    
+    if (filters?.search) {
+      whereConditions.push(`(LOWER(site_name) LIKE LOWER($${paramIndex}) OR LOWER(site_id) LIKE LOWER($${paramIndex}) OR LOWER(vendor_name) LIKE LOWER($${paramIndex}) OR LOWER(system_key) LIKE LOWER($${paramIndex}))`);
+      queryParams.push(`%${filters.search}%`);
+      paramIndex++;
+    }
+    
+    if (filters?.statusFilter && filters.statusFilter !== 'all') {
+      whereConditions.push(`LOWER(site_status) = LOWER($${paramIndex})`);
+      queryParams.push(filters.statusFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.regionFilter && filters.regionFilter !== 'all') {
+      whereConditions.push(`region = $${paramIndex}`);
+      queryParams.push(filters.regionFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
+      whereConditions.push(`LOWER(vendor_code) = LOWER($${paramIndex})`);
+      queryParams.push(filters.vendorFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.programFilter && filters.programFilter !== 'all') {
+      whereConditions.push(`program_report = $${paramIndex}`);
+      queryParams.push(filters.programFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.cityFilter && filters.cityFilter !== 'all') {
+      whereConditions.push(`imp_ttp = $${paramIndex}`);
+      queryParams.push(filters.cityFilter);
+      paramIndex++;
+    }
+    
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    
+const statsQuery = `
+      SELECT 
+        COUNT(*) as total,
+        COUNT(CASE WHEN system_key IS NOT NULL THEN 1 END) as scope,
+        COUNT(CASE WHEN caf_approved IS NOT NULL THEN 1 END) as caf,
+        COUNT(CASE WHEN mos_af IS NOT NULL THEN 1 END) as mos,
+        COUNT(CASE WHEN ic_000040_af IS NOT NULL THEN 1 END) as installation,
+        COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as five_g_readiness,
+        COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as five_g_activation,
+        COUNT(CASE WHEN rfc_approved IS NOT NULL THEN 1 END) as rfc,
+        COUNT(CASE WHEN endorse_af IS NOT NULL THEN 1 END) as endorse,
+        COUNT(CASE WHEN hotnews_af IS NOT NULL THEN 1 END) as hotnews,
+        COUNT(CASE WHEN pac_accepted_af IS NOT NULL THEN 1 END) as pac,
+        COUNT(CASE WHEN cluster_acceptance_af IS NOT NULL THEN 1 END) as cluster_atp
+      FROM site_data_5g
+      ${whereClause}
+    `;
+    
+    const result = await client.query(statsQuery, queryParams);
+    client.release();
+    
+    const row = result.rows[0];
+    return {
+      total: parseInt(row.total),
+      scope: parseInt(row.scope),
+      caf: parseInt(row.caf),
+      mos: parseInt(row.mos),
+      installation: parseInt(row.installation),
+      fiveGReadiness: parseInt(row.five_g_readiness),
+      fiveGActivation: parseInt(row.five_g_activation),
+      rfc: parseInt(row.rfc),
+      endorse: parseInt(row.endorse),
+      hotnews: parseInt(row.hotnews),
+      pac: parseInt(row.pac),
+      clusterAtp: parseInt(row.cluster_atp)
+    };
+    
+  } catch (error) {
+    console.error('Error fetching Hermes 5G stats:', error);
+    return {
+      total: 0,
+      scope: 0,
+      caf: 0,
+      mos: 0,
+      installation: 0,
+      fiveGReadiness: 0,
+      fiveGActivation: 0,
+      rfc: 0,
+      endorse: 0,
+      hotnews: 0,
+      pac: 0,
+      clusterAtp: 0
+    };
+  }
+}
+
+// Get Available Filter Options
+export async function getFilterOptions(): Promise<FilterOptionsResponse> {
+  try {
+    const client = await postgresPool.connect();
+    
+    // Get unique vendors from vendor_name
+    const vendorsQuery = `
+      SELECT DISTINCT vendor_name 
+      FROM site_data_5g
+      ${whereClause} 
+      WHERE vendor_name IS NOT NULL 
+        AND vendor_name != ''
+      ORDER BY vendor_name
+    `;
+    
+    // Get unique programs from program_report
+    const programsQuery = `
+      SELECT DISTINCT program_report 
+      FROM site_data_5g
+      ${whereClause} 
+      WHERE program_report IS NOT NULL 
+        AND program_report != ''
+      ORDER BY program_report
+    `;
+    
+    // Get unique cities from imp_ttp
+    const citiesQuery = `
+      SELECT DISTINCT imp_ttp 
+      FROM site_data_5g
+      ${whereClause} 
+      WHERE imp_ttp IS NOT NULL 
+        AND imp_ttp != ''
+      ORDER BY imp_ttp
+    `;
+    
+    const [vendorsResult, programsResult, citiesResult] = await Promise.all([
+      client.query(vendorsQuery),
+      client.query(programsQuery),
+      client.query(citiesQuery)
+    ]);
+    
+    client.release();
+    
+    const data: FilterOptionsData = {
+      vendors: vendorsResult.rows.map(row => row.vendor_name),
+      programs: programsResult.rows.map(row => row.program_report),
+      cities: citiesResult.rows.map(row => row.imp_ttp)
+    };
+    
+    console.log('Filter options from DB:', data);
+    
+    return {
+      status: 'success',
+      data,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error getting filter options:', error);
+    return {
+      status: 'error',
+      data: {
+        vendors: [],
+        programs: [],
+        cities: []
+      },
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// Get 5G Readiness Chart Data
+export async function getReadinessChartData(filters?: {
+  vendorFilter?: string;
+  programFilter?: string;
+  cityFilter?: string;
+}): Promise<ReadinessChartResponse> {
+  try {
+    const client = await postgresPool.connect();
+    
+    // Build WHERE clause for filters
+    const whereConditions: string[] = [];
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+    
+    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
+      whereConditions.push(`vendor_name = $${paramIndex}`);
+      queryParams.push(filters.vendorFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.programFilter && filters.programFilter !== 'all') {
+      whereConditions.push(`program_report = $${paramIndex}`);
+      queryParams.push(filters.programFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.cityFilter && filters.cityFilter !== 'all') {
+      whereConditions.push(`imp_ttp = $${paramIndex}`);
+      queryParams.push(filters.cityFilter);
+      paramIndex++;
+    }
+    
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    
+    const query = `
+      SELECT 
+        COALESCE(imp_ttp, 'NULL') as location,
+        COUNT(CASE WHEN imp_integ_af IS NULL THEN 1 END) as nyReadiness,
+        COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness
+      FROM site_data_5g
+      ${whereClause} 
+      ${whereClause}
+      GROUP BY imp_ttp
+      ORDER BY nyReadiness DESC
+    `;
+    
+    const result = await client.query(query, queryParams);
+    client.release();
+    
+    return {
+      status: 'success',
+      data: result.rows.map(row => ({
+        location: row.location,
+        nyReadiness: parseInt(row.nyreadiness) || 0,
+        readiness: parseInt(row.readiness) || 0
+      })),
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error getting readiness chart data:', error);
+    return {
+      status: 'error',
+      data: [],
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// Get 5G Activated Chart Data
+export async function getActivatedChartData(filters?: {
+  vendorFilter?: string;
+  programFilter?: string;
+  cityFilter?: string;
+}): Promise<ActivatedChartResponse> {
+  try {
+    const client = await postgresPool.connect();
+    
+    // Build WHERE clause for filters
+    const whereConditions: string[] = [];
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+    
+    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
+      whereConditions.push(`vendor_name = $${paramIndex}`);
+      queryParams.push(filters.vendorFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.programFilter && filters.programFilter !== 'all') {
+      whereConditions.push(`program_report = $${paramIndex}`);
+      queryParams.push(filters.programFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.cityFilter && filters.cityFilter !== 'all') {
+      whereConditions.push(`imp_ttp = $${paramIndex}`);
+      queryParams.push(filters.cityFilter);
+      paramIndex++;
+    }
+    
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    
+    const query = `
+      SELECT 
+        COALESCE(imp_ttp, 'NULL') as location,
+        COUNT(CASE WHEN rfs_af IS NULL THEN 1 END) as nyActivated,
+        COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated
+      FROM site_data_5g
+      ${whereClause} 
+      ${whereClause}
+      GROUP BY imp_ttp
+      ORDER BY nyActivated DESC
+    `;
+    
+    const result = await client.query(query, queryParams);
+    client.release();
+    
+    return {
+      status: 'success',
+      data: result.rows.map(row => ({
+        location: row.location,
+        nyActivated: parseInt(row.nyactivated) || 0,
+        activated: parseInt(row.activated) || 0
+      })),
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error getting activated chart data:', error);
+    return {
+      status: 'error',
+      data: [],
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// Get Progress Curve Data
+export async function getProgressCurveData(filters?: {
+  vendorFilter?: string;
+  programFilter?: string;
+  cityFilter?: string;
+}): Promise<ProgressCurveResponse> {
+  try {
+    const client = await postgresPool.connect();
+    
+    // Build WHERE clause for filters
+    const whereConditions: string[] = ['rfs_forecast_lock IS NOT NULL'];
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+    
+    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
+      whereConditions.push(`vendor_name = $${paramIndex}`);
+      queryParams.push(filters.vendorFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.programFilter && filters.programFilter !== 'all') {
+      whereConditions.push(`program_report = $${paramIndex}`);
+      queryParams.push(filters.programFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.cityFilter && filters.cityFilter !== 'all') {
+      whereConditions.push(`imp_ttp = $${paramIndex}`);
+      queryParams.push(filters.cityFilter);
+      paramIndex++;
+    }
+    
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    
+    // Get real data from database with proper aggregation
+    const realDataQuery = `
+      WITH weekly_data AS (
+        SELECT 
+          EXTRACT(WEEK FROM rfs_forecast_lock) as week_num,
+          COUNT(*) as forecastAccelerate,
+          COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness,
+          COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated
+        FROM site_data_5g
+      ${whereClause} 
+        ${whereClause}
+          AND EXTRACT(MONTH FROM rfs_forecast_lock) = 9 
+          AND EXTRACT(YEAR FROM rfs_forecast_lock) = 2025
+        GROUP BY EXTRACT(WEEK FROM rfs_forecast_lock)
+      ),
+      monthly_data AS (
+        SELECT 
+          EXTRACT(MONTH FROM rfs_forecast_lock) as month_num,
+          COUNT(*) as forecastAccelerate,
+          COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness,
+          COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated
+        FROM site_data_5g
+      ${whereClause} 
+        ${whereClause}
+          AND EXTRACT(MONTH FROM rfs_forecast_lock) IN (10, 11, 12, 1, 2)
+          AND EXTRACT(YEAR FROM rfs_forecast_lock) IN (2024, 2025)
+        GROUP BY EXTRACT(MONTH FROM rfs_forecast_lock)
+      )
+      SELECT 'weekly' as data_type, week_num as period_num, forecastAccelerate, readiness, activated
+      FROM weekly_data
+      UNION ALL
+      SELECT 'monthly' as data_type, month_num as period_num, forecastAccelerate, readiness, activated
+      FROM monthly_data
+      ORDER BY data_type DESC, period_num
+    `;
+    
+    const result = await client.query(realDataQuery, queryParams);
+    client.release();
+    
+    // Process real data to create periods
+    const processedData: ProgressCurveData[] = result.rows.map(row => {
+      const dataType = row.data_type;
+      const periodNum = parseInt(row.period_num);
+      
+      let period = '';
+      if (dataType === 'weekly') {
+        // Weekly format for current month (September)
+        period = `W${periodNum}-Sep`;
+      } else {
+        // Monthly format for previous months
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        period = monthNames[periodNum - 1];
+      }
+      
+      return {
+        period,
+        forecastAccelerate: parseInt(row.forecastaccelerate) || 0,
+        readiness: parseInt(row.readiness) || 0,
+        activated: parseInt(row.activated) || 0
+      };
+    });
+    
+    return {
+      status: 'success',
+      data: processedData,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error getting progress curve data:', error);
+    return {
+      status: 'error',
+      data: [],
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// Get Daily Runrate Data for Last 7 Days
+export async function getDailyRunrateData(filters?: {
+  vendorFilter?: string;
+  programFilter?: string;
+  cityFilter?: string;
+}): Promise<DailyRunrateResponse> {
+  try {
+    const client = await postgresPool.connect();
+    
+    // Build WHERE clause for filters
+    const whereConditions: string[] = [];
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+    
+    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
+      whereConditions.push(`s5g.vendor_name = $${paramIndex}`);
+      queryParams.push(filters.vendorFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.programFilter && filters.programFilter !== 'all') {
+      whereConditions.push(`s5g.program_report = $${paramIndex}`);
+      queryParams.push(filters.programFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.cityFilter && filters.cityFilter !== 'all') {
+      whereConditions.push(`s5g.imp_ttp = $${paramIndex}`);
+      queryParams.push(filters.cityFilter);
+      paramIndex++;
+    }
+    
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    
+    // Get data for current week (Monday to Sunday)
+    const query = `
+      WITH date_series AS (
+        SELECT generate_series(
+          DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '1 day', -- Monday
+          DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '7 days', -- Sunday
+          INTERVAL '1 day'
+        )::date as week_date
+      ),
+      daily_counts AS (
+        SELECT 
+          TO_CHAR(ds.week_date, 'DD-Mon-YY') as date,
+          COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness,
+          COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated
+        FROM date_series ds
+        LEFT JOIN site_data_5g s5g ON DATE(COALESCE(s5g.imp_integ_af, s5g.rfs_af)) = ds.week_date
+        ${whereClause}
+        GROUP BY ds.week_date
+        ORDER BY ds.week_date
+      )
+      SELECT * FROM daily_counts
+    `;
+    
+    const result = await client.query(query, queryParams);
+    client.release();
+    
+    // Process data to ensure we have all 7 days
+    const processedData = result.rows.map(row => ({
+      date: row.date,
+      readiness: parseInt(row.readiness) || 0,
+      activated: parseInt(row.activated) || 0
+    }));
+    
+    // Log what we got from database
+    console.log('Daily Runrate - Current week data from DB:', processedData);
+    
+    return {
+      status: 'success',
+      data: processedData,
+      timestamp: new Date().toISOString(),
+      note: processedData.length === 7 ? 'Full current week data (Mon-Sun)' : `Only ${processedData.length} days available`
+    };
+  } catch (error) {
+    console.error('Error getting daily runrate data:', error);
+    return {
+      status: 'error',
+      data: [],
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// Get Data Alignment Data
+export async function getDataAlignmentData(filters?: {
+  vendorFilter?: string;
+  programFilter?: string;
+  cityFilter?: string;
+}): Promise<DataAlignmentResponse> {
+  try {
+    const client = await postgresPool.connect();
+    
+    // Build WHERE clause for filters
+    const whereConditions: string[] = [];
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+    
+    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
+      whereConditions.push(`vendor_name = $${paramIndex}`);
+      queryParams.push(filters.vendorFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.programFilter && filters.programFilter !== 'all') {
+      whereConditions.push(`program_report = $${paramIndex}`);
+      queryParams.push(filters.programFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.cityFilter && filters.cityFilter !== 'all') {
+      whereConditions.push(`imp_ttp = $${paramIndex}`);
+      queryParams.push(filters.cityFilter);
+      paramIndex++;
+    }
+    
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    
+    const query = `
+      SELECT 
+        COUNT(CASE WHEN caf_approved IS NOT NULL THEN 1 END) as caf,
+        COUNT(CASE WHEN mos_af IS NOT NULL THEN 1 END) as mos,
+        COUNT(CASE WHEN ic_000040_af IS NOT NULL THEN 1 END) as install,
+        COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness,
+        COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated,
+        COUNT(CASE WHEN rfc_approved IS NOT NULL THEN 1 END) as rfc,
+        COUNT(CASE WHEN hotnews_af IS NOT NULL THEN 1 END) as hn,
+        COUNT(CASE WHEN endorse_af IS NOT NULL THEN 1 END) as endorse
+      FROM site_data_5g
+      ${whereClause}
+      ${whereClause}
+    `;
+    
+    const result = await client.query(query, queryParams);
+    client.release();
+    
+    const row = result.rows[0];
+    const data: DataAlignmentData = {
+      caf: parseInt(row.caf) || 0,
+      mos: parseInt(row.mos) || 0,
+      install: parseInt(row.install) || 0,
+      readiness: parseInt(row.readiness) || 0,
+      activated: parseInt(row.activated) || 0,
+      rfc: parseInt(row.rfc) || 0,
+      hn: parseInt(row.hn) || 0,
+      endorse: parseInt(row.endorse) || 0
+    };
+    
+    console.log('Data Alignment data from DB:', data);
+    
+    return {
+      status: 'success',
+      data,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error getting data alignment data:', error);
+    return {
+      status: 'error',
+      data: {
+        caf: 0,
+        mos: 0,
+        install: 0,
+        readiness: 0,
+        activated: 0,
+        rfc: 0,
+        hn: 0,
+        endorse: 0
+      },
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// Get Top 5 Issue Data
+export async function getTop5IssueData(filters?: {
+  vendorFilter?: string;
+  programFilter?: string;
+  cityFilter?: string;
+}): Promise<Top5IssueResponse> {
+  try {
+    const client = await postgresPool.connect();
+    
+    // Build WHERE clause for filters
+    const whereConditions: string[] = ['issue_category IS NOT NULL', `issue_category != ''`];
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+    
+    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
+      whereConditions.push(`vendor_name = $${paramIndex}`);
+      queryParams.push(filters.vendorFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.programFilter && filters.programFilter !== 'all') {
+      whereConditions.push(`program_report = $${paramIndex}`);
+      queryParams.push(filters.programFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.cityFilter && filters.cityFilter !== 'all') {
+      whereConditions.push(`imp_ttp = $${paramIndex}`);
+      queryParams.push(filters.cityFilter);
+      paramIndex++;
+    }
+    
+    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    
+    // Get top 5 issue categories by count
+    const query = `
+      SELECT 
+        issue_category as category,
+        COUNT(*) as count
+      FROM site_data_5g
+      ${whereClause} 
+      ${whereClause}
+      GROUP BY issue_category 
+      ORDER BY count DESC 
+      LIMIT 5
+    `;
+    
+    const result = await client.query(query, queryParams);
+    client.release();
+    
+    // Get total count of all issues
+    const totalQuery = `
+      SELECT COUNT(*) as total
+      FROM site_data_5g
+      ${whereClause} 
+      ${whereClause}
+    `;
+    
+    const totalResult = await client.query(totalQuery, queryParams);
+    const totalCount = parseInt(totalResult.rows[0].total) || 0;
+    
+    // Define colors for segments
+    const colors = ['#3B82F6', '#10B981', '#06B6D4', '#EF4444', '#8B5CF6'];
+    
+    // Process data with colors
+    const processedData: Top5IssueData[] = result.rows.map((row, index) => ({
+      category: row.category,
+      count: parseInt(row.count) || 0,
+      color: colors[index] || '#6B7280'
+    }));
+    
+    // Calculate top 5 count
+    const top5Count = processedData.reduce((sum, item) => sum + item.count, 0);
+    
+    console.log('Top 5 Issue data from DB:', processedData);
+    console.log('Top 5 Count:', top5Count, 'Total Count:', totalCount);
+    
+    return {
+      status: 'success',
+      data: processedData,
+      top5Count,
+      totalCount,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error getting top 5 issue data:', error);
+    return {
+      status: 'error',
+      data: [],
+      top5Count: 0,
+      totalCount: 0,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// Get Nano Cluster Data
+export async function getNanoClusterData(filters?: {
+  vendorFilter?: string;
+  programFilter?: string;
+  cityFilter?: string;
+}): Promise<NanoClusterResponse> {
+  try {
+    const client = await postgresPool.connect();
+    
+    // Build WHERE clause for filters
+    const whereConditions: string[] = ['nano_cluster IS NOT NULL', `nano_cluster != ''`];
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+    
+    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
+      whereConditions.push(`vendor_name = $${paramIndex}`);
+      queryParams.push(filters.vendorFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.programFilter && filters.programFilter !== 'all') {
+      whereConditions.push(`program_report = $${paramIndex}`);
+      queryParams.push(filters.programFilter);
+      paramIndex++;
+    }
+    
+    if (filters?.cityFilter && filters.cityFilter !== 'all') {
+      whereConditions.push(`imp_ttp = $${paramIndex}`);
+      queryParams.push(filters.cityFilter);
+      paramIndex++;
+    }
+    
+    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    
+    // Get total unique nano clusters
+    const totalQuery = `
+      SELECT COUNT(DISTINCT nano_cluster) as total
+      FROM site_data_5g
+      ${whereClause} 
+      ${whereClause}
+    `;
+    
+    const totalResult = await client.query(totalQuery, queryParams);
+    const totalClusters = parseInt(totalResult.rows[0].total) || 0;
+    
+    // Get cluster readiness data based on imp_integ_af
+    const readinessQuery = `
+      WITH cluster_readiness AS (
+        SELECT 
+          nano_cluster,
+          COUNT(*) as total_sites,
+          COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as ready_sites
+        FROM site_data_5g
+      ${whereClause} 
+        ${whereClause}
+        GROUP BY nano_cluster
+      ),
+      readiness_percentage AS (
+        SELECT 
+          nano_cluster,
+          total_sites,
+          ready_sites,
+          CASE 
+            WHEN total_sites = 0 THEN 0
+            ELSE (ready_sites::float / total_sites::float) * 100
+          END as readiness_percentage
+        FROM cluster_readiness
+      )
+      SELECT 
+        COUNT(CASE WHEN readiness_percentage < 50 THEN 1 END) as less_50,
+        COUNT(CASE WHEN readiness_percentage >= 50 AND readiness_percentage < 80 THEN 1 END) as between_50_80,
+        COUNT(CASE WHEN readiness_percentage >= 80 AND readiness_percentage < 99 THEN 1 END) as between_80_99,
+        COUNT(CASE WHEN readiness_percentage >= 99 AND readiness_percentage < 100 THEN 1 END) as between_99_100,
+        COUNT(CASE WHEN readiness_percentage = 100 THEN 1 END) as exactly_100
+      FROM readiness_percentage
+    `;
+    
+    const readinessResult = await client.query(readinessQuery, queryParams);
+    const readinessRow = readinessResult.rows[0];
+    
+    // Get completed clusters (100% 5G activated based on rfs_af)
+    const completedQuery = `
+      WITH cluster_activation AS (
+        SELECT 
+          nano_cluster,
+          COUNT(*) as total_sites,
+          COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated_sites
+        FROM site_data_5g
+      ${whereClause} 
+        ${whereClause}
+        GROUP BY nano_cluster
+      )
+      SELECT COUNT(*) as completed
+      FROM cluster_activation 
+      WHERE total_sites > 0 
+        AND (activated_sites::float / total_sites::float) = 1.0
+    `;
+    
+    const completedResult = await client.query(completedQuery, queryParams);
+    const completed = parseInt(completedResult.rows[0].completed) || 0;
+    
+    client.release();
+    
+    const data: NanoClusterData = {
+      totalClusters,
+      readinessLess50: parseInt(readinessRow.less_50) || 0,
+      readiness50to80: parseInt(readinessRow.between_50_80) || 0,
+      readiness80to99: parseInt(readinessRow.between_80_99) || 0,
+      readiness100: parseInt(readinessRow.exactly_100) || 0,
+      completed
+    };
+    
+    console.log('Nano Cluster data from DB:', data);
+    
+    return {
+      status: 'success',
+      data,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error getting nano cluster data:', error);
+    return {
+      status: 'error',
+      data: {
+        totalClusters: 0,
+        readinessLess50: 0,
+        readiness50to80: 0,
+        readiness80to99: 0,
+        readiness100: 0,
+        completed: 0
+      },
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+ 
