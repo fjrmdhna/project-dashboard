@@ -1,0 +1,6 @@
+ Cluster A    |   862
+ Cluster B    |   860
+ Cluster J    |   859
+ Cluster I    |   859
+ Cluster H    |   859
+

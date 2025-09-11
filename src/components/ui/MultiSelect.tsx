@@ -1,0 +1,193 @@
+"use client"
+
+import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
+import { Check, ChevronDown, X } from "lucide-react"
+
+export interface MultiSelectProps {
+  options: string[]
+  selected: string[]
+  placeholder?: string
+  onChange: (selected: string[]) => void
+  className?: string
+  disabled?: boolean
+  width?: string
+}
+
+export function MultiSelect({
+  options,
+  selected,
+  placeholder = "Select",
+  onChange,
+  className = "",
+  disabled = false,
+  width = "auto"
+}: MultiSelectProps) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 0 })
+  const [isMounted, setIsMounted] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
+
+  // Update menu position when button is clicked
+  const updateMenuPosition = () => {
+    if (!buttonRef.current) return
+    const rect = buttonRef.current.getBoundingClientRect()
+    setMenuPosition({
+      top: rect.bottom + window.scrollY + 4,
+      left: rect.left + window.scrollX,
+      width: Math.max(180, rect.width)
+    })
+  }
+
+  // Handle toggle dropdown
+  const handleToggle = () => {
+    if (!disabled) {
+      if (!open) {
+        updateMenuPosition()
+      }
+      setOpen(!open)
+    }
+  }
+
+  // Handle option selection
+  const handleOptionClick = (option: string) => {
+    const newSelected = selected.includes(option)
+      ? selected.filter(item => item !== option)
+      : [...selected, option]
+    
+    onChange(newSelected)
+  }
+
+  // Handle clear all
+  const handleClearAll = () => {
+    onChange([])
+    setSearchTerm("")
+  }
+
+  // Handle click outside
+  useEffect(() => {
+    if (!open) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        containerRef.current && 
+        !containerRef.current.contains(event.target as Node) &&
+        menuRef.current && 
+        !menuRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [open])
+
+  // Client-side only
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  // Filter options based on search term
+  const filteredOptions = searchTerm 
+    ? options.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()))
+    : options
+
+  // Display label
+  const label = selected.length === 0 
+    ? placeholder 
+    : selected.length === 1 
+      ? selected[0] 
+      : `${selected.length} selected`
+  
+  // Determine button width based on placeholder
+  const getButtonWidth = () => {
+    if (width !== "auto") return width;
+    
+    // Default widths based on placeholder
+    switch (placeholder) {
+      case "Vendor": return "w-[120px]";
+      case "Program": return "w-[130px]";
+      case "City (imp_ttp)": return "w-[150px]";
+      default: return "w-[130px]";
+    }
+  }
+
+  // Menu component
+  const Menu = () => (
+    <div
+      ref={menuRef}
+      className="fixed z-[9999] max-h-60 overflow-auto rounded-lg border border-white/10 bg-[#0F1630] p-2 shadow-lg"
+      style={{ 
+        top: `${menuPosition.top}px`, 
+        left: `${menuPosition.left}px`, 
+        minWidth: `${menuPosition.width}px` 
+      }}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-[9px] uppercase tracking-wider text-gray-400 px-1">Options</div>
+        {selected.length > 0 && (
+          <button 
+            onClick={handleClearAll}
+            className="text-[9px] text-gray-400 hover:text-white flex items-center gap-0.5"
+          >
+            Clear <X className="h-2.5 w-2.5" />
+          </button>
+        )}
+      </div>
+      
+      {/* Search input */}
+      <div className="mb-1.5 px-1">
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Search..."
+          className="w-full bg-white/5 rounded text-xs px-2 py-1 text-white placeholder:text-gray-500 outline-none focus:ring-1 focus:ring-white/20"
+        />
+      </div>
+      
+      {filteredOptions.length === 0 ? (
+        <div className="px-2 py-1 text-xs text-gray-400">No options found</div>
+      ) : (
+        <div>
+          {filteredOptions.map(option => (
+            <button 
+              key={option} 
+              type="button"
+              className="w-full text-left flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/5 cursor-pointer select-none"
+              onClick={() => handleOptionClick(option)}
+            >
+              <div className="flex-shrink-0 w-3.5 h-3.5 border rounded flex items-center justify-center border-white/20">
+                {selected.includes(option) && <Check className="h-2.5 w-2.5 text-blue-500" />}
+              </div>
+              <span className="text-xs text-white truncate">{option}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <div ref={containerRef} className={`relative ${className}`}>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={`bg-white/5 rounded-lg h-7 px-2 inline-flex items-center justify-between text-white ${getButtonWidth()}`}
+        onClick={handleToggle}
+        disabled={disabled}
+      >
+        <span className="truncate max-w-[100px] text-xs text-left">{label}</span>
+        <ChevronDown className="h-3.5 w-3.5 opacity-70 flex-shrink-0" />
+      </button>
+
+      {open && isMounted && createPortal(<Menu />, document.body)}
+    </div>
+  )
+} 

@@ -1,0 +1,6 @@
+ Power Issue         |  1229
+ Integration Problem |  1228
+ Permit Issue        |  1227
+ Equipment Issue     |  1226
+ Documentation Issue |  1226
+

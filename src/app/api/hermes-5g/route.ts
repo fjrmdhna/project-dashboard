@@ -12,8 +12,6 @@ export async function GET(request: Request) {
     const statusFilter = searchParams.get('status') || 'all'
     const regionFilter = searchParams.get('regionFilter') || searchParams.get('region') || 'all'
     const vendorFilter = searchParams.get('vendorFilter') || searchParams.get('vendor') || 'all'
-    const programFilter = searchParams.get('programFilter') || 'all'
-    const cityFilter = searchParams.get('cityFilter') || 'all'
     const sortBy = searchParams.get('sortBy') || 'created_at'
     const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc'
 
@@ -29,8 +27,6 @@ export async function GET(request: Request) {
       statusFilter,
       regionFilter,
       vendorFilter,
-      programFilter,
-      cityFilter,
       sortBy,
       sortOrder
     }

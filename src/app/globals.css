@@ -177,14 +177,52 @@
   --shadow-lg: 0px 4px 8px -2px hsl(0 0% 0% / 0.10), 0px 4px 6px -3px hsl(0 0% 0% / 0.10);
   --shadow-xl: 0px 4px 8px -2px hsl(0 0% 0% / 0.10), 0px 8px 10px -3px hsl(0 0% 0% / 0.10);
   --shadow-2xl: 0px 4px 8px -2px hsl(0 0% 0% / 0.25);
+  --tracking-normal: 0em;
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground; letter-spacing: var(--tracking-normal); }
   }
-  body {
-    @apply bg-background text-foreground;
-    letter-spacing: var(--tracking-normal);
+
+/* Baseline fullscreen + CSS-only scaling */
+html, body, #__next { height: 100%; overflow: hidden; margin: 0; padding: 0; }
+
+/* Dashboard layout variables */
+:root {
+  --wb-width: 2000px !important;
+  --wb-height: 900px !important;
+  --wb-header-height: 50px !important;
+  --wb-content-height: calc(var(--wb-height) - var(--wb-header-height)) !important;
+  --wb-column-gap: 16px !important;
+  --wb-row-gap: 8px !important;
+  --wb-card-padding: 12px !important;
+  
+  /* Column widths */
+  --wb-side-column-width: 460px !important;
+  --wb-middle-column-width: 940px !important;
+  
+  /* Column 1 & 3 card heights */
+  --wb-side-card-height: 410px !important;
+  
+  /* Column 2 components */
+  --wb-filter-height: 50px !important;
+  --wb-matrix-margin: 8px !important;
+  --wb-progress-height: 350px !important;
+  --wb-bottom-cards-height: 315px !important;
+}
+
+.wallboard-scale {
+  --wb-scale: min(1, min(calc(100dvw / var(--wb-width)), calc(100dvh / var(--wb-height))));
+  transform: scale(var(--wb-scale));
+  transform-origin: top left;
+  width: var(--wb-width);
+  height: var(--wb-height);
+  box-sizing: border-box;
+}
+
+@supports not (height: 100dvh) {
+  .wallboard-scale { 
+    --wb-scale: min(1, min(calc(100vw / var(--wb-width)), calc(100vh / var(--wb-height)))); 
   }
 }

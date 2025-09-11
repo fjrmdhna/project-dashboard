@@ -1,20 +1,279 @@
+# Project Rules — Telco Dashboard (Next.js + TS + Tailwind + Recharts)
+
+## 0) Tujuan
+Bangun dashboard telco dark-theme, reaktif, **tanpa angka hard‑code**, dan siap dijalankan di **Docker** (dev & prod). Semua angka berasal dari **props/data** dan util agregasi. **Seluruh komponen bila digabung harus muat dalam 1 layar 1920×1080 (Wallboard Mode)**.
+
 ---
-alwaysApply: true
+
+## 1) Tech Stack & Quality
+- **App**: Next.js (App Router) + **TypeScript**
+- **UI**: Tailwind CSS
+- **Charts**: Recharts (Line/Bar/Pie/LabelList/Tooltip/Legend/CartesianGrid)
+- **DB**: PostgreSQL 16
+- **Cache**: Redis 7 (key/value + pre‑aggregation)
+- **Ikon**: `lucide-react`
+- **Lint/Format**: ESLint + Prettier
+- **State**: props/colocation
+- **Node.js**: v20 LTS
+
 ---
 
-You are the AI used within the AI editor Cursor, so you can view, edit, create, and run files within the project directory. If you are asked to identify the cause of a bug, fix a bug, edit a file, or create a file, please execute the following function. Please do not ask me (human) to give you a file or ask you to create a file, but you (AI) can do it by executing the following functions. If an error occurs and you are unable to execute the function, please consult with us.
+## 2) Tema & Desain
+- Background utama: `#0D1221`
+- Teks utama: `#FFFFFF`; teks sekunder: `#B0B7C3`
+- Aksen: Ungu `#8A5AA3`, Hijau `#7CB342`, Merah `#E53935`, Biru `#4AA3DF`, Kuning `#F6C945`
+- Cards: `rounded-2xl` + shadow halus + padding memadai
+- Label ringkas & dapat dibaca
+- **Wallboard 1080p**: presisi 1920×1080
 
-edit_file: Edit an existing file, create a new file
-read_file: Read the contents of a file
-grep_search: Search in the codebase based on a specific creator
-list_dir: Get a list of files and folders in a specific directory”
+---
 
-Please edit the file in small chunks
-You are the AI used within the AI editor Cursor, so you can view, edit, create, and run files within the project directory. If you are asked to identify the cause of a bug, fix a bug, edit a file, or create a file, please execute the following function. Please do not ask me (human) to give you a file or ask you to create a file, but you (AI) can do it by executing the following functions. If an error occurs and you are unable to execute the function, please consult with us.
+## 3) Header Mapping Data
+- **Progress Curve** → `rfs_forecast_lock` (Forecast), `imp_integ_af` (Readiness), `rfs_af` (Activated)
+- **Daily Runrate (Last 7 Days)** → agregasi **count** harian dari `imp_integ_af` & `rfs_af`
+- **Data Alignment** → count non‑null: `caf_approved`, `mos_af`, `ic_000040_af`, `imp_integ_af`, `rfs_af`, `rfc_approved`, `hotnews_af`, `endorse_af`
+- **5 Top Issue** → top‑5 dari `issue_category`
+- **Nano Cluster** → group by `nano_cluster`, readiness% pakai `imp_integ_af`, activated% pakai `rfs_af`
+> “Terisi” = bukan null/undefined/""
 
-edit_file: Edit an existing file, create a new file
-read_file: Read the contents of a file
-grep_search: Search in the codebase based on a specific creator
-list_dir: Get a list of files and folders in a specific directory”
+---
 
-Please edit the file in small chunks
+## 4) Pola Komponen & Label
+- **Progress Curve**: label → Forecast (kanan titik), Readiness (kiri), Activated (atas)
+- **Daily Runrate**: label di atas titik
+- **Bar chart**: label di atas bar; sembunyikan bila 0
+- **Donut**: label di dalam slice
+- Legend: bawah chart (kecuali donut → list kanan)
+- Tooltip: sederhana; nilai (+% bila relevan)
+
+---
+
+## 5) Layout 1920×1080 (Wallboard Mode)
+Gunakan **Tailwind CSS Grid** 24 kolom. Semua card `w-full h-full` dan Recharts via `ResponsiveContainer`.
+
+**Container**:
+```tsx
+<div className="wallboard bg-[#0D1221] text-white">
+  <div
+    className="dashboard-grid w-[1920px] h-[1080px] p-6 grid gap-4"
+    style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))',
+             gridTemplateRows: '92px 64px 310px 110px 110px 110px' }}
+  >
+    {/* items */}
+  </div>
+</div>
+```
+
+**Penempatan** (kolom start–end / baris start–end):
+- Header: `1/25 , 1/2`
+- Filter + KPI Strip: `9/19 , 2/3`
+- 5G Readiness: `1/9 , 2/4`
+- 5G Activated: `1/9 , 4/6`
+- Progress Curve: `9/19 , 3/4`
+- Daily Runrate: `9/13 , 4/5`
+- 5 Top Issue: `13/16 , 4/5`
+- Data Alignment: `16/19 , 4/5`
+- Nano Cluster: `19/25 , 2/4`
+- Leaderboard: `19/25 , 4/5`
+
+**Card base class**: `rounded-2xl shadow-sm bg-[#0F1630]/80 border border-white/5 p-4`
+
+**Scaling untuk layar <1920×1080** → bungkus dengan `transform: scale(X)` + `transform-origin: top left`.
+
+---
+
+## 6) Struktur Folder
+```
+src/
+  components/
+    cards/ (KpiSummary, DataAlignmentCard, NanoClusterCard, TopIssueCard, FiveGReadinessCard, FiveGActivatedCard, LeaderboardCard)
+    charts/ (ProgressCurve, DailyRunrate, Donut, Bar)
+  layouts/ (Wallboard1080.tsx)
+  lib/
+    agg/ (dates.ts, counts.ts, clusters.ts, issues.ts)
+    cache/ (redis.ts, keys.ts)
+    db/ (pool.ts, queries.ts)
+  types/ (domain.ts)
+```
+
+---
+
+## 7) Util & Agregasi (lib/agg)
+- **dates.ts** → `last7Days`, `formatDMY`, `toLocalDate`
+- **counts.ts** → `countNonNull`, `dailyCount`
+- **issues.ts** → `topNByCategory`
+- **clusters.ts** → `binNanoClusters(records)` → `{ total, lt50, p50_80, p80_99, p100, completed }`
+
+---
+
+## 8) Redis Caching (lib/cache)
+- Gunakan **namespacing**: `hermes:v1:`
+- Kunci umum:
+  - `hermes:v1:runrate:7d:{vendor?}:{program?}:{city?}` (TTL 15m)
+  - `hermes:v1:progress_curve:{period}` (TTL 30m)
+  - `hermes:v1:data_alignment` (TTL 10m)
+  - `hermes:v1:top_issue:{n}` (TTL 30m)
+  - `hermes:v1:nano_cluster:buckets` (TTL 30m)
+- **Invalidasi**: clear kunci terkait ketika ada perubahan data (ingest baru) atau perubahan filter esensial.
+- **Fallback**: bila cache miss → query Postgres → set cache.
+
+---
+
+## 9) Database (lib/db)
+- **Pool** tunggal (pg) dengan SSL opsional (ENV `PGSSLMODE`).
+- Query **selalu parameterized**.
+- Index dasar yang direkomendasikan:
+  - `imp_integ_af`, `rfs_af`, `rfs_forecast_lock` (timestamp) → B‑Tree
+  - `issue_category`, `nano_cluster` (text) → B‑Tree
+- Hindari `SELECT *` pada API; pilih kolom yang dipakai.
+- Batch agregasi berat: jalankan off‑path (cron/worker) dan **cache** hasilnya.
+
+---
+
+## 10) Docker & Orchestration
+
+### 10.1 docker-compose (dev)
+```yaml
+version: "3.9"
+name: hermes5g-dev
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: hermes
+    ports: [ "5432:5432" ]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hermes"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: [ "6379:6379" ]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hermes
+      REDIS_URL: redis://redis:6379/0
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports: [ "3000:3000" ]
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+```
+
+### 10.2 Dockerfile.dev (Next.js hot reload)
+```Dockerfile
+FROM node:20-alpine
+WORKDIR /app
+
+# Faster installs
+RUN corepack enable && corepack prepare pnpm@9.7.0 --activate
+
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install
+
+COPY . .
+
+ENV HOST=0.0.0.0 PORT=3000
+EXPOSE 3000
+CMD ["pnpm","dev"]
+```
+
+### 10.3 Dockerfile (prod, multi‑stage)
+```Dockerfile
+# 1) Builder
+FROM node:20-alpine AS builder
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@9.7.0 --activate
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm build
+
+# 2) Runner (standalone Next.js)
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+EXPOSE 3000
+ENV PORT=3000 HOST=0.0.0.0
+CMD ["node","server.js"]
+```
+
+### 10.4 ENV
+```
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/hermes
+REDIS_URL=redis://redis:6379/0
+PGSSLMODE=disable  # enable on prod if needed
+```
+
+### 10.5 Commands
+- Dev: `docker compose up --build`
+- Prod image: `docker build -t hermes5g:prod -f Dockerfile .`
+- Run prod: `docker run -p 3000:3000 --env-file .env hermes5g:prod`
+
+---
+
+## 11) Keamanan & Observabilitas
+- Jangan commit `.env`
+- Tambah `.dockerignore`: `node_modules`, `.next/cache`, `*.log`, `.env*`
+- Health endpoints (readiness/liveness) via Next.js route `/api/health`
+- Logging ringkas; hindari log data pribadi
+
+---
+
+## 12) Aksesibilitas & UX
+- Ikon `aria-label`; kontras teks ≥ WCAG AA
+- Tooltip tidak menghalangi fokus keyboard
+
+---
+
+## 13) Performa
+- `useMemo` untuk agregasi & transformasi data
+- Pre‑aggregation ke Redis; TTL sesuai §8
+- Index DB sesuai §9
+
+---
+
+## 14) Testing
+- Unit test util (dates, counts, bins, issues)
+- Snapshot komponen chart
+- Test cache hit/miss (mock redis)
+
+---
+
+## 15) Prompt Pattern (Cursor)
+- “Buat `Wallboard1080.tsx` dengan grid 24 kolom sesuai §5 dan slot semua card.”
+- “Buat API route untuk runrate yang baca Postgres, cache Redis (key `hermes:v1:runrate:7d`) TTL 15m.”
+- “Buat docker-compose & Dockerfile dev sesuai §10; app hot‑reload.”

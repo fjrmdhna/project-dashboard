@@ -1,0 +1,62 @@
+ system_key               | text                        | NO
+ SBOQ.project_type        | text                        | YES
+ vendor_code              | text                        | YES
+ vendor_name              | text                        | YES
+ wbs_status               | text                        | YES
+ site_id                  | text                        | YES
+ site_name                | text                        | YES
+ new_site_id              | text                        | YES
+ new_site_name            | text                        | YES
+ unique_id                | text                        | YES
+ relo_id                  | text                        | YES
+ relo_name                | text                        | YES
+ site_category            | text                        | YES
+ po_number                | text                        | YES
+ po_subline               | text                        | YES
+ network_header           | text                        | YES
+ year                     | text                        | YES
+ program_name             | text                        | YES
+ project_name             | text                        | YES
+ program                  | text                        | YES
+ program_report           | text                        | YES
+ ran_score                | text                        | YES
+ region                   | text                        | YES
+ region_wise              | text                        | YES
+ region_circle            | text                        | YES
+ nano_cluster             | text                        | YES
+ twr_owner                | text                        | YES
+ long                     | double precision            | YES
+ lat                      | double precision            | YES
+ scope_of_work            | text                        | YES
+ issue_category           | text                        | YES
+ site_status              | text                        | YES
+ highlevel_issue          | text                        | YES
+ ran_scope                | text                        | YES
+ scope_category           | text                        | YES
+ imp_ttp                  | text                        | YES
+ mc_cluster               | text                        | YES
+ imp_integ_ff             | timestamp without time zone | YES
+ imp_integ_af             | timestamp without time zone | YES
+ rfs_ff                   | timestamp without time zone | YES
+ rfs_af                   | timestamp without time zone | YES
+ rfc_approved             | timestamp without time zone | YES
+ hotnews_af               | timestamp without time zone | YES
+ endorse_af               | timestamp without time zone | YES
+ pac_accepted_af          | timestamp without time zone | YES
+ 5g_readiness_date        | timestamp without time zone | YES
+ 5g_activation_date       | timestamp without time zone | YES
+ cx_submitted             | timestamp without time zone | YES
+ cx_approved              | timestamp without time zone | YES
+ cx_acceptance_status     | text                        | YES
+ cx_remark                | text                        | YES
+ created_at               | timestamp without time zone | YES
+ updated_at               | timestamp without time zone | YES
+ RF_Fusion.cutover_af     | timestamp without time zone | YES
+ rfs_bf                   | timestamp without time zone | YES
+ mocn_activation_forecast | timestamp without time zone | YES
+ rfs_forecast_lock        | timestamp without time zone | YES
+ caf_approved             | timestamp without time zone | YES
+ mos_af                   | timestamp without time zone | YES
+ cluster_acceptance_af    | timestamp without time zone | YES
+ ic_000040_af             | timestamp without time zone | YES
+

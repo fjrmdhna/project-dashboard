@@ -1,134 +1,163 @@
 "use client"
 
-import { Loader2 } from 'lucide-react'
-import { ReadinessChart } from "@/components/readiness-chart"
-import { ActivatedChart } from "@/components/activated-chart"
-import { CompactDailyRunrate } from "@/components/CompactDailyRunrate"
-import { CompactDataAlignment } from "@/components/CompactDataAlignment"
-import { CompactTop5Issues } from "@/components/CompactTop5Issues"
-import { CompactNanoCluster } from "@/components/CompactNanoCluster"
-import { Hermes5GFilterSection } from "@/components/Hermes5GFilterSection"
-import { Hermes5GDataTable } from "@/components/Hermes5GDataTable"
-import { VendorLeaderboard } from "@/components/VendorLeaderboard"
-import { DashboardHeader } from "@/components/DashboardHeader"
-import { SidebarCharts } from "@/components/SidebarCharts"
-import { MetricsRow } from "@/components/MetricsRow"
-import { CompactLeaderboard } from "@/components/CompactLeaderboard"
-import { CompactFilterSection } from "@/components/CompactFilterSection"
-import { useHermes5GContext } from '@/contexts/Hermes5GContext'
-import { useVendorLeaderboard } from '@/hooks/useVendorLeaderboard'
+import { useState } from "react"
+import { FilterBar, FilterValue } from "@/components/filters/FilterBar"
+import { MatrixStatsCard } from "@/components/cards/MatrixStatsCard"
+import { FiveGReadinessCard } from "@/components/cards/FiveGReadinessCard"
+import { FiveGActivatedCard } from "@/components/cards/FiveGActivatedCard"
+import { NanoClusterCard } from "@/components/cards/NanoClusterCard"
+import ProgressCurveLineChart from "@/components/charts/ProgressCurveLineChart"
+import { DataAlignmentCard } from "@/components/cards/DataAlignmentCard"
+import { TopIssueCard } from "@/components/cards/TopIssueCard"
+import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
+import { useSiteData } from "@/hooks/useSiteData"
+import { useTopIssueData } from "@/hooks/useTopIssueData"
+import { useDailyRunrateData } from "@/hooks/useDailyRunrateData"
+import { Wallboard1080 } from "@/layouts/Wallboard1080"
 
-export default function HermesPage() {
+export default function Hermes5GPage() {
+  // Menggunakan hook useSiteData untuk mengambil data berdasarkan filter
+  const { 
+    rows, 
+    loading, 
+    error, 
+    count, 
+    filter, 
+    updateFilter 
+  } = useSiteData()
+
+  // Menggunakan hook useTopIssueData untuk mengambil data top 5 issue
+  // Meneruskan filter yang sama dengan useSiteData
   const {
-    // Filters
-    filters,
-    filterOptions,
-    setSearchTerm,
-    setVendorFilter,
-    setProgramFilter,
-    setCityFilter,
-    resetFilters,
-    
-    // Chart Data
-    chartData,
-    chartLoading,
-    refreshAllCharts,
-    
-    // Site Data
-    stats,
-    sites,
-    siteLoading,
-    pagination,
-    refreshSiteData,
-    
-    // Combined actions
-    refreshAll
-  } = useHermes5GContext()
-
-  // Vendor Leaderboard
+    data: topIssuesData,
+    loading: topIssuesLoading,
+    topIssuesTotal,
+    totalIssues
+  } = useTopIssueData({ filter })
+  
+  // Menggunakan hook useDailyRunrateData untuk mengambil data daily runrate
+  // Meneruskan filter yang sama dengan useSiteData
   const {
-    vendors: leaderboardVendors,
-    loading: leaderboardLoading,
-    updateFTR
-  } = useVendorLeaderboard()
+    data: dailyRunrateData,
+    loading: dailyRunrateLoading
+  } = useDailyRunrateData({ filter })
 
-  // Transform chart data for sidebar
-  const sidebarReadinessData = chartData.readinessChartData.map(item => ({
-    location: item.location,
-    nyValue: item.nyReadiness,
-    currentValue: item.readiness
-  }))
+  // Handler untuk perubahan filter
+  const handleFilterChange = (newFilters: FilterValue) => {
+    console.log("Filter changed:", newFilters)
+    updateFilter(newFilters)
+  }
 
-  const sidebarActivatedData = chartData.activatedChartData.map(item => ({
-    location: item.location,
-    nyValue: item.nyActivated,
-    currentValue: item.activated
-  }))
+  // Handler untuk reset filter
+  const handleFilterReset = () => {
+    console.log("Filters reset")
+    // Reset sudah ditangani di FilterBar component
+  }
 
-  return (
-    <div className="min-h-screen bg-slate-900">
-      {/* Header */}
-      <DashboardHeader />
-
-      {/* Main Layout */}
-      <div className="flex">
-        {/* Left Sidebar */}
-        <SidebarCharts 
-          readinessData={sidebarReadinessData}
-          activatedData={sidebarActivatedData}
+  // Header component
+  const header = (
+    <div className="flex items-center justify-between h-full w-full px-4">
+      {/* Logo Indosat di kiri */}
+      <div className="flex-shrink-0">
+        <img 
+          src="/logo indosat putih.png" 
+          alt="Indosat Logo" 
+          className="h-8" 
         />
+      </div>
+      
+      {/* Judul di tengah */}
+      <div className="flex-grow text-center">
+        <h1 className="text-3xl font-bold text-white tracking-wide">DASHBOARD HERMES H2 2025</h1>
+      </div>
+      
+      {/* Bagian kanan (kosong untuk keseimbangan) */}
+      <div className="flex-shrink-0 w-20"></div>
+            </div>
+  )
 
-        {/* Main Content Area */}
-        <div className="flex-1 p-2 space-y-2">
-          {/* Filters Section */}
-          <CompactFilterSection
-            filters={{
-              searchTerm: filters.searchTerm,
-              vendorFilter: filters.vendorFilter,
-              programFilter: filters.programFilter,
-              cityFilter: filters.cityFilter
-            }}
-            filterOptions={filterOptions}
-            onSearchChange={setSearchTerm}
-            onVendorChange={setVendorFilter}
-            onProgramChange={setProgramFilter}
-            onCityChange={setCityFilter}
-            onResetFilters={resetFilters}
-            loading={siteLoading}
-          />
+  // FilterBar component
+  const filterBar = (
+    <div className="h-full">
+      <FilterBar 
+        value={filter}
+        onChange={handleFilterChange}
+        onReset={handleFilterReset}
+                  />
+                </div>
+  )
 
-          {/* Metrics Row */}
-          <MetricsRow stats={stats} loading={siteLoading} />
+  // MatrixStats component
+  const matrixStats = (
+    <MatrixStatsCard rows={rows} />
+  )
 
-          {/* Charts Grid Layout */}
-          <div className="grid grid-cols-2 gap-2 mb-2">
-            {/* Nano Cluster */}
-            <CompactNanoCluster data={chartData.nanoClusterData} />
-          </div>
+  // 5G Readiness component
+  const readinessCard = (
+    <FiveGReadinessCard rows={rows} maxCities={10} />
+  )
 
-          {/* Bottom Row: Daily Runrate + Top Issues + Data Alignment + Leaderboard */}
-          <div className="grid grid-cols-4 gap-2">
-            {/* Daily Runrate */}
-            <CompactDailyRunrate data={chartData.dailyRunrateData} />
+  // 5G Activated component
+  const activatedCard = (
+    <FiveGActivatedCard rows={rows} maxCities={10} />
+  )
 
-            {/* Top 5 Issues */}
-            <CompactTop5Issues 
-              data={chartData.top5IssueData} 
-              top5Count={chartData.top5IssueStats.top5Count}
-              totalCount={chartData.top5IssueStats.totalCount}
-            />
+  // Nano Cluster component
+  const nanoClusterCard = (
+    <NanoClusterCard rows={rows} />
+  )
 
-            {/* Data Alignment */}
-            <CompactDataAlignment data={chartData.dataAlignmentData} />
+  // Progress Curve component
+  const progressCurveCard = (
+    <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} monthsSpan={3} />
+  )
+  
+  // Data Alignment component
+  const dataAlignmentCard = (
+    <DataAlignmentCard records={rows} />
+  )
 
-            {/* Compact Leaderboard */}
-            <CompactLeaderboard 
-              vendors={leaderboardVendors}
-              loading={leaderboardLoading}
-            />
-          </div>
-        </div>
+  // Daily Runrate component
+  const dailyRunrateCard = (
+    <DailyRunrateCard 
+      data={dailyRunrateData} 
+      isLoading={dailyRunrateLoading} 
+    />
+  )
+
+  // TopIssueCard component
+  const topIssueCard = (
+    <TopIssueCard 
+      issues={topIssuesData} 
+      totalIssues={totalIssues} 
+      topIssuesTotal={topIssuesTotal}
+      isLoading={topIssuesLoading}
+    />
+  )
+
+  // Placeholder untuk komponen lain
+  const placeholder = (title: string) => (
+    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full h-full flex flex-col">
+      <h3 className="text-lg font-semibold mb-2">{title}</h3>
+      <div className="flex-1 flex items-center justify-center text-white/50">
+        {loading ? "Loading..." : "Coming soon"}
       </div>
     </div>
+  )
+
+  return (
+    <Wallboard1080
+      header={header}
+      filterBar={filterBar}
+      matrixStats={matrixStats}
+      readinessCard={readinessCard}
+      activatedCard={activatedCard}
+      progressCurve={progressCurveCard}
+      dailyRunrate={dailyRunrateCard}
+      top5Issue={topIssueCard}
+      dataAlignment={dataAlignmentCard}
+      nanoCluster={nanoClusterCard}
+      leaderboard={placeholder("Vendor Leaderboard")}
+    />
   )
 } 

@@ -7,7 +7,7 @@ import { FilterState, FilterActions, FilterContextType, DEFAULT_FILTERS } from '
 const FilterContext = createContext<FilterContextType | undefined>(undefined)
 
 // Filter Provider Props
-interface FilterProviderProps {
+interface FilterPoviderProps {
   children: ReactNode
 }
 

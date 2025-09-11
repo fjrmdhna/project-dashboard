@@ -44,8 +44,6 @@ export interface PaginationParams {
   statusFilter?: string;
   regionFilter?: string;
   vendorFilter?: string;
-  programFilter?: string;
-  cityFilter?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
@@ -238,26 +236,10 @@ export async function getHermes5GData(params: PaginationParams): Promise<Hermes5
       paramIndex++;
     }
     
-    // Program filter
-    if (params.programFilter && params.programFilter !== 'all') {
-      whereConditions.push(`program_report = $${paramIndex}`);
-      queryParams.push(params.programFilter);
-      paramIndex++;
-    }
-    
-    // City filter (using imp_ttp)
-    if (params.cityFilter && params.cityFilter !== 'all') {
-      whereConditions.push(`imp_ttp = $${paramIndex}`);
-      queryParams.push(params.cityFilter);
-      paramIndex++;
-    }
-    
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
     
     // Get total count
-    const countQuery = `SELECT COUNT(*) FROM site_data_5g
-      ${whereClause}
-      ${whereClause} ${whereClause}`;
+    const countQuery = `SELECT COUNT(*) FROM site_data_5g ${whereClause}`;
     const countResult = await client.query(countQuery, queryParams);
     const totalRecords = parseInt(countResult.rows[0].count);
     
@@ -292,23 +274,8 @@ export async function getHermes5GData(params: PaginationParams): Promise<Hermes5
         site_category,
         scope_of_work,
         region_wise,
-        region_circle,
-        imp_ttp,
-        imp_integ_af,
-        rfs_af,
-        caf_approved,
-        mos_af,
-        ic_000040_af,
-        rfc_approved,
-        hotnews_af,
-        endorse_af,
-        pac_accepted_af,
-        cluster_acceptance_af,
-        issue_category,
-        nano_cluster,
-        rfs_forecast_lock
-      FROM site_data_5g
-      ${whereClause} 
+        region_circle
+      FROM site_data_5g 
       ${whereClause}
       ${orderClause}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -320,7 +287,7 @@ export async function getHermes5GData(params: PaginationParams): Promise<Hermes5
     client.release();
     
     // Calculate stats
-    const stats = await getHermes5GStats({ search: params.search, statusFilter: params.statusFilter, regionFilter: params.regionFilter, vendorFilter: params.vendorFilter, programFilter: params.programFilter, cityFilter: params.cityFilter });
+    const stats = await getHermes5GStats();
     
     return {
       status: 'success',
@@ -344,55 +311,11 @@ export async function getHermes5GData(params: PaginationParams): Promise<Hermes5
 }
 
 // Get Hermes 5G Statistics
-export async function getHermes5GStats(filters?: { search?: string; statusFilter?: string; regionFilter?: string; vendorFilter?: string; programFilter?: string; cityFilter?: string; }) {
+export async function getHermes5GStats() {
   try {
     const client = await postgresPool.connect();
     
-    
-    // Build WHERE clause for stats
-    const whereConditions = [];
-    const queryParams = [];
-    let paramIndex = 1;
-    
-    if (filters?.search) {
-      whereConditions.push(`(LOWER(site_name) LIKE LOWER($${paramIndex}) OR LOWER(site_id) LIKE LOWER($${paramIndex}) OR LOWER(vendor_name) LIKE LOWER($${paramIndex}) OR LOWER(system_key) LIKE LOWER($${paramIndex}))`);
-      queryParams.push(`%${filters.search}%`);
-      paramIndex++;
-    }
-    
-    if (filters?.statusFilter && filters.statusFilter !== 'all') {
-      whereConditions.push(`LOWER(site_status) = LOWER($${paramIndex})`);
-      queryParams.push(filters.statusFilter);
-      paramIndex++;
-    }
-    
-    if (filters?.regionFilter && filters.regionFilter !== 'all') {
-      whereConditions.push(`region = $${paramIndex}`);
-      queryParams.push(filters.regionFilter);
-      paramIndex++;
-    }
-    
-    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      whereConditions.push(`LOWER(vendor_code) = LOWER($${paramIndex})`);
-      queryParams.push(filters.vendorFilter);
-      paramIndex++;
-    }
-    
-    if (filters?.programFilter && filters.programFilter !== 'all') {
-      whereConditions.push(`program_report = $${paramIndex}`);
-      queryParams.push(filters.programFilter);
-      paramIndex++;
-    }
-    
-    if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      whereConditions.push(`imp_ttp = $${paramIndex}`);
-      queryParams.push(filters.cityFilter);
-      paramIndex++;
-    }
-    
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-    
-const statsQuery = `
+    const statsQuery = `
       SELECT 
         COUNT(*) as total,
         COUNT(CASE WHEN system_key IS NOT NULL THEN 1 END) as scope,
@@ -407,10 +330,9 @@ const statsQuery = `
         COUNT(CASE WHEN pac_accepted_af IS NOT NULL THEN 1 END) as pac,
         COUNT(CASE WHEN cluster_acceptance_af IS NOT NULL THEN 1 END) as cluster_atp
       FROM site_data_5g
-      ${whereClause}
     `;
     
-    const result = await client.query(statsQuery, queryParams);
+    const result = await client.query(statsQuery);
     client.release();
     
     const row = result.rows[0];
@@ -456,8 +378,7 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     // Get unique vendors from vendor_name
     const vendorsQuery = `
       SELECT DISTINCT vendor_name 
-      FROM site_data_5g
-      ${whereClause} 
+      FROM site_data_5g 
       WHERE vendor_name IS NOT NULL 
         AND vendor_name != ''
       ORDER BY vendor_name
@@ -466,8 +387,7 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     // Get unique programs from program_report
     const programsQuery = `
       SELECT DISTINCT program_report 
-      FROM site_data_5g
-      ${whereClause} 
+      FROM site_data_5g 
       WHERE program_report IS NOT NULL 
         AND program_report != ''
       ORDER BY program_report
@@ -476,8 +396,7 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     // Get unique cities from imp_ttp
     const citiesQuery = `
       SELECT DISTINCT imp_ttp 
-      FROM site_data_5g
-      ${whereClause} 
+      FROM site_data_5g 
       WHERE imp_ttp IS NOT NULL 
         AND imp_ttp != ''
       ORDER BY imp_ttp
@@ -528,7 +447,7 @@ export async function getReadinessChartData(filters?: {
     const client = await postgresPool.connect();
     
     // Build WHERE clause for filters
-    const whereConditions: string[] = [];
+    const whereConditions: string[] = ['imp_ttp IS NOT NULL'];
     const queryParams: any[] = [];
     let paramIndex = 1;
     
@@ -554,11 +473,10 @@ export async function getReadinessChartData(filters?: {
     
     const query = `
       SELECT 
-        COALESCE(imp_ttp, 'NULL') as location,
+        COALESCE(imp_ttp, 'Unknown') as location,
         COUNT(CASE WHEN imp_integ_af IS NULL THEN 1 END) as nyReadiness,
         COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness
-      FROM site_data_5g
-      ${whereClause} 
+      FROM site_data_5g 
       ${whereClause}
       GROUP BY imp_ttp
       ORDER BY nyReadiness DESC
@@ -596,7 +514,7 @@ export async function getActivatedChartData(filters?: {
     const client = await postgresPool.connect();
     
     // Build WHERE clause for filters
-    const whereConditions: string[] = [];
+    const whereConditions: string[] = ['imp_ttp IS NOT NULL'];
     const queryParams: any[] = [];
     let paramIndex = 1;
     
@@ -622,11 +540,10 @@ export async function getActivatedChartData(filters?: {
     
     const query = `
       SELECT 
-        COALESCE(imp_ttp, 'NULL') as location,
+        COALESCE(imp_ttp, 'Unknown') as location,
         COUNT(CASE WHEN rfs_af IS NULL THEN 1 END) as nyActivated,
         COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated
-      FROM site_data_5g
-      ${whereClause} 
+      FROM site_data_5g 
       ${whereClause}
       GROUP BY imp_ttp
       ORDER BY nyActivated DESC
@@ -696,8 +613,7 @@ export async function getProgressCurveData(filters?: {
           COUNT(*) as forecastAccelerate,
           COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness,
           COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated
-        FROM site_data_5g
-      ${whereClause} 
+        FROM site_data_5g 
         ${whereClause}
           AND EXTRACT(MONTH FROM rfs_forecast_lock) = 9 
           AND EXTRACT(YEAR FROM rfs_forecast_lock) = 2025
@@ -709,8 +625,7 @@ export async function getProgressCurveData(filters?: {
           COUNT(*) as forecastAccelerate,
           COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness,
           COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated
-        FROM site_data_5g
-      ${whereClause} 
+        FROM site_data_5g 
         ${whereClause}
           AND EXTRACT(MONTH FROM rfs_forecast_lock) IN (10, 11, 12, 1, 2)
           AND EXTRACT(YEAR FROM rfs_forecast_lock) IN (2024, 2025)
@@ -897,7 +812,6 @@ export async function getDataAlignmentData(filters?: {
         COUNT(CASE WHEN endorse_af IS NOT NULL THEN 1 END) as endorse
       FROM site_data_5g
       ${whereClause}
-      ${whereClause}
     `;
     
     const result = await client.query(query, queryParams);
@@ -980,8 +894,7 @@ export async function getTop5IssueData(filters?: {
       SELECT 
         issue_category as category,
         COUNT(*) as count
-      FROM site_data_5g
-      ${whereClause} 
+      FROM site_data_5g 
       ${whereClause}
       GROUP BY issue_category 
       ORDER BY count DESC 
@@ -994,8 +907,7 @@ export async function getTop5IssueData(filters?: {
     // Get total count of all issues
     const totalQuery = `
       SELECT COUNT(*) as total
-      FROM site_data_5g
-      ${whereClause} 
+      FROM site_data_5g 
       ${whereClause}
     `;
     
@@ -1074,8 +986,7 @@ export async function getNanoClusterData(filters?: {
     // Get total unique nano clusters
     const totalQuery = `
       SELECT COUNT(DISTINCT nano_cluster) as total
-      FROM site_data_5g
-      ${whereClause} 
+      FROM site_data_5g 
       ${whereClause}
     `;
     
@@ -1089,8 +1000,7 @@ export async function getNanoClusterData(filters?: {
           nano_cluster,
           COUNT(*) as total_sites,
           COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as ready_sites
-        FROM site_data_5g
-      ${whereClause} 
+        FROM site_data_5g 
         ${whereClause}
         GROUP BY nano_cluster
       ),
@@ -1124,8 +1034,7 @@ export async function getNanoClusterData(filters?: {
           nano_cluster,
           COUNT(*) as total_sites,
           COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated_sites
-        FROM site_data_5g
-      ${whereClause} 
+        FROM site_data_5g 
         ${whereClause}
         GROUP BY nano_cluster
       )
