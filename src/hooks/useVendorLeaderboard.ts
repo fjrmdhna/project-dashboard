@@ -1,110 +1,108 @@
-import { useState, useEffect, useCallback } from 'react'
-import { VendorMetrics } from '@/types/leaderboard'
-import { getCurrentWeek } from '@/lib/leaderboard-utils'
+"use client"
 
-interface UseVendorLeaderboardReturn {
-  vendors: VendorMetrics[]
-  loading: boolean
-  error: string | null
-  week: number
-  year: number
-  stats: any
-  refetch: () => void
-  updateFTR: (data: any[]) => Promise<void>
-  setWeek: (week: number) => void
-  setYear: (year: number) => void
+import { useState, useEffect, useCallback } from 'react'
+import { FilterValue } from '@/components/filters/FilterBar'
+
+export interface VendorScore {
+  vendorName: string
+  totalSites: number
+  readinessCount: number
+  activatedCount: number
+  forecastCount: number
+  readinessVsForecast: number
+  activatedVsForecast: number
+  aboveAccelerationActivated: number
+  firstTimeRight: number
+  totalScore: number
+  rank: number
 }
 
-export function useVendorLeaderboard(): UseVendorLeaderboardReturn {
-  const [vendors, setVendors] = useState<VendorMetrics[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [stats, setStats] = useState(null)
-  
-  const { week: currentWeek, year: currentYear } = getCurrentWeek()
-  const [week, setWeek] = useState(currentWeek)
-  const [year, setYear] = useState(currentYear)
+interface UseVendorLeaderboardOptions {
+  filter?: FilterValue
+}
 
-  // Fetch leaderboard data
-  const fetchLeaderboard = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    
+interface UseVendorLeaderboardReturn {
+  data: VendorScore[]
+  loading: boolean
+  error: Error | null
+  refetch: () => Promise<void>
+  totalVendors: number
+}
+
+export function useVendorLeaderboard(options: UseVendorLeaderboardOptions = {}): UseVendorLeaderboardReturn {
+  const [data, setData] = useState<VendorScore[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+  const [totalVendors, setTotalVendors] = useState(0)
+
+  const fetchData = useCallback(async () => {
     try {
-      const params = new URLSearchParams({
-        week: week.toString(),
-        year: year.toString()
+      setLoading(true)
+      setError(null)
+
+      const filter = options.filter || {
+        q: '',
+        vendor_name: [],
+        program_report: [],
+        imp_ttp: []
+      }
+
+      // Build URL with filter parameters
+      const url = new URL('/api/hermes-5g/vendor-leaderboard', window.location.origin)
+      
+      // Add query parameters
+      if (filter.q) url.searchParams.append('q', filter.q)
+      
+      // Add multi-value parameters
+      filter.vendor_name.forEach(vendor => {
+        url.searchParams.append('vendor_name', vendor)
       })
       
-      const response = await fetch(`/api/vendor-leaderboard?${params}`)
+      filter.program_report.forEach(program => {
+        url.searchParams.append('program_report', program)
+      })
+      
+      filter.imp_ttp.forEach(city => {
+        url.searchParams.append('imp_ttp', city)
+      })
+
+      const response = await fetch(url.toString())
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
       const result = await response.json()
       
-      if (result.success) {
-        setVendors(result.data.vendors)
-        setStats(result.data.stats)
+      if (result.status === 'success') {
+        setData(result.data)
+        setTotalVendors(result.totalVendors || 0)
       } else {
-        setError(result.error || 'Failed to fetch leaderboard data')
-        setVendors([])
-        setStats(null)
+        throw new Error(result.message || 'Failed to fetch vendor leaderboard data')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-      setVendors([])
-      setStats(null)
+      console.error('Error fetching vendor leaderboard data:', err)
+      setError(err instanceof Error ? err : new Error('Unknown error'))
+      setData([])
+      setTotalVendors(0)
     } finally {
       setLoading(false)
     }
-  }, [week, year])
+  }, [options.filter])
 
-  // Update FTR data
-  const updateFTR = useCallback(async (ftrData: any[]) => {
-    try {
-      const response = await fetch('/api/vendor-leaderboard', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ftr_data: ftrData,
-          week: week,
-          year: year
-        })
-      })
+  const refetch = useCallback(async () => {
+    await fetchData()
+  }, [fetchData])
 
-      const result = await response.json()
-      
-      if (result.success) {
-        // Refresh leaderboard after FTR update
-        await fetchLeaderboard()
-      } else {
-        throw new Error(result.error || 'Failed to save FTR data')
-      }
-    } catch (err) {
-      console.error('Error updating FTR data:', err)
-      throw err
-    }
-  }, [week, year, fetchLeaderboard])
-
-  // Refetch function
-  const refetch = useCallback(() => {
-    fetchLeaderboard()
-  }, [fetchLeaderboard])
-
-  // Fetch data when week/year changes
   useEffect(() => {
-    fetchLeaderboard()
-  }, [fetchLeaderboard])
+    fetchData()
+  }, [fetchData])
 
   return {
-    vendors,
+    data,
     loading,
     error,
-    week,
-    year,
-    stats,
     refetch,
-    updateFTR,
-    setWeek,
-    setYear
+    totalVendors
   }
-} 
+}

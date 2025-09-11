@@ -28,7 +28,6 @@ interface Wallboard1080Props {
   progressCurve?: ReactNode
   dailyRunrate?: ReactNode
   top5Issue?: ReactNode
-  dataAlignment?: ReactNode
   nanoCluster?: ReactNode
   leaderboard?: ReactNode
 }
@@ -42,7 +41,6 @@ export function Wallboard1080({
   progressCurve,
   dailyRunrate,
   top5Issue,
-  dataAlignment,
   nanoCluster,
   leaderboard
 }: Wallboard1080Props) {
@@ -90,18 +88,13 @@ export function Wallboard1080({
               {/* Bottom Row - Small cards with reduced height */}
               <div className="flex" style={{ height: 'var(--wb-bottom-cards-height)', gap: 'var(--wb-column-gap)' }}>
                 {/* Daily Runrate */}
-                <GridItem className="w-1/3">
+                <GridItem className="w-1/2">
                   {dailyRunrate}
                 </GridItem>
                 
                 {/* Top 5 Issue */}
-                <GridItem className="w-1/3">
+                <GridItem className="w-1/2">
                   {top5Issue}
-                </GridItem>
-                
-                {/* Data Alignment */}
-                <GridItem className="w-1/3">
-                  {dataAlignment}
                 </GridItem>
               </div>
             </div>

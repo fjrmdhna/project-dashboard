@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Search, Tag, X } from "lucide-react"
 import { MultiSelect } from "@/components/ui/MultiSelect"
 import { useDebounce } from "@/hooks/useDebounce"
@@ -95,19 +95,22 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
   }, [debouncedSearch, onChange, value])
   
   // Handler untuk vendor selection
-  const handleVendorChange = (selected: string[]) => {
+  const handleVendorChange = useCallback((selected: string[]) => {
+    console.log('Vendor filter changed:', selected)
     onChange({ ...value, vendor_name: selected })
-  }
+  }, [onChange, value])
   
   // Handler untuk program selection
-  const handleProgramChange = (selected: string[]) => {
+  const handleProgramChange = useCallback((selected: string[]) => {
+    console.log('Program filter changed:', selected)
     onChange({ ...value, program_report: selected })
-  }
+  }, [onChange, value])
   
   // Handler untuk city/imp_ttp selection
-  const handleCityChange = (selected: string[]) => {
+  const handleCityChange = useCallback((selected: string[]) => {
+    console.log('City filter changed:', selected)
     onChange({ ...value, imp_ttp: selected })
-  }
+  }, [onChange, value])
   
   // Handler untuk reset semua filter
   const handleReset = () => {

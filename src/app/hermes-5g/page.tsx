@@ -7,12 +7,13 @@ import { FiveGReadinessCard } from "@/components/cards/FiveGReadinessCard"
 import { FiveGActivatedCard } from "@/components/cards/FiveGActivatedCard"
 import { NanoClusterCard } from "@/components/cards/NanoClusterCard"
 import ProgressCurveLineChart from "@/components/charts/ProgressCurveLineChart"
-import { DataAlignmentCard } from "@/components/cards/DataAlignmentCard"
 import { TopIssueCard } from "@/components/cards/TopIssueCard"
 import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
+import { VendorLeaderboardCard } from "@/components/cards/VendorLeaderboardCard"
 import { useSiteData } from "@/hooks/useSiteData"
 import { useTopIssueData } from "@/hooks/useTopIssueData"
 import { useDailyRunrateData } from "@/hooks/useDailyRunrateData"
+import { useVendorLeaderboard } from "@/hooks/useVendorLeaderboard"
 import { Wallboard1080 } from "@/layouts/Wallboard1080"
 
 export default function Hermes5GPage() {
@@ -41,6 +42,14 @@ export default function Hermes5GPage() {
     data: dailyRunrateData,
     loading: dailyRunrateLoading
   } = useDailyRunrateData({ filter })
+
+  // Menggunakan hook useVendorLeaderboard untuk mengambil data vendor leaderboard
+  // Meneruskan filter yang sama dengan useSiteData
+  const {
+    data: vendorLeaderboardData,
+    loading: vendorLeaderboardLoading,
+    totalVendors
+  } = useVendorLeaderboard({ filter })
 
   // Handler untuk perubahan filter
   const handleFilterChange = (newFilters: FilterValue) => {
@@ -112,10 +121,6 @@ export default function Hermes5GPage() {
     <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} monthsSpan={3} />
   )
   
-  // Data Alignment component
-  const dataAlignmentCard = (
-    <DataAlignmentCard records={rows} />
-  )
 
   // Daily Runrate component
   const dailyRunrateCard = (
@@ -132,6 +137,14 @@ export default function Hermes5GPage() {
       totalIssues={totalIssues} 
       topIssuesTotal={topIssuesTotal}
       isLoading={topIssuesLoading}
+    />
+  )
+
+  // Vendor Leaderboard component
+  const vendorLeaderboardCard = (
+    <VendorLeaderboardCard 
+      rows={rows}
+      isLoading={vendorLeaderboardLoading}
     />
   )
 
@@ -155,9 +168,8 @@ export default function Hermes5GPage() {
       progressCurve={progressCurveCard}
       dailyRunrate={dailyRunrateCard}
       top5Issue={topIssueCard}
-      dataAlignment={dataAlignmentCard}
       nanoCluster={nanoClusterCard}
-      leaderboard={placeholder("Vendor Leaderboard")}
+      leaderboard={vendorLeaderboardCard}
     />
   )
 } 

@@ -203,7 +203,7 @@ html, body, #__next { height: 100%; overflow: hidden; margin: 0; padding: 0; }
   --wb-middle-column-width: 940px !important;
   
   /* Column 1 & 3 card heights */
-  --wb-side-card-height: 410px !important;
+  --wb-side-card-height: 425px !important;
   
   /* Column 2 components */
   --wb-filter-height: 50px !important;

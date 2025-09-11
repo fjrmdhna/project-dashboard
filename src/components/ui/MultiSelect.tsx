@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { Check, ChevronDown, X } from "lucide-react"
 
@@ -53,13 +53,14 @@ export function MultiSelect({
   }
 
   // Handle option selection
-  const handleOptionClick = (option: string) => {
+  const handleOptionClick = useCallback((option: string) => {
     const newSelected = selected.includes(option)
       ? selected.filter(item => item !== option)
       : [...selected, option]
     
+    console.log('MultiSelect option clicked:', option, 'New selection:', newSelected)
     onChange(newSelected)
-  }
+  }, [selected, onChange])
 
   // Handle clear all
   const handleClearAll = () => {

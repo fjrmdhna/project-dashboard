@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { FilterValue } from '@/components/filters/FilterBar'
 import { Row } from '@/components/cards/MatrixStatsCard'
 
@@ -31,9 +31,13 @@ export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn
       imp_ttp: []
     }
   )
+  
+  // Ref untuk menyimpan timeout ID
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isFetchingRef = useRef(false)
 
   // Fungsi untuk membangun URL dengan filter
-  const buildUrl = (filter: FilterValue) => {
+  const buildUrl = useCallback((filter: FilterValue) => {
     const url = new URL('/api/hermes-5g/site-data', window.location.origin)
     
     // Tambahkan query parameter
@@ -53,15 +57,23 @@ export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn
     })
     
     return url.toString()
-  }
+  }, [])
   
-  // Fungsi untuk fetch data
-  const fetchData = async (filter: FilterValue) => {
+  // Fungsi untuk fetch data dengan race condition protection
+  const fetchData = useCallback(async (filter: FilterValue) => {
+    // Set flag untuk mencegah multiple concurrent requests
+    if (isFetchingRef.current) {
+      console.log('Request already in progress, skipping...')
+      return
+    }
+    
+    isFetchingRef.current = true
     setLoading(true)
     setError(null)
     
     try {
       const url = buildUrl(filter)
+      console.log('Fetching data with filter:', filter)
       const response = await fetch(url)
       
       if (!response.ok) {
@@ -73,6 +85,7 @@ export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn
       if (data.status === 'success') {
         setRows(data.data)
         setCount(data.count || 0)
+        console.log('Data fetched successfully:', data.count, 'records')
       } else {
         throw new Error(data.message || 'Unknown error')
       }
@@ -83,23 +96,49 @@ export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn
       setCount(0)
     } finally {
       setLoading(false)
+      isFetchingRef.current = false
     }
-  }
+  }, [buildUrl])
   
-  // Effect untuk fetch data saat filter berubah
+  // Effect untuk fetch data saat filter berubah dengan debouncing
   useEffect(() => {
-    fetchData(filter)
-  }, [filter])
+    // Clear timeout sebelumnya jika ada
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current)
+    }
+    
+    // Set timeout baru untuk debounce
+    debounceTimeoutRef.current = setTimeout(() => {
+      fetchData(filter)
+    }, 300) // 300ms debounce delay
+    
+    // Cleanup function
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+      }
+    }
+  }, [filter, fetchData])
   
   // Fungsi untuk refetch data dengan filter saat ini
-  const refetch = async () => {
+  const refetch = useCallback(async () => {
     await fetchData(filter)
-  }
+  }, [filter, fetchData])
   
-  // Fungsi untuk update filter
-  const updateFilter = (newFilter: FilterValue) => {
+  // Fungsi untuk update filter dengan immediate update
+  const updateFilter = useCallback((newFilter: FilterValue) => {
+    console.log('Filter updated:', newFilter)
     setFilter(newFilter)
-  }
+  }, [])
+  
+  // Cleanup timeout saat component unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+      }
+    }
+  }, [])
   
   return {
     rows,

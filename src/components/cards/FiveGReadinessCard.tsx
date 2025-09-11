@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, ReactNode } from "react"
+import { BarChart3 } from "lucide-react"
 import {
   BarChart,
   Bar,
@@ -82,24 +83,30 @@ function CityTick(props: any) {
   )
 }
 
-// Custom label untuk NY Readiness (sisi kiri)
+// Custom label untuk NY Readiness
 const NyLabel = (props: any) => {
   const { x, y, width, height, value } = props
-  const absValue = Math.abs(value)
   
   // Jika nilai terlalu kecil, jangan tampilkan
-  if (absValue < 5) return null
+  if (value < 5) return null
+  
+  // Jika bar terlalu panjang, posisikan label di dalam bar
+  const isLongBar = width > 150
   
   return (
     <text
-      x={x - 8} // Posisi di luar bar (kiri)
+      x={isLongBar ? x + width - 8 : x + width + 4}
       y={y + height / 2}
       fill="#fff"
-      fontSize={11}
-      textAnchor="end"
+      fontSize={10}
+      textAnchor={isLongBar ? "end" : "start"}
       dominantBaseline="central"
+      style={{ 
+        filter: isLongBar ? 'drop-shadow(0px 0px 2px rgba(0,0,0,0.8))' : 'none',
+        textShadow: isLongBar ? '0px 0px 3px rgba(0,0,0,0.8)' : 'none'
+      }}
     >
-      {absValue.toLocaleString()}
+      {value.toLocaleString()}
     </text>
   )
 }
@@ -111,14 +118,21 @@ const ReadyLabel = (props: any) => {
   // Jika nilai terlalu kecil, jangan tampilkan
   if (value < 5) return null
   
+  // Jika bar terlalu panjang, posisikan label di dalam bar
+  const isLongBar = width > 150
+  
   return (
     <text
-      x={x + width + 8} // Posisi di luar bar (kanan)
+      x={isLongBar ? x + width - 8 : x + width + 4}
       y={y + height / 2}
       fill="#fff"
-      fontSize={11}
-      textAnchor="start"
+      fontSize={10}
+      textAnchor={isLongBar ? "end" : "start"}
       dominantBaseline="central"
+      style={{ 
+        filter: isLongBar ? 'drop-shadow(0px 0px 2px rgba(0,0,0,0.8))' : 'none',
+        textShadow: isLongBar ? '0px 0px 3px rgba(0,0,0,0.8)' : 'none'
+      }}
     >
       {value.toLocaleString()}
     </text>
@@ -153,14 +167,14 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
     // Konversi map ke array untuk sorting
     const result: ChartItem[] = Array.from(cityMap.entries()).map(([city, data]) => ({
       city,
-      ny: -Math.abs(data.ny || 0), // Selalu nilai NEGATIF
-      rdy: data.rdy > 0 ? Math.abs(data.rdy) : null, // Konversi 0 menjadi null
+      ny: Math.abs(data.ny || 0), // Nilai POSITIF untuk NY Readiness
+      rdy: data.rdy > 0 ? Math.abs(data.rdy) : null, // Nilai POSITIF untuk Readiness
       total: data.ny + data.rdy // Total absolut
     }))
     
     // Sort by total (descending)
     const sortedResult = result.sort((a, b) => 
-      (b.rdy || 0) + Math.abs(b.ny) - ((a.rdy || 0) + Math.abs(a.ny))
+      (b.rdy || 0) + (b.ny || 0) - ((a.rdy || 0) + (a.ny || 0))
     )
     
     // Cek apakah Surabaya ada dalam data
@@ -180,11 +194,11 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
     return sortedResult.slice(0, maxCities)
   }, [rows, maxCities])
 
-  // Hitung nilai maksimum absolut untuk domain
-  const maxAbs = useMemo(() => {
+  // Hitung nilai maksimum untuk domain
+  const maxValue = useMemo(() => {
     let max = 0
     chartData.forEach(item => {
-      max = Math.max(max, Math.abs(item.ny), item.rdy || 0)
+      max = Math.max(max, item.ny || 0, item.rdy || 0)
     })
     return Math.ceil(max * 1.1)
   }, [chartData])
@@ -196,20 +210,28 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
 
   return (
     <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col" style={{ padding: 'var(--wb-card-padding)' }}>
-      <div className="text-base font-semibold mb-1">5G Readiness by City</div>
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-4">
+        <div className="bg-purple-500/20 p-1.5 rounded-lg">
+          <BarChart3 className="h-4 w-4 text-purple-400" />
+        </div>
+        <div className="text-xs font-medium bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">
+          5G Readiness by City
+        </div>
+      </div>
       
       <div className="flex-1">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             layout="vertical"
             data={chartData}
-            margin={{ top: 5, right: 40, bottom: 20, left: 40 }}
+            margin={{ top: 5, right: 10, bottom: 20, left: 40 }}
             barCategoryGap={6}
           >
             <XAxis 
               type="number" 
-              domain={[-maxAbs, maxAbs]} 
-              tickFormatter={(v) => Math.abs(v).toLocaleString()}
+              domain={[0, maxValue]} 
+              tickFormatter={(v) => v.toLocaleString()}
             />
             <YAxis
               type="category"
@@ -223,8 +245,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
             />
             <Tooltip
               formatter={(value, name) => {
-                const val = Math.abs(value as number)
-                return [val.toLocaleString(), name]
+                return [value.toLocaleString(), name]
               }}
             />
             <Legend 
@@ -232,14 +253,12 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
               align="center" 
               wrapperStyle={{ paddingTop: "10px" }}
             />
-            <ReferenceLine x={0} stroke="#8ba3c7" strokeOpacity={0.5} />
             <Bar 
               dataKey="ny" 
               name="NY Readiness" 
               fill="#8A5AA3" 
               barSize={16}
               minPointSize={2}
-              stackId="a"
             >
               <LabelList
                 content={<NyLabel />}
@@ -250,7 +269,6 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
               name="Readiness" 
               fill="#7CB342" 
               barSize={16}
-              stackId="a"
             >
               <LabelList
                 content={<ReadyLabel />}

@@ -11,6 +11,7 @@ export interface Row {
   ic_000040_af?: string | null
   imp_integ_af?: string | null
   rfs_af?: string | null
+  rfs_forecast_lock?: string | null
   hotnews_af?: string | null
   endorse_af?: string | null
   vendor_name?: string
@@ -62,11 +63,18 @@ export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
 
   return (
     <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-4">
+        <div className="bg-blue-500/20 p-1.5 rounded-lg">
+          <BarChart3 className="h-4 w-4 text-blue-400" />
+        </div>
+        <div className="text-xs font-medium bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">
+          Matrix Statistics
+        </div>
+      </div>
+      
       <div className="flex flex-col md:flex-row items-center">
         <div className="flex items-center gap-3 mb-4 md:mb-0 md:mr-8">
-          <div className="bg-blue-500/20 p-2 rounded-lg">
-            <BarChart3 className="h-6 w-6 text-blue-400" />
-          </div>
           <div>
             <div className="text-2xl font-bold">{stats.totalSites}</div>
             <div className="text-xs text-[#B0B7C3]">Total Sites</div>

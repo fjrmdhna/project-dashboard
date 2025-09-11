@@ -29,11 +29,16 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
       }
     }
     
+    // Filter out items containing "no issue" (case insensitive)
+    const filteredIssues = issues.filter(issue => 
+      !issue.category.toLowerCase().includes('no issue')
+    )
+    
     // Data sudah disorting dari API, jadi kita bisa langsung gunakan
-    const topTotal = issues.reduce((sum, issue) => sum + issue.count, 0)
+    const topTotal = filteredIssues.reduce((sum, issue) => sum + issue.count, 0)
     
     return {
-      chartData: issues,
+      chartData: filteredIssues,
       calculatedTopTotal: topTotal
     }
   }, [issues, isLoading])

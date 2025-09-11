@@ -98,6 +98,7 @@ export async function GET(request: NextRequest) {
           ic_000040_af,
           imp_integ_af,
           rfs_af,
+          rfs_forecast_lock,
           hotnews_af,
           endorse_af
         FROM site_data_5g
