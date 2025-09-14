@@ -112,22 +112,75 @@ function buildHybridBuckets(anchorDate?: string, span: 3|5 = 3): Bucket[] {
 }
 
 // Type for aggregated data points
-type Point = { key: string; label: string; forecast: number; ready: number; active: number };
+type Point = { key: string; label: string; forecast: number | null; ready: number | null; active: number | null };
 
-// Function to aggregate data into buckets
+// Function to aggregate data into buckets with cumulative values
 function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
   const inRange = (val?: string | null, s?: Date, e?: Date) => {
     const d = safeDate(val);
     return !!(d && s && e && d >= s && d <= e);
   };
   
-  return buckets.map((b) => ({
+  // First, calculate individual bucket values
+  const bucketData = buckets.map((b) => ({
     key: b.key,
     label: b.label,
     forecast: rows.reduce((n, r) => n + (inRange(r.rfs_forecast_lock, b.start, b.end) ? 1 : 0), 0),
     ready: rows.reduce((n, r) => n + (inRange(r.imp_integ_af, b.start, b.end) ? 1 : 0), 0),
     active: rows.reduce((n, r) => n + (inRange(r.rfs_af, b.start, b.end) ? 1 : 0), 0),
   }));
+  
+  // Find the last bucket that has any data for each metric
+  let lastForecastIndex = -1;
+  let lastReadyIndex = -1;
+  let lastActiveIndex = -1;
+  
+  for (let i = bucketData.length - 1; i >= 0; i--) {
+    if (bucketData[i].forecast > 0 && lastForecastIndex === -1) {
+      lastForecastIndex = i;
+    }
+    if (bucketData[i].ready > 0 && lastReadyIndex === -1) {
+      lastReadyIndex = i;
+    }
+    if (bucketData[i].active > 0 && lastActiveIndex === -1) {
+      lastActiveIndex = i;
+    }
+  }
+  
+  // Find the overall last data index
+  const lastDataIndex = Math.max(lastForecastIndex, lastReadyIndex, lastActiveIndex);
+  
+  // If no data found, return empty array
+  if (lastDataIndex === -1) {
+    return [];
+  }
+  
+  // Trim to only include buckets up to the last data point
+  const trimmedBuckets = bucketData.slice(0, lastDataIndex + 1);
+  
+  // Then, make them cumulative
+  let cumulativeForecast = 0;
+  let cumulativeReady = 0;
+  let cumulativeActive = 0;
+  
+  return trimmedBuckets.map((bucket, index) => {
+    cumulativeForecast += bucket.forecast;
+    cumulativeReady += bucket.ready;
+    cumulativeActive += bucket.active;
+    
+    // Set values to null after the last data point for each metric
+    const forecast = index <= lastForecastIndex ? cumulativeForecast : null;
+    const ready = index <= lastReadyIndex ? cumulativeReady : null;
+    const active = index <= lastActiveIndex ? cumulativeActive : null;
+    
+    return {
+      key: bucket.key,
+      label: bucket.label,
+      forecast,
+      ready,
+      active,
+    };
+  });
 }
 
 // Custom formatter for labels to handle null/undefined values
@@ -142,9 +195,9 @@ const ForecastDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.forecast;
   
-  // Don't render if value is 0 or empty
-  if (!value || value === '0' || value === '') {
-    return <circle cx={cx} cy={cy} r={4} fill="#8A5AA3" />;
+  // Don't render if value is null, 0, or empty
+  if (value === null || !value || value === '0' || value === '') {
+    return null; // Don't render dot at all for null values
   }
   
   return (
@@ -192,9 +245,9 @@ const ReadinessDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.ready;
   
-  // Don't render if value is 0 or empty
-  if (!value || value === '0' || value === '') {
-    return <circle cx={cx} cy={cy} r={4} fill="#E53935" />;
+  // Don't render if value is null, 0, or empty
+  if (value === null || !value || value === '0' || value === '') {
+    return null; // Don't render dot at all for null values
   }
   
   return (
@@ -242,9 +295,9 @@ const ActivatedDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.active;
   
-  // Don't render if value is 0 or empty
-  if (!value || value === '0' || value === '') {
-    return <circle cx={cx} cy={cy} r={4} fill="#7CB342" />;
+  // Don't render if value is null, 0, or empty
+  if (value === null || !value || value === '0' || value === '') {
+    return null; // Don't render dot at all for null values
   }
   
   return (
@@ -295,13 +348,13 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
 
 
   return (
-    <div className={`rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full h-full flex flex-col ${className ?? ''}`}>
+    <div className={`rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full h-full flex flex-col min-w-0 ${className ?? ''}`}>
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <div className="bg-orange-500/20 p-1.5 rounded-lg">
           <TrendingUp className="h-4 w-4 text-orange-400" />
         </div>
-        <div className="text-xs font-medium bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">
+        <div className="responsive-text-sm font-medium bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">
           Progress Curve
         </div>
       </div>

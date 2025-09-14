@@ -123,7 +123,7 @@ export function MultiSelect({
   const Menu = () => (
     <div
       ref={menuRef}
-      className="fixed z-[9999] max-h-60 overflow-auto rounded-lg border border-white/10 bg-[#0F1630] p-2 shadow-lg"
+      className="fixed z-[9999] max-h-60 overflow-auto rounded-lg border border-white/10 bg-[#0F1630] p-2 shadow-lg min-w-0"
       style={{ 
         top: `${menuPosition.top}px`, 
         left: `${menuPosition.left}px`, 
@@ -131,11 +131,11 @@ export function MultiSelect({
       }}
     >
       <div className="flex items-center justify-between mb-1.5">
-        <div className="text-[9px] uppercase tracking-wider text-gray-400 px-1">Options</div>
+        <div className="responsive-text-sm uppercase tracking-wider text-gray-400 px-1">Options</div>
         {selected.length > 0 && (
           <button 
             onClick={handleClearAll}
-            className="text-[9px] text-gray-400 hover:text-white flex items-center gap-0.5"
+            className="responsive-text-sm text-gray-400 hover:text-white flex items-center gap-0.5"
           >
             Clear <X className="h-2.5 w-2.5" />
           </button>
@@ -149,25 +149,25 @@ export function MultiSelect({
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search..."
-          className="w-full bg-white/5 rounded text-xs px-2 py-1 text-white placeholder:text-gray-500 outline-none focus:ring-1 focus:ring-white/20"
+          className="w-full bg-white/5 rounded responsive-text-sm px-2 py-1 text-white placeholder:text-gray-500 outline-none focus:ring-1 focus:ring-white/20"
         />
       </div>
       
       {filteredOptions.length === 0 ? (
-        <div className="px-2 py-1 text-xs text-gray-400">No options found</div>
+        <div className="px-2 py-1 responsive-text-sm text-gray-400">No options found</div>
       ) : (
         <div>
           {filteredOptions.map(option => (
             <button 
               key={option} 
               type="button"
-              className="w-full text-left flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/5 cursor-pointer select-none"
+              className="w-full text-left flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/5 cursor-pointer select-none min-w-0"
               onClick={() => handleOptionClick(option)}
             >
               <div className="flex-shrink-0 w-3.5 h-3.5 border rounded flex items-center justify-center border-white/20">
                 {selected.includes(option) && <Check className="h-2.5 w-2.5 text-blue-500" />}
               </div>
-              <span className="text-xs text-white truncate">{option}</span>
+              <span className="responsive-text-sm text-white truncate">{option}</span>
             </button>
           ))}
         </div>
@@ -176,15 +176,15 @@ export function MultiSelect({
   )
 
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
+    <div ref={containerRef} className={`relative min-w-0 ${className}`}>
       <button
         ref={buttonRef}
         type="button"
-        className={`bg-white/5 rounded-lg h-7 px-2 inline-flex items-center justify-between text-white ${getButtonWidth()}`}
+        className={`bg-white/5 rounded-lg h-7 px-2 inline-flex items-center justify-between text-white min-w-0 ${getButtonWidth()}`}
         onClick={handleToggle}
         disabled={disabled}
       >
-        <span className="truncate max-w-[100px] text-xs text-left">{label}</span>
+        <span className="truncate max-w-[100px] responsive-text-sm text-left">{label}</span>
         <ChevronDown className="h-3.5 w-3.5 opacity-70 flex-shrink-0" />
       </button>
 

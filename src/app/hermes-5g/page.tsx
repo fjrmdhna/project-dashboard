@@ -15,6 +15,10 @@ import { useTopIssueData } from "@/hooks/useTopIssueData"
 import { useDailyRunrateData } from "@/hooks/useDailyRunrateData"
 import { useVendorLeaderboard } from "@/hooks/useVendorLeaderboard"
 import { Wallboard1080 } from "@/layouts/Wallboard1080"
+import { ScalingDebug } from "@/components/ScalingDebug"
+import { ViewportDebug } from "@/components/ViewportDebug"
+import { FitToScreenDebug } from "@/components/FitToScreenDebug"
+import { WallboardFitToScreenDebug } from "@/components/WallboardFitToScreenDebug"
 
 export default function Hermes5GPage() {
   // Menggunakan hook useSiteData untuk mengambil data berdasarkan filter
@@ -159,17 +163,23 @@ export default function Hermes5GPage() {
   )
 
   return (
-    <Wallboard1080
-      header={header}
-      filterBar={filterBar}
-      matrixStats={matrixStats}
-      readinessCard={readinessCard}
-      activatedCard={activatedCard}
-      progressCurve={progressCurveCard}
-      dailyRunrate={dailyRunrateCard}
-      top5Issue={topIssueCard}
-      nanoCluster={nanoClusterCard}
-      leaderboard={vendorLeaderboardCard}
-    />
+    <>
+      <Wallboard1080
+        header={header}
+        filterBar={filterBar}
+        matrixStats={matrixStats}
+        readinessCard={readinessCard}
+        activatedCard={activatedCard}
+        progressCurve={progressCurveCard}
+        dailyRunrate={dailyRunrateCard}
+        top5Issue={topIssueCard}
+        nanoCluster={nanoClusterCard}
+        leaderboard={vendorLeaderboardCard}
+      />
+      <ScalingDebug />
+      <ViewportDebug />
+      <FitToScreenDebug />
+      <WallboardFitToScreenDebug />
+    </>
   )
 } 

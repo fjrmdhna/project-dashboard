@@ -1,18 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTop5IssueData } from '@/lib/hermes-5g-utils';
-import { Pool } from 'pg';
-
-// PostgreSQL Pool
-const postgresPool = new Pool({
-  host: process.env.POSTGRES_HOST || 'postgres',
-  port: parseInt(process.env.POSTGRES_PORT || '5432'),
-  database: process.env.POSTGRES_DB || 'project_dashboard',
-  user: process.env.POSTGRES_USER || 'project_user',
-  password: process.env.POSTGRES_PASSWORD || 'projectpassword',
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+import { supabase } from '@/lib/supabase';
 
 // Warna untuk kategori issue
 const ISSUE_COLORS = [
@@ -33,97 +20,77 @@ export async function GET(request: NextRequest) {
     const cityFilter = searchParams.get('cityFilter') || 'all';
     const searchFilter = searchParams.get('searchFilter') || '';
     
-    // Build WHERE clause for filters
-    const whereConditions: string[] = ['issue_category IS NOT NULL', `issue_category != ''`];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
+    // Build Supabase query with filters
+    let query = supabase
+      .from('site_data_5g')
+      .select('issue_category')
+      .not('issue_category', 'is', null)
+      .neq('issue_category', '');
     
-    // Add search filter
+    // Apply filters
     if (searchFilter) {
-      whereConditions.push(`(
-        LOWER(system_key) LIKE LOWER($${paramIndex}) OR
-        LOWER(site_id) LIKE LOWER($${paramIndex}) OR
-        LOWER(site_name) LIKE LOWER($${paramIndex}) OR
-        LOWER(vendor_name) LIKE LOWER($${paramIndex}) OR
-        LOWER(issue_category) LIKE LOWER($${paramIndex})
-      )`);
-      queryParams.push(`%${searchFilter}%`);
-      paramIndex++;
+      query = query.or(`system_key.ilike.%${searchFilter}%,site_id.ilike.%${searchFilter}%,site_name.ilike.%${searchFilter}%,vendor_name.ilike.%${searchFilter}%,issue_category.ilike.%${searchFilter}%`);
     }
     
-    // Add vendor filter
     if (vendorFilter && vendorFilter !== 'all') {
-      whereConditions.push(`vendor_name = $${paramIndex}`);
-      queryParams.push(vendorFilter);
-      paramIndex++;
+      query = query.eq('vendor_name', vendorFilter);
     }
     
-    // Add program filter
     if (programFilter && programFilter !== 'all') {
-      whereConditions.push(`program_report = $${paramIndex}`);
-      queryParams.push(programFilter);
-      paramIndex++;
+      query = query.eq('program_report', programFilter);
     }
     
-    // Add city filter
     if (cityFilter && cityFilter !== 'all') {
-      whereConditions.push(`imp_ttp = $${paramIndex}`);
-      queryParams.push(cityFilter);
-      paramIndex++;
+      query = query.eq('imp_ttp', cityFilter);
     }
     
-    // Finalize WHERE clause
-    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    // Get data from Supabase
+    const { data, error } = await query;
     
-    // Get top 5 issue categories by count
-    const query = `
-      SELECT 
-        issue_category as category,
-        COUNT(*) as count
-      FROM site_data_5g 
-      ${whereClause}
-      GROUP BY issue_category 
-      ORDER BY count DESC 
-      LIMIT 5
-    `;
-    
-    // Get total count of all issues
-    const totalQuery = `
-      SELECT COUNT(*) as total
-      FROM site_data_5g 
-      ${whereClause}
-    `;
-    
-    // Execute queries
-    const client = await postgresPool.connect();
-    
-    try {
-      const result = await client.query(query, queryParams);
-      const totalResult = await client.query(totalQuery, queryParams);
-      
-      // Process the results
-      const totalCount = parseInt(totalResult.rows[0].total || '0');
-      
-      // Add colors to the data
-      const data = result.rows.map((row, index) => ({
-        category: row.category,
-        count: parseInt(row.count),
-        color: ISSUE_COLORS[index % ISSUE_COLORS.length]
-      }));
-      
-      // Calculate top 5 count
-      const top5Count = data.reduce((sum, item) => sum + item.count, 0);
-      
-      return NextResponse.json({
-        status: 'success',
-        data,
-        top5Count,
-        totalCount,
-        timestamp: new Date().toISOString()
-      });
-    } finally {
-      client.release();
+    if (error) {
+      console.error('Supabase Error:', error);
+      return NextResponse.json(
+        {
+          status: 'error',
+          message: 'Failed to fetch top 5 issue data',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        },
+        { status: 500 }
+      );
     }
+    
+    // Process data to count issue categories
+    const categoryCount: { [key: string]: number } = {};
+    data?.forEach(row => {
+      if (row.issue_category) {
+        categoryCount[row.issue_category] = (categoryCount[row.issue_category] || 0) + 1;
+      }
+    });
+    
+    // Sort by count and get top 5
+    const sortedCategories = Object.entries(categoryCount)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5);
+    
+    // Add colors to the data
+    const result = sortedCategories.map(([category, count], index) => ({
+      category,
+      count,
+      color: ISSUE_COLORS[index % ISSUE_COLORS.length]
+    }));
+    
+    // Calculate totals
+    const totalCount = data?.length || 0;
+    const top5Count = result.reduce((sum, item) => sum + item.count, 0);
+    
+    return NextResponse.json({
+      status: 'success',
+      data: result,
+      top5Count,
+      totalCount,
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     console.error('Error fetching top 5 issue data:', error);
     return NextResponse.json(

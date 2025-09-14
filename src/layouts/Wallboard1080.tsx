@@ -1,6 +1,7 @@
 "use client"
 
-import { ReactNode } from "react"
+import { ReactNode, useRef, useEffect } from "react"
+import { useUniversalScaling } from "@/hooks/useUniversalScaling"
 
 interface GridItemProps {
   children: ReactNode
@@ -12,7 +13,7 @@ function GridItem({ children, className = "", style = {} }: GridItemProps) {
   return (
     <div 
       style={style}
-      className={`w-full h-full ${className}`}
+      className={`wallboard-grid-item ${className}`}
     >
       {children}
     </div>
@@ -44,70 +45,92 @@ export function Wallboard1080({
   nanoCluster,
   leaderboard
 }: Wallboard1080Props) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  
+  // Apply universal scaling for consistent display across all devices
+  useUniversalScaling(containerRef, {
+    forceConsistentScaling: true, // Use consistent scaling instead of fill
+    minScale: 0.4, // Allow smaller scaling for mobile devices
+    maxScale: 3.0  // Allow larger scaling for ultra-wide screens
+  })
+
+  // Prevent body scroll when wallboard is active
+  useEffect(() => {
+    // Add class to prevent body scroll
+    document.documentElement.classList.add('viewport-active')
+    document.body.classList.add('viewport-active')
+    
+    // Cleanup on unmount
+    return () => {
+      document.documentElement.classList.remove('viewport-active')
+      document.body.classList.remove('viewport-active')
+    }
+  }, [])
+
   return (
-    <div className="fixed inset-0 overflow-hidden bg-[#0D1221]">
-      <div className="wallboard-scale">
-        <div className="w-full h-full box-border">
+    <div id="wb-wrapper" className="viewport-wrapper">
+      <div id="wb-canvas" ref={containerRef} className="wallboard-scale">
+        <div className="wallboard-grid">
           {/* Header - Full width, minimal height */}
-          <div className="w-full" style={{ height: 'var(--wb-header-height)', padding: '0 1.5rem' }}>
+          <div className="wallboard-header">
             {header}
           </div>
           
-          {/* Main Content Area */}
-          <div className="w-full px-6 flex" style={{ height: 'var(--wb-content-height)', gap: 'var(--wb-column-gap)' }}>
+          {/* Main Content Area - CSS Grid Layout */}
+          <div className="wallboard-content">
             {/* Column 1: Readiness & Activated (Left) */}
-            <div className="h-full flex flex-col" style={{ width: 'var(--wb-side-column-width)', gap: 'var(--wb-row-gap)' }}>
+            <div className="wallboard-side-column">
               {/* 5G Readiness - Top half */}
-              <GridItem style={{ height: 'var(--wb-side-card-height)' }}>
+              <GridItem className="wallboard-side-card">
                 {readinessCard}
               </GridItem>
               
               {/* 5G Activated - Bottom half */}
-              <GridItem style={{ height: 'var(--wb-side-card-height)' }}>
+              <GridItem className="wallboard-side-card">
                 {activatedCard}
               </GridItem>
             </div>
             
             {/* Column 2: Filter, Matrix, Progress, Bottom Row (Middle) */}
-            <div className="h-full flex-grow flex flex-col">
-              {/* Filter Bar - Thin row */}
-              <div style={{ height: 'var(--wb-filter-height)', marginBottom: 'var(--wb-matrix-margin)' }}>
+            <div className="wallboard-middle-column">
+              {/* Filter Bar - Auto height */}
+              <GridItem className="wallboard-middle-card">
                 {filterBar}
-              </div>
+              </GridItem>
               
-              {/* Matrix Stats - Auto height with no bottom space */}
-              <div className="mb-4">
+              {/* Matrix Stats - 1fr */}
+              <GridItem className="wallboard-middle-card">
                 {matrixStats}
-              </div>
+              </GridItem>
               
-              {/* Progress Curve - Reduced height */}
-              <div style={{ height: 'var(--wb-progress-height)', marginBottom: 'var(--wb-matrix-margin)' }}>
+              {/* Progress Curve - 1fr */}
+              <GridItem className="wallboard-middle-card">
                 {progressCurve}
-              </div>
+              </GridItem>
               
-              {/* Bottom Row - Small cards with reduced height */}
-              <div className="flex" style={{ height: 'var(--wb-bottom-cards-height)', gap: 'var(--wb-column-gap)' }}>
+              {/* Bottom Row - Auto height with nested grid */}
+              <div className="wallboard-grid-item" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--wb-grid-gap)' }}>
                 {/* Daily Runrate */}
-                <GridItem className="w-1/2">
+                <GridItem className="wallboard-middle-card">
                   {dailyRunrate}
                 </GridItem>
                 
                 {/* Top 5 Issue */}
-                <GridItem className="w-1/2">
+                <GridItem className="wallboard-middle-card">
                   {top5Issue}
                 </GridItem>
               </div>
             </div>
             
             {/* Column 3: Nano Cluster & Leaderboard (Right) */}
-            <div className="h-full flex flex-col" style={{ width: 'var(--wb-side-column-width)', gap: 'var(--wb-row-gap)' }}>
+            <div className="wallboard-side-column">
               {/* Nano Cluster - Top half */}
-              <GridItem style={{ height: 'var(--wb-side-card-height)' }}>
+              <GridItem className="wallboard-side-card">
                 {nanoCluster}
               </GridItem>
               
               {/* Leaderboard - Bottom half */}
-              <GridItem style={{ height: 'var(--wb-side-card-height)' }}>
+              <GridItem className="wallboard-side-card">
                 {leaderboard}
               </GridItem>
             </div>

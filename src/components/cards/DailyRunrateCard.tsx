@@ -87,19 +87,19 @@ export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardPr
   console.log("Daily Runrate Data:", data);
   
   return (
-    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full h-full flex flex-col">
+    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full h-full flex flex-col min-w-0">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <div className="bg-blue-500/20 p-1.5 rounded-lg">
           <BarChart className="h-4 w-4 text-blue-400" />
         </div>
-        <div className="text-xs font-medium bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">
+        <div className="responsive-text-sm font-medium bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">
           Daily Runrate – Last 7 Days
         </div>
       </div>
       
       {/* Chart */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={data}
@@ -118,7 +118,7 @@ export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardPr
               tickLine={{ stroke: 'rgba(255,255,255,0.1)' }}
               interval={0}
               angle={-45}
-              height={60}
+              height={undefined}
               textAnchor="end"
               tickMargin={15}
             />
@@ -131,7 +131,7 @@ export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardPr
             <Tooltip content={<CustomTooltip />} />
             <Legend 
               verticalAlign="bottom" 
-              height={30} 
+              height={undefined} 
               iconType="circle" 
               iconSize={8}
               formatter={(value) => (

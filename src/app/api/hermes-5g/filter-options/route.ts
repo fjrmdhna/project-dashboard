@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getFilterOptions } from '@/lib/hermes-5g-utils'
+import { getFilterOptions } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
   try {

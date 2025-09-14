@@ -44,14 +44,14 @@ interface MetricItemProps {
 
 function MetricItem({ icon, value, label, bgColor, textColor, className = "" }: MetricItemProps) {
   return (
-    <div className={`flex flex-col items-center rounded-xl border border-white/5 p-3 transition-all hover:border-white/10 hover:bg-white/5 ${className}`}>
+    <div className={`flex flex-col items-center rounded-xl border border-white/5 p-3 transition-all hover:border-white/10 hover:bg-white/5 min-w-0 ${className}`}>
       <div className={`${bgColor} p-3 rounded-xl mb-2 self-start`}>
         {icon}
       </div>
-      <div className="text-3xl font-bold mb-1 self-start" style={{ color: textColor }}>
+      <div className="responsive-text-3xl font-bold mb-1 self-start" style={{ color: textColor }}>
         {value.toLocaleString()}
       </div>
-      <div className="text-xs text-[#B0B7C3] self-start">
+      <div className="responsive-text-sm text-[#B0B7C3] self-start">
         {label}
       </div>
     </div>
@@ -131,25 +131,25 @@ export function NanoClusterCard(props: NanoClusterCardProps) {
   }, [isFromRows(props) ? props.rows : null])
   
   return (
-    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col text-white" style={{ padding: 'var(--wb-card-padding)' }}>
+    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col text-white min-w-0" style={{ padding: 'var(--wb-card-padding)' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="bg-indigo-500/20 p-1.5 rounded-lg">
             <Hexagon className="h-4 w-4 text-indigo-400" />
           </div>
-          <div className="text-xs font-medium bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full">
+          <div className="responsive-text-sm font-medium bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full">
             NANO CLUSTER
           </div>
         </div>
         <div className="bg-indigo-500/10 px-3 py-1.5 rounded-lg flex items-center">
-          <div className="text-xs text-indigo-300 mr-2">Total:</div>
-          <div className="text-2xl font-bold text-white">{metrics.totalClusters}</div>
+          <div className="responsive-text-sm text-indigo-300 mr-2">Total:</div>
+          <div className="responsive-text-2xl font-bold text-white">{metrics.totalClusters}</div>
         </div>
       </div>
       
       {/* Grid of metrics - 3 in top row, 2 in bottom row */}
-      <div className="grid grid-cols-3 gap-3 flex-1">
+      <div className="grid grid-cols-3 gap-3 flex-1 min-h-0">
         {/* Top row: 3 items */}
         <MetricItem 
           icon={<Hourglass className="h-5 w-5 text-amber-400" />} 

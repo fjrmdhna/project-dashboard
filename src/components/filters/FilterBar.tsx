@@ -140,9 +140,9 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     value.imp_ttp.length > 0
   
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col min-w-0">
       {/* Filter Controls - Distributed Evenly */}
-      <div className="flex items-center justify-between gap-3 text-xs">
+      <div className="flex items-center justify-between gap-3 responsive-text-sm flex-shrink-0">
         {/* Left Side - Search Input */}
         <div className="relative w-1/4 min-w-[220px]">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
@@ -151,7 +151,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search sites, vendors..."
-            className="w-full bg-white/5 rounded-lg h-7 pl-7 pr-7 text-xs text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
+            className="w-full bg-white/5 rounded-lg h-7 pl-7 pr-7 responsive-text-sm text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
           />
           {searchInput && (
             <button 
@@ -164,7 +164,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
         </div>
         
         {/* Middle - Filter Dropdowns */}
-        <div className="flex items-center gap-3 flex-1 justify-center">
+        <div className="flex items-center gap-3 flex-1 justify-center min-w-0">
         {/* Vendor Filter */}
         <MultiSelect
           options={options.vendors}
@@ -211,7 +211,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
 
       {/* Active Filters Display - Compact and Truncated */}
       {hasActiveFilters && (
-        <div className="flex flex-wrap gap-1.5 text-[10px] mt-2">
+        <div className="flex flex-wrap gap-1.5 responsive-text-sm mt-2 flex-shrink-0">
           {value.q && (
             <div className="bg-blue-500/20 text-blue-300 rounded-full px-2 py-0.5 flex items-center gap-1">
               <span title={value.q}>Search: {truncateText(value.q, 25)}</span>

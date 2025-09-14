@@ -28,9 +28,9 @@ export interface MatrixStatsCardProps {
 // Komponen untuk menampilkan metrik tunggal
 function MetricItem({ label, value }: { label: string; value: number }) {
   return (
-    <div className="text-center flex flex-col items-center justify-center">
-      <div className="text-xl font-bold">{value.toLocaleString()}</div>
-      <div className="text-xs text-[#B0B7C3]">{label}</div>
+    <div className="text-center flex flex-col items-center justify-center min-w-0">
+      <div className="responsive-text-xl font-bold">{value.toLocaleString()}</div>
+      <div className="responsive-text-sm text-[#B0B7C3]">{label}</div>
     </div>
   )
 }
@@ -62,26 +62,26 @@ export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
   }, [rows, patpCount])
 
   return (
-    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full">
+    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full h-full flex flex-col min-w-0">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <div className="bg-blue-500/20 p-1.5 rounded-lg">
           <BarChart3 className="h-4 w-4 text-blue-400" />
         </div>
-        <div className="text-xs font-medium bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">
+        <div className="responsive-text-sm font-medium bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">
           Matrix Statistics
         </div>
       </div>
       
-      <div className="flex flex-col md:flex-row items-center">
-        <div className="flex items-center gap-3 mb-4 md:mb-0 md:mr-8">
+      <div className="flex flex-col md:flex-row items-center flex-1 min-h-0">
+        <div className="flex items-center gap-3 mb-4 md:mb-0 md:mr-8 flex-shrink-0">
           <div>
-            <div className="text-2xl font-bold">{stats.totalSites}</div>
-            <div className="text-xs text-[#B0B7C3]">Total Sites</div>
+            <div className="responsive-text-2xl font-bold">{stats.totalSites}</div>
+            <div className="responsive-text-sm text-[#B0B7C3]">Total Sites</div>
           </div>
         </div>
         
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-2 md:gap-0 w-full">
+        <div className="grid grid-cols-4 md:grid-cols-8 gap-2 md:gap-0 w-full flex-1">
           <MetricItem label="CAF" value={stats.caf} />
           <MetricItem label="MOS" value={stats.mos} />
           <MetricItem label="INSTALL" value={stats.install} />

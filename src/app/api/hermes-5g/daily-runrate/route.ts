@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Pool } from 'pg';
 import { format, subDays } from 'date-fns';
-
-// PostgreSQL Pool
-const postgresPool = new Pool({
-  host: process.env.POSTGRES_HOST || 'postgres',
-  port: parseInt(process.env.POSTGRES_PORT || '5432'),
-  database: process.env.POSTGRES_DB || 'project_dashboard',
-  user: process.env.POSTGRES_USER || 'project_user',
-  password: process.env.POSTGRES_PASSWORD || 'projectpassword',
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+import { supabase } from '@/lib/supabase';
 
 // Interface untuk date record
 interface DateRecord {
@@ -47,138 +35,32 @@ export async function GET(request: NextRequest) {
       };
     });
     
-    // Get client connection
-    const client = await postgresPool.connect();
+    // Build Supabase query with filters
+    let query = supabase.from('site_data_5g').select('imp_integ_af, rfs_af');
     
-    try {
-      // Membangun array kondisi filter dasar
-      const baseWhereConditions: string[] = [];
-      const queryParams: any[] = [];
-      let paramIndex = 1;
-      
-      // Menambahkan filter berdasarkan parameter yang diterima
-      if (searchFilter) {
-        baseWhereConditions.push(`(
-          LOWER(system_key) LIKE LOWER($${paramIndex}) OR
-          LOWER(site_id) LIKE LOWER($${paramIndex}) OR
-          LOWER(site_name) LIKE LOWER($${paramIndex}) OR
-          LOWER(vendor_name) LIKE LOWER($${paramIndex})
-        )`);
-        queryParams.push(`%${searchFilter}%`);
-        paramIndex++;
-      }
-      
-      if (vendorFilter && vendorFilter !== 'all') {
-        baseWhereConditions.push(`vendor_name = $${paramIndex}`);
-        queryParams.push(vendorFilter);
-        paramIndex++;
-      }
-      
-      if (programFilter && programFilter !== 'all') {
-        baseWhereConditions.push(`program_report = $${paramIndex}`);
-        queryParams.push(programFilter);
-        paramIndex++;
-      }
-      
-      if (cityFilter && cityFilter !== 'all') {
-        baseWhereConditions.push(`imp_ttp = $${paramIndex}`);
-        queryParams.push(cityFilter);
-        paramIndex++;
-      }
-      
-      // Menggunakan pendekatan yang lebih efisien
-      // Daripada menjalankan query untuk setiap hari, kita akan menjalankan satu query
-      // dan kemudian memproses hasilnya
-      
-      let sqlQuery = `
-        SELECT 
-          DATE(imp_integ_af) as readiness_date,
-          COUNT(*) as readiness_count
-        FROM 
-          site_data_5g
-      `;
-      
-      // Membangun WHERE clause lengkap
-      let whereClause = "";
-      if (baseWhereConditions.length > 0) {
-        whereClause = `WHERE ${baseWhereConditions.join(' AND ')}`;
-      }
-      
-      sqlQuery += `
-        ${whereClause}
-        ${whereClause ? "AND" : "WHERE"} imp_integ_af IS NOT NULL
-        AND DATE(imp_integ_af) >= $${paramIndex}
-        AND DATE(imp_integ_af) <= $${paramIndex + 1}
-        GROUP BY DATE(imp_integ_af)
-      `;
-      
-      // Tambahkan rentang tanggal sebagai parameter
-      const startDate = format(dates[0].date, 'yyyy-MM-dd');
-      const endDate = format(dates[dates.length - 1].date, 'yyyy-MM-dd');
-      queryParams.push(startDate, endDate);
-      
-      // Query untuk readiness data
-      const readinessResult = await client.query(sqlQuery, queryParams);
-      
-      // Map readiness data ke struktur yang sesuai
-      const readinessMap: DataCountMap = {};
-      readinessResult.rows.forEach(row => {
-        const dateKey = format(new Date(row.readiness_date), 'yyyy-MM-dd');
-        readinessMap[dateKey] = parseInt(row.readiness_count);
-      });
-      
-      // Query serupa untuk activated data
-      let activatedQueryParams = [...queryParams.slice(0, paramIndex - 1)]; // Salin parameter dasar
-      
-      let activatedQuery = `
-        SELECT 
-          DATE(rfs_af) as activated_date,
-          COUNT(*) as activated_count
-        FROM 
-          site_data_5g
-      `;
-      
-      // Membangun WHERE clause lengkap untuk activated query
-      activatedQuery += `
-        ${whereClause}
-        ${whereClause ? "AND" : "WHERE"} rfs_af IS NOT NULL
-        AND DATE(rfs_af) >= $${paramIndex}
-        AND DATE(rfs_af) <= $${paramIndex + 1}
-        GROUP BY DATE(rfs_af)
-      `;
-      
-      activatedQueryParams.push(startDate, endDate);
-      
-      // Query untuk activated data
-      const activatedResult = await client.query(activatedQuery, activatedQueryParams);
-      
-      // Map activated data ke struktur yang sesuai
-      const activatedMap: DataCountMap = {};
-      activatedResult.rows.forEach(row => {
-        const dateKey = format(new Date(row.activated_date), 'yyyy-MM-dd');
-        activatedMap[dateKey] = parseInt(row.activated_count);
-      });
-      
-      // Gabungkan data untuk setiap tanggal, selalu gunakan nilai 0 jika tidak ada data
-      const dailyData = dates.map(({ date, formatted, sqlDate }) => {
-        const sqlDateStr = format(date, 'yyyy-MM-dd');
-        return {
-          date: formatted,
-          readiness: readinessMap[sqlDateStr] || 0,
-          activated: activatedMap[sqlDateStr] || 0
-        };
-      });
-
-      console.log("API returned data:", dailyData);
-      
-      return NextResponse.json({
-        status: 'success',
-        data: dailyData,
-        timestamp: new Date().toISOString()
-      });
-    } catch (err) {
-      console.error("SQL Error:", err);
-      // Kembalikan data dengan nilai 0 untuk semua hari, bukan data dummy random
+    // Apply filters
+    if (searchFilter) {
+      query = query.or(`system_key.ilike.%${searchFilter}%,site_id.ilike.%${searchFilter}%,site_name.ilike.%${searchFilter}%,vendor_name.ilike.%${searchFilter}%`);
+    }
+    
+    if (vendorFilter && vendorFilter !== 'all') {
+      query = query.eq('vendor_name', vendorFilter);
+    }
+    
+    if (programFilter && programFilter !== 'all') {
+      query = query.eq('program_report', programFilter);
+    }
+    
+    if (cityFilter && cityFilter !== 'all') {
+      query = query.eq('imp_ttp', cityFilter);
+    }
+    
+    // Get data from Supabase
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error("Supabase Error:", error);
+      // Return empty data on error
       const emptyData = dates.map(({ formatted }) => ({
         date: formatted,
         readiness: 0,
@@ -189,11 +71,47 @@ export async function GET(request: NextRequest) {
         status: 'success',
         data: emptyData,
         timestamp: new Date().toISOString(),
-        error: err instanceof Error ? err.message : 'Unknown error'
+        error: error.message
       });
-    } finally {
-      client.release();
     }
+    
+    // Process data to count by date
+    const readinessMap: DataCountMap = {};
+    const activatedMap: DataCountMap = {};
+    
+    data?.forEach(row => {
+      // Process readiness data
+      if (row.imp_integ_af) {
+        const date = new Date(row.imp_integ_af);
+        const dateKey = format(date, 'yyyy-MM-dd');
+        readinessMap[dateKey] = (readinessMap[dateKey] || 0) + 1;
+      }
+      
+      // Process activated data
+      if (row.rfs_af) {
+        const date = new Date(row.rfs_af);
+        const dateKey = format(date, 'yyyy-MM-dd');
+        activatedMap[dateKey] = (activatedMap[dateKey] || 0) + 1;
+      }
+    });
+    
+    // Combine data for each date
+    const dailyData = dates.map(({ date, formatted }) => {
+      const sqlDateStr = format(date, 'yyyy-MM-dd');
+      return {
+        date: formatted,
+        readiness: readinessMap[sqlDateStr] || 0,
+        activated: activatedMap[sqlDateStr] || 0
+      };
+    });
+
+    console.log("API returned data:", dailyData);
+    
+    return NextResponse.json({
+      status: 'success',
+      data: dailyData,
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     console.error('Error fetching daily runrate data:', error);
     return NextResponse.json(

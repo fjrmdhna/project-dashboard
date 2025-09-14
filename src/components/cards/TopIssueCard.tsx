@@ -113,35 +113,35 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
   }
 
   return (
-    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full h-full flex flex-col">
+    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full h-full flex flex-col min-w-0">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="bg-red-500/20 p-1.5 rounded-lg">
             <AlertTriangle className="h-4 w-4 text-red-400" />
           </div>
-          <div className="text-xs font-medium bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full">
+          <div className="responsive-text-sm font-medium bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full">
             5 Top Issue
           </div>
         </div>
         
         <div className="flex items-end gap-4">
           <div className="text-right">
-            <div className="text-3xl font-bold text-white">{topTotal}</div>
-            <div className="text-xs text-[#B0B7C3]">5 Top Issue</div>
+            <div className="responsive-text-3xl font-bold text-white">{topTotal}</div>
+            <div className="responsive-text-sm text-[#B0B7C3]">5 Top Issue</div>
           </div>
           
           <div className="text-right">
-            <div className="text-3xl font-bold text-white">{totalIssues}</div>
-            <div className="text-xs text-[#B0B7C3]">Total Issue</div>
+            <div className="responsive-text-3xl font-bold text-white">{totalIssues}</div>
+            <div className="responsive-text-sm text-[#B0B7C3]">Total Issue</div>
           </div>
         </div>
       </div>
       
       {/* Content */}
-      <div className="flex-1 flex flex-col md:flex-row">
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
         {/* Donut Chart (Left) */}
-        <div className="w-full md:w-1/2 h-[200px] md:h-auto">
+        <div className="w-full md:w-1/2 min-h-0 flex-1">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -167,16 +167,16 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
         </div>
         
         {/* Issue List (Right) */}
-        <div className="w-full md:w-1/2 pl-0 md:pl-4 mt-4 md:mt-0">
-          <div className="text-sm font-semibold text-white mb-2">5 Top Issue</div>
-          <div className="space-y-2">
+        <div className="w-full md:w-1/2 pl-0 md:pl-4 mt-4 md:mt-0 min-h-0 flex flex-col">
+          <div className="responsive-text font-semibold text-white mb-2">5 Top Issue</div>
+          <div className="space-y-2 flex-1 overflow-y-auto">
             {chartData.map((issue, index) => (
               <div key={index} className="flex items-start gap-2">
                 <div 
-                  className="w-3 h-3 rounded-full mt-1" 
+                  className="w-3 h-3 rounded-full mt-1 flex-shrink-0" 
                   style={{ backgroundColor: issue.color }}
                 />
-                <div className="text-xs text-[#B0B7C3] flex-1 truncate">
+                <div className="responsive-text-sm text-[#B0B7C3] flex-1 truncate">
                   {issue.category}
                 </div>
               </div>

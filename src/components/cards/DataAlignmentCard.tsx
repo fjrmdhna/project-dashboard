@@ -91,7 +91,7 @@ export function DataAlignmentCard({
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-[#1A2340] border border-white/10 px-3 py-2 rounded-md text-xs">
+        <div className="bg-[#1A2340] border border-white/10 px-3 py-2 rounded-md responsive-text-sm">
           <p className="text-white/90">{`${payload[0].payload.key}: ${payload[0].value}`}</p>
         </div>
       )
@@ -100,19 +100,19 @@ export function DataAlignmentCard({
   }
 
   return (
-    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col" style={{ padding: 'var(--wb-card-padding)' }}>
+    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'var(--wb-card-padding)' }}>
       {/* Header */}
-      <div className="flex items-center gap-2 mb-0">
+      <div className="flex items-center gap-2 mb-0 flex-shrink-0">
         <div className="bg-blue-500/20 p-1.5 rounded-lg">
           <Search className="h-4 w-4 text-blue-400" />
         </div>
-        <div className="text-xs font-medium bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">
+        <div className="responsive-text-sm font-medium bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">
           Data Alignment
         </div>
       </div>
 
       {/* Chart */}
-      <div className="flex-1 flex">
+      <div className="flex-1 flex min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
@@ -130,7 +130,7 @@ export function DataAlignmentCard({
               tickLine={false}
               axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
               angle={-45}
-              height={50}
+              height={undefined}
               textAnchor="end"
               interval={0}
               tickMargin={5}

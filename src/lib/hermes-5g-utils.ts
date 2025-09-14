@@ -1,16 +1,4 @@
-import { Pool } from 'pg';
-
-// PostgreSQL Pool (reuse from migration-utils)
-const postgresPool = new Pool({
-  host: process.env.POSTGRES_HOST || 'postgres',
-  port: parseInt(process.env.POSTGRES_PORT || '5432'),
-  database: process.env.POSTGRES_DB || 'project_dashboard',
-  user: process.env.POSTGRES_USER || 'project_user',
-  password: process.env.POSTGRES_PASSWORD || 'projectpassword',
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+import { supabase } from './supabase';
 
 // Hermes 5G Data Interface
 export interface Hermes5GData {
@@ -196,102 +184,53 @@ export interface FilterOptionsResponse {
 // Get Hermes 5G Data with Pagination
 export async function getHermes5GData(params: PaginationParams): Promise<Hermes5GResponse> {
   try {
-    const client = await postgresPool.connect();
+    // Build Supabase query
+    let query = supabase
+      .from('site_data_5g')
+      .select('*', { count: 'exact' });
     
-    // Build WHERE clause
-    const whereConditions: string[] = [];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
-    
-    // Search filter
+    // Apply filters
     if (params.search) {
-      whereConditions.push(`(
-        LOWER(site_name) LIKE LOWER($${paramIndex}) OR 
-        LOWER(site_id) LIKE LOWER($${paramIndex}) OR 
-        LOWER(vendor_name) LIKE LOWER($${paramIndex}) OR
-        LOWER(system_key) LIKE LOWER($${paramIndex})
-      )`);
-      queryParams.push(`%${params.search}%`);
-      paramIndex++;
+      query = query.or(`site_name.ilike.%${params.search}%,site_id.ilike.%${params.search}%,vendor_name.ilike.%${params.search}%,system_key.ilike.%${params.search}%`);
     }
     
-    // Status filter
     if (params.statusFilter && params.statusFilter !== 'all') {
-      whereConditions.push(`LOWER(site_status) = LOWER($${paramIndex})`);
-      queryParams.push(params.statusFilter);
-      paramIndex++;
+      query = query.eq('site_status', params.statusFilter);
     }
     
-    // Region filter
     if (params.regionFilter && params.regionFilter !== 'all') {
-      whereConditions.push(`region = $${paramIndex}`);
-      queryParams.push(params.regionFilter);
-      paramIndex++;
+      query = query.eq('region', params.regionFilter);
     }
     
-    // Vendor filter
     if (params.vendorFilter && params.vendorFilter !== 'all') {
-      whereConditions.push(`LOWER(vendor_code) = LOWER($${paramIndex})`);
-      queryParams.push(params.vendorFilter);
-      paramIndex++;
+      query = query.eq('vendor_code', params.vendorFilter);
     }
     
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-    
-    // Get total count
-    const countQuery = `SELECT COUNT(*) FROM site_data_5g ${whereClause}`;
-    const countResult = await client.query(countQuery, queryParams);
-    const totalRecords = parseInt(countResult.rows[0].count);
-    
-    // Calculate pagination
-    const totalPages = Math.ceil(totalRecords / params.pageSize);
+    // Apply pagination
     const offset = (params.page - 1) * params.pageSize;
+    query = query.range(offset, offset + params.pageSize - 1);
     
-    // Build ORDER BY clause
+    // Apply sorting
     const sortBy = params.sortBy || 'created_at';
     const sortOrder = params.sortOrder || 'desc';
-    const orderClause = `ORDER BY "${sortBy}" ${sortOrder.toUpperCase()}`;
+    query = query.order(sortBy, { ascending: sortOrder === 'asc' });
     
-    // Get paginated data
-    const dataQuery = `
-      SELECT 
-        system_key,
-        site_id,
-        site_name,
-        vendor_name,
-        COALESCE(site_status, 'Unknown') as site_status,
-        region,
-        year,
-        program_name,
-        "SBOQ.project_type",
-        vendor_code,
-        "5g_readiness_date",
-        "5g_activation_date",
-        COALESCE(cx_acceptance_status, 'Unknown') as cx_acceptance_status,
-        long,
-        lat,
-        created_at,
-        site_category,
-        scope_of_work,
-        region_wise,
-        region_circle
-      FROM site_data_5g 
-      ${whereClause}
-      ${orderClause}
-      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
-    `;
+    const { data, error, count } = await query;
     
-    const dataParams = [...queryParams, params.pageSize, offset];
-    const dataResult = await client.query(dataQuery, dataParams);
+    if (error) {
+      console.error('Supabase Error:', error);
+      throw new Error(`Supabase error: ${error.message}`);
+    }
     
-    client.release();
+    const totalRecords = count || 0;
+    const totalPages = Math.ceil(totalRecords / params.pageSize);
     
     // Calculate stats
     const stats = await getHermes5GStats();
     
     return {
       status: 'success',
-      data: dataResult.rows,
+      data: data as Hermes5GData[],
       pagination: {
         currentPage: params.page,
         pageSize: params.pageSize,
@@ -313,42 +252,60 @@ export async function getHermes5GData(params: PaginationParams): Promise<Hermes5
 // Get Hermes 5G Statistics
 export async function getHermes5GStats() {
   try {
-    const client = await postgresPool.connect();
+    // Get all data to calculate stats
+    const { data, error } = await supabase
+      .from('site_data_5g')
+      .select('*');
     
-    const statsQuery = `
-      SELECT 
-        COUNT(*) as total,
-        COUNT(CASE WHEN system_key IS NOT NULL THEN 1 END) as scope,
-        COUNT(CASE WHEN caf_approved IS NOT NULL THEN 1 END) as caf,
-        COUNT(CASE WHEN mos_af IS NOT NULL THEN 1 END) as mos,
-        COUNT(CASE WHEN ic_000040_af IS NOT NULL THEN 1 END) as installation,
-        COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as five_g_readiness,
-        COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as five_g_activation,
-        COUNT(CASE WHEN rfc_approved IS NOT NULL THEN 1 END) as rfc,
-        COUNT(CASE WHEN endorse_af IS NOT NULL THEN 1 END) as endorse,
-        COUNT(CASE WHEN hotnews_af IS NOT NULL THEN 1 END) as hotnews,
-        COUNT(CASE WHEN pac_accepted_af IS NOT NULL THEN 1 END) as pac,
-        COUNT(CASE WHEN cluster_acceptance_af IS NOT NULL THEN 1 END) as cluster_atp
-      FROM site_data_5g
-    `;
+    if (error) {
+      console.error('Supabase Error:', error);
+      throw new Error(`Supabase error: ${error.message}`);
+    }
     
-    const result = await client.query(statsQuery);
-    client.release();
+    if (!data) {
+      return {
+        total: 0,
+        scope: 0,
+        caf: 0,
+        mos: 0,
+        installation: 0,
+        fiveGReadiness: 0,
+        fiveGActivation: 0,
+        rfc: 0,
+        endorse: 0,
+        hotnews: 0,
+        pac: 0,
+        clusterAtp: 0
+      };
+    }
     
-    const row = result.rows[0];
+    // Calculate stats from data
+    const total = data.length;
+    const scope = data.filter(row => row.system_key).length;
+    const caf = data.filter(row => row.caf_approved).length;
+    const mos = data.filter(row => row.mos_af).length;
+    const installation = data.filter(row => row.ic_000040_af).length;
+    const fiveGReadiness = data.filter(row => row.imp_integ_af).length;
+    const fiveGActivation = data.filter(row => row.rfs_af).length;
+    const rfc = data.filter(row => row.rfc_approved).length;
+    const endorse = data.filter(row => row.endorse_af).length;
+    const hotnews = data.filter(row => row.hotnews_af).length;
+    const pac = data.filter(row => row.pac_accepted_af).length;
+    const clusterAtp = data.filter(row => row.cluster_acceptance_af).length;
+    
     return {
-      total: parseInt(row.total),
-      scope: parseInt(row.scope),
-      caf: parseInt(row.caf),
-      mos: parseInt(row.mos),
-      installation: parseInt(row.installation),
-      fiveGReadiness: parseInt(row.five_g_readiness),
-      fiveGActivation: parseInt(row.five_g_activation),
-      rfc: parseInt(row.rfc),
-      endorse: parseInt(row.endorse),
-      hotnews: parseInt(row.hotnews),
-      pac: parseInt(row.pac),
-      clusterAtp: parseInt(row.cluster_atp)
+      total,
+      scope,
+      caf,
+      mos,
+      installation,
+      fiveGReadiness,
+      fiveGActivation,
+      rfc,
+      endorse,
+      hotnews,
+      pac,
+      clusterAtp
     };
     
   } catch (error) {
@@ -373,50 +330,39 @@ export async function getHermes5GStats() {
 // Get Available Filter Options
 export async function getFilterOptions(): Promise<FilterOptionsResponse> {
   try {
-    const client = await postgresPool.connect();
-    
     // Get unique vendors from vendor_name
-    const vendorsQuery = `
-      SELECT DISTINCT vendor_name 
-      FROM site_data_5g 
-      WHERE vendor_name IS NOT NULL 
-        AND vendor_name != ''
-      ORDER BY vendor_name
-    `;
+    const { data: vendorsData, error: vendorsError } = await supabase
+      .from('site_data_5g')
+      .select('vendor_name')
+      .not('vendor_name', 'is', null)
+      .neq('vendor_name', '');
     
     // Get unique programs from program_report
-    const programsQuery = `
-      SELECT DISTINCT program_report 
-      FROM site_data_5g 
-      WHERE program_report IS NOT NULL 
-        AND program_report != ''
-      ORDER BY program_report
-    `;
+    const { data: programsData, error: programsError } = await supabase
+      .from('site_data_5g')
+      .select('program_report')
+      .not('program_report', 'is', null)
+      .neq('program_report', '');
     
     // Get unique cities from imp_ttp
-    const citiesQuery = `
-      SELECT DISTINCT imp_ttp 
-      FROM site_data_5g 
-      WHERE imp_ttp IS NOT NULL 
-        AND imp_ttp != ''
-      ORDER BY imp_ttp
-    `;
+    const { data: citiesData, error: citiesError } = await supabase
+      .from('site_data_5g')
+      .select('imp_ttp')
+      .not('imp_ttp', 'is', null)
+      .neq('imp_ttp', '');
     
-    const [vendorsResult, programsResult, citiesResult] = await Promise.all([
-      client.query(vendorsQuery),
-      client.query(programsQuery),
-      client.query(citiesQuery)
-    ]);
-    
-    client.release();
+    if (vendorsError || programsError || citiesError) {
+      console.error('Supabase Error:', vendorsError || programsError || citiesError);
+      throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message}`);
+    }
     
     const data: FilterOptionsData = {
-      vendors: vendorsResult.rows.map(row => row.vendor_name),
-      programs: programsResult.rows.map(row => row.program_report),
-      cities: citiesResult.rows.map(row => row.imp_ttp)
+      vendors: [...new Set(vendorsData?.map(row => row.vendor_name) || [])].sort(),
+      programs: [...new Set(programsData?.map(row => row.program_report) || [])].sort(),
+      cities: [...new Set(citiesData?.map(row => row.imp_ttp) || [])].sort()
     };
     
-    console.log('Filter options from DB:', data);
+    console.log('Filter options from Supabase:', data);
     
     return {
       status: 'success',
@@ -444,54 +390,64 @@ export async function getReadinessChartData(filters?: {
   cityFilter?: string;
 }): Promise<ReadinessChartResponse> {
   try {
-    const client = await postgresPool.connect();
+    // Build Supabase query with filters
+    let query = supabase
+      .from('site_data_5g')
+      .select('imp_ttp, imp_integ_af')
+      .not('imp_ttp', 'is', null);
     
-    // Build WHERE clause for filters
-    const whereConditions: string[] = ['imp_ttp IS NOT NULL'];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
-    
+    // Apply filters
     if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      whereConditions.push(`vendor_name = $${paramIndex}`);
-      queryParams.push(filters.vendorFilter);
-      paramIndex++;
+      query = query.eq('vendor_name', filters.vendorFilter);
     }
     
     if (filters?.programFilter && filters.programFilter !== 'all') {
-      whereConditions.push(`program_report = $${paramIndex}`);
-      queryParams.push(filters.programFilter);
-      paramIndex++;
+      query = query.eq('program_report', filters.programFilter);
     }
     
     if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      whereConditions.push(`imp_ttp = $${paramIndex}`);
-      queryParams.push(filters.cityFilter);
-      paramIndex++;
+      query = query.eq('imp_ttp', filters.cityFilter);
     }
     
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    const { data, error } = await query;
     
-    const query = `
-      SELECT 
-        COALESCE(imp_ttp, 'Unknown') as location,
-        COUNT(CASE WHEN imp_integ_af IS NULL THEN 1 END) as nyReadiness,
-        COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness
-      FROM site_data_5g 
-      ${whereClause}
-      GROUP BY imp_ttp
-      ORDER BY nyReadiness DESC
-    `;
+    if (error) {
+      console.error('Supabase Error:', error);
+      return {
+        status: 'error',
+        data: [],
+        timestamp: new Date().toISOString()
+      };
+    }
     
-    const result = await client.query(query, queryParams);
-    client.release();
+    // Process data to group by location
+    const locationData: { [key: string]: { nyReadiness: number; readiness: number } } = {};
+    
+    data?.forEach(row => {
+      const location = row.imp_ttp || 'Unknown';
+      if (!locationData[location]) {
+        locationData[location] = { nyReadiness: 0, readiness: 0 };
+      }
+      
+      if (row.imp_integ_af === null) {
+        locationData[location].nyReadiness++;
+      } else {
+        locationData[location].readiness++;
+      }
+    });
+    
+    // Convert to array and sort by nyReadiness
+    const result = Object.entries(locationData)
+      .map(([location, counts]) => ({
+        location,
+        nyReadiness: counts.nyReadiness,
+        readiness: counts.readiness
+      }))
+      .sort((a, b) => b.nyReadiness - a.nyReadiness);
     
     return {
       status: 'success',
-      data: result.rows.map(row => ({
-        location: row.location,
-        nyReadiness: parseInt(row.nyreadiness) || 0,
-        readiness: parseInt(row.readiness) || 0
-      })),
+      data: result,
       timestamp: new Date().toISOString()
     };
   } catch (error) {
@@ -511,54 +467,64 @@ export async function getActivatedChartData(filters?: {
   cityFilter?: string;
 }): Promise<ActivatedChartResponse> {
   try {
-    const client = await postgresPool.connect();
+    // Build Supabase query with filters
+    let query = supabase
+      .from('site_data_5g')
+      .select('imp_ttp, rfs_af')
+      .not('imp_ttp', 'is', null);
     
-    // Build WHERE clause for filters
-    const whereConditions: string[] = ['imp_ttp IS NOT NULL'];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
-    
+    // Apply filters
     if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      whereConditions.push(`vendor_name = $${paramIndex}`);
-      queryParams.push(filters.vendorFilter);
-      paramIndex++;
+      query = query.eq('vendor_name', filters.vendorFilter);
     }
     
     if (filters?.programFilter && filters.programFilter !== 'all') {
-      whereConditions.push(`program_report = $${paramIndex}`);
-      queryParams.push(filters.programFilter);
-      paramIndex++;
+      query = query.eq('program_report', filters.programFilter);
     }
     
     if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      whereConditions.push(`imp_ttp = $${paramIndex}`);
-      queryParams.push(filters.cityFilter);
-      paramIndex++;
+      query = query.eq('imp_ttp', filters.cityFilter);
     }
     
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    const { data, error } = await query;
     
-    const query = `
-      SELECT 
-        COALESCE(imp_ttp, 'Unknown') as location,
-        COUNT(CASE WHEN rfs_af IS NULL THEN 1 END) as nyActivated,
-        COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated
-      FROM site_data_5g 
-      ${whereClause}
-      GROUP BY imp_ttp
-      ORDER BY nyActivated DESC
-    `;
+    if (error) {
+      console.error('Supabase Error:', error);
+      return {
+        status: 'error',
+        data: [],
+        timestamp: new Date().toISOString()
+      };
+    }
     
-    const result = await client.query(query, queryParams);
-    client.release();
+    // Process data to group by location
+    const locationData: { [key: string]: { nyActivated: number; activated: number } } = {};
+    
+    data?.forEach(row => {
+      const location = row.imp_ttp || 'Unknown';
+      if (!locationData[location]) {
+        locationData[location] = { nyActivated: 0, activated: 0 };
+      }
+      
+      if (row.rfs_af === null) {
+        locationData[location].nyActivated++;
+      } else {
+        locationData[location].activated++;
+      }
+    });
+    
+    // Convert to array and sort by nyActivated
+    const result = Object.entries(locationData)
+      .map(([location, counts]) => ({
+        location,
+        nyActivated: counts.nyActivated,
+        activated: counts.activated
+      }))
+      .sort((a, b) => b.nyActivated - a.nyActivated);
     
     return {
       status: 'success',
-      data: result.rows.map(row => ({
-        location: row.location,
-        nyActivated: parseInt(row.nyactivated) || 0,
-        activated: parseInt(row.activated) || 0
-      })),
+      data: result,
       timestamp: new Date().toISOString()
     };
   } catch (error) {
@@ -578,92 +544,98 @@ export async function getProgressCurveData(filters?: {
   cityFilter?: string;
 }): Promise<ProgressCurveResponse> {
   try {
-    const client = await postgresPool.connect();
+    // Build Supabase query with filters
+    let query = supabase
+      .from('site_data_5g')
+      .select('rfs_forecast_lock, imp_integ_af, rfs_af')
+      .not('rfs_forecast_lock', 'is', null);
     
-    // Build WHERE clause for filters
-    const whereConditions: string[] = ['rfs_forecast_lock IS NOT NULL'];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
-    
+    // Apply filters
     if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      whereConditions.push(`vendor_name = $${paramIndex}`);
-      queryParams.push(filters.vendorFilter);
-      paramIndex++;
+      query = query.eq('vendor_name', filters.vendorFilter);
     }
     
     if (filters?.programFilter && filters.programFilter !== 'all') {
-      whereConditions.push(`program_report = $${paramIndex}`);
-      queryParams.push(filters.programFilter);
-      paramIndex++;
+      query = query.eq('program_report', filters.programFilter);
     }
     
     if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      whereConditions.push(`imp_ttp = $${paramIndex}`);
-      queryParams.push(filters.cityFilter);
-      paramIndex++;
+      query = query.eq('imp_ttp', filters.cityFilter);
     }
     
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    const { data, error } = await query;
     
-    // Get real data from database with proper aggregation
-    const realDataQuery = `
-      WITH weekly_data AS (
-        SELECT 
-          EXTRACT(WEEK FROM rfs_forecast_lock) as week_num,
-          COUNT(*) as forecastAccelerate,
-          COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness,
-          COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated
-        FROM site_data_5g 
-        ${whereClause}
-          AND EXTRACT(MONTH FROM rfs_forecast_lock) = 9 
-          AND EXTRACT(YEAR FROM rfs_forecast_lock) = 2025
-        GROUP BY EXTRACT(WEEK FROM rfs_forecast_lock)
-      ),
-      monthly_data AS (
-        SELECT 
-          EXTRACT(MONTH FROM rfs_forecast_lock) as month_num,
-          COUNT(*) as forecastAccelerate,
-          COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness,
-          COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated
-        FROM site_data_5g 
-        ${whereClause}
-          AND EXTRACT(MONTH FROM rfs_forecast_lock) IN (10, 11, 12, 1, 2)
-          AND EXTRACT(YEAR FROM rfs_forecast_lock) IN (2024, 2025)
-        GROUP BY EXTRACT(MONTH FROM rfs_forecast_lock)
-      )
-      SELECT 'weekly' as data_type, week_num as period_num, forecastAccelerate, readiness, activated
-      FROM weekly_data
-      UNION ALL
-      SELECT 'monthly' as data_type, month_num as period_num, forecastAccelerate, readiness, activated
-      FROM monthly_data
-      ORDER BY data_type DESC, period_num
-    `;
-    
-    const result = await client.query(realDataQuery, queryParams);
-    client.release();
-    
-    // Process real data to create periods
-    const processedData: ProgressCurveData[] = result.rows.map(row => {
-      const dataType = row.data_type;
-      const periodNum = parseInt(row.period_num);
-      
-      let period = '';
-      if (dataType === 'weekly') {
-        // Weekly format for current month (September)
-        period = `W${periodNum}-Sep`;
-      } else {
-        // Monthly format for previous months
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        period = monthNames[periodNum - 1];
-      }
-      
+    if (error) {
+      console.error('Supabase Error:', error);
       return {
-        period,
-        forecastAccelerate: parseInt(row.forecastaccelerate) || 0,
-        readiness: parseInt(row.readiness) || 0,
-        activated: parseInt(row.activated) || 0
+        status: 'error',
+        data: [],
+        timestamp: new Date().toISOString()
       };
+    }
+    
+    // Process data to group by period
+    const periodData: { [key: string]: { forecastAccelerate: number; readiness: number; activated: number } } = {};
+    
+    data?.forEach(row => {
+      if (row.rfs_forecast_lock) {
+        const date = new Date(row.rfs_forecast_lock);
+        const month = date.getMonth() + 1; // 1-12
+        const year = date.getFullYear();
+        const week = Math.ceil(date.getDate() / 7);
+        
+        let period = '';
+        if (month === 9 && year === 2025) {
+          // Weekly format for September 2025
+          period = `W${week}-Sep`;
+        } else {
+          // Monthly format for other months
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          period = monthNames[month - 1];
+        }
+        
+        if (!periodData[period]) {
+          periodData[period] = { forecastAccelerate: 0, readiness: 0, activated: 0 };
+        }
+        
+        periodData[period].forecastAccelerate++;
+        
+        if (row.imp_integ_af) {
+          periodData[period].readiness++;
+        }
+        
+        if (row.rfs_af) {
+          periodData[period].activated++;
+        }
+      }
     });
+    
+    // Convert to array and sort
+    const processedData: ProgressCurveData[] = Object.entries(periodData)
+      .map(([period, counts]) => ({
+        period,
+        forecastAccelerate: counts.forecastAccelerate,
+        readiness: counts.readiness,
+        activated: counts.activated
+      }))
+      .sort((a, b) => {
+        // Sort by period order
+        const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const aIsWeekly = a.period.includes('W');
+        const bIsWeekly = b.period.includes('W');
+        
+        if (aIsWeekly && bIsWeekly) {
+          return a.period.localeCompare(b.period);
+        } else if (aIsWeekly) {
+          return -1;
+        } else if (bIsWeekly) {
+          return 1;
+        } else {
+          const aMonth = a.period;
+          const bMonth = b.period;
+          return monthOrder.indexOf(aMonth) - monthOrder.indexOf(bMonth);
+        }
+      });
     
     return {
       status: 'success',
@@ -687,74 +659,71 @@ export async function getDailyRunrateData(filters?: {
   cityFilter?: string;
 }): Promise<DailyRunrateResponse> {
   try {
-    const client = await postgresPool.connect();
+    // Build Supabase query with filters
+    let query = supabase
+      .from('site_data_5g')
+      .select('imp_integ_af, rfs_af');
     
-    // Build WHERE clause for filters
-    const whereConditions: string[] = [];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
-    
+    // Apply filters
     if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      whereConditions.push(`s5g.vendor_name = $${paramIndex}`);
-      queryParams.push(filters.vendorFilter);
-      paramIndex++;
+      query = query.eq('vendor_name', filters.vendorFilter);
     }
     
     if (filters?.programFilter && filters.programFilter !== 'all') {
-      whereConditions.push(`s5g.program_report = $${paramIndex}`);
-      queryParams.push(filters.programFilter);
-      paramIndex++;
+      query = query.eq('program_report', filters.programFilter);
     }
     
     if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      whereConditions.push(`s5g.imp_ttp = $${paramIndex}`);
-      queryParams.push(filters.cityFilter);
-      paramIndex++;
+      query = query.eq('imp_ttp', filters.cityFilter);
     }
     
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    const { data, error } = await query;
     
-    // Get data for current week (Monday to Sunday)
-    const query = `
-      WITH date_series AS (
-        SELECT generate_series(
-          DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '1 day', -- Monday
-          DATE_TRUNC('week', CURRENT_DATE) + INTERVAL '7 days', -- Sunday
-          INTERVAL '1 day'
-        )::date as week_date
-      ),
-      daily_counts AS (
-        SELECT 
-          TO_CHAR(ds.week_date, 'DD-Mon-YY') as date,
-          COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness,
-          COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated
-        FROM date_series ds
-        LEFT JOIN site_data_5g s5g ON DATE(COALESCE(s5g.imp_integ_af, s5g.rfs_af)) = ds.week_date
-        ${whereClause}
-        GROUP BY ds.week_date
-        ORDER BY ds.week_date
-      )
-      SELECT * FROM daily_counts
-    `;
+    if (error) {
+      console.error('Supabase Error:', error);
+      return {
+        status: 'error',
+        data: [],
+        timestamp: new Date().toISOString()
+      };
+    }
     
-    const result = await client.query(query, queryParams);
-    client.release();
+    // Generate current week dates (Monday to Sunday)
+    const today = new Date();
+    const currentWeek = [];
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Monday
     
-    // Process data to ensure we have all 7 days
-    const processedData = result.rows.map(row => ({
-      date: row.date,
-      readiness: parseInt(row.readiness) || 0,
-      activated: parseInt(row.activated) || 0
-    }));
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
+      currentWeek.push(date);
+    }
     
-    // Log what we got from database
-    console.log('Daily Runrate - Current week data from DB:', processedData);
+    // Process data to count readiness and activation by date
+    const processedData = currentWeek.map(date => {
+      const dateStr = date.toISOString().split('T')[0];
+      const readiness = data?.filter(row => 
+        row.imp_integ_af && row.imp_integ_af.startsWith(dateStr)
+      ).length || 0;
+      const activated = data?.filter(row => 
+        row.rfs_af && row.rfs_af.startsWith(dateStr)
+      ).length || 0;
+      
+      return {
+        date: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }),
+        readiness,
+        activated
+      };
+    });
+    
+    console.log('Daily Runrate - Current week data from Supabase:', processedData);
     
     return {
       status: 'success',
       data: processedData,
       timestamp: new Date().toISOString(),
-      note: processedData.length === 7 ? 'Full current week data (Mon-Sun)' : `Only ${processedData.length} days available`
+      note: 'Full current week data (Mon-Sun)'
     };
   } catch (error) {
     console.error('Error getting daily runrate data:', error);
@@ -773,67 +742,61 @@ export async function getDataAlignmentData(filters?: {
   cityFilter?: string;
 }): Promise<DataAlignmentResponse> {
   try {
-    const client = await postgresPool.connect();
+    // Build Supabase query with filters
+    let query = supabase
+      .from('site_data_5g')
+      .select('caf_approved, mos_af, ic_000040_af, imp_integ_af, rfs_af, rfc_approved, hotnews_af, endorse_af');
     
-    // Build WHERE clause for filters
-    const whereConditions: string[] = [];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
-    
+    // Apply filters
     if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      whereConditions.push(`vendor_name = $${paramIndex}`);
-      queryParams.push(filters.vendorFilter);
-      paramIndex++;
+      query = query.eq('vendor_name', filters.vendorFilter);
     }
     
     if (filters?.programFilter && filters.programFilter !== 'all') {
-      whereConditions.push(`program_report = $${paramIndex}`);
-      queryParams.push(filters.programFilter);
-      paramIndex++;
+      query = query.eq('program_report', filters.programFilter);
     }
     
     if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      whereConditions.push(`imp_ttp = $${paramIndex}`);
-      queryParams.push(filters.cityFilter);
-      paramIndex++;
+      query = query.eq('imp_ttp', filters.cityFilter);
     }
     
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    const { data, error } = await query;
     
-    const query = `
-      SELECT 
-        COUNT(CASE WHEN caf_approved IS NOT NULL THEN 1 END) as caf,
-        COUNT(CASE WHEN mos_af IS NOT NULL THEN 1 END) as mos,
-        COUNT(CASE WHEN ic_000040_af IS NOT NULL THEN 1 END) as install,
-        COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as readiness,
-        COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated,
-        COUNT(CASE WHEN rfc_approved IS NOT NULL THEN 1 END) as rfc,
-        COUNT(CASE WHEN hotnews_af IS NOT NULL THEN 1 END) as hn,
-        COUNT(CASE WHEN endorse_af IS NOT NULL THEN 1 END) as endorse
-      FROM site_data_5g
-      ${whereClause}
-    `;
+    if (error) {
+      console.error('Supabase Error:', error);
+      return {
+        status: 'error',
+        data: {
+          caf: 0,
+          mos: 0,
+          install: 0,
+          readiness: 0,
+          activated: 0,
+          rfc: 0,
+          hn: 0,
+          endorse: 0
+        },
+        timestamp: new Date().toISOString()
+      };
+    }
     
-    const result = await client.query(query, queryParams);
-    client.release();
-    
-    const row = result.rows[0];
-    const data: DataAlignmentData = {
-      caf: parseInt(row.caf) || 0,
-      mos: parseInt(row.mos) || 0,
-      install: parseInt(row.install) || 0,
-      readiness: parseInt(row.readiness) || 0,
-      activated: parseInt(row.activated) || 0,
-      rfc: parseInt(row.rfc) || 0,
-      hn: parseInt(row.hn) || 0,
-      endorse: parseInt(row.endorse) || 0
+    // Calculate counts from data
+    const dataAlignment: DataAlignmentData = {
+      caf: data?.filter(row => row.caf_approved).length || 0,
+      mos: data?.filter(row => row.mos_af).length || 0,
+      install: data?.filter(row => row.ic_000040_af).length || 0,
+      readiness: data?.filter(row => row.imp_integ_af).length || 0,
+      activated: data?.filter(row => row.rfs_af).length || 0,
+      rfc: data?.filter(row => row.rfc_approved).length || 0,
+      hn: data?.filter(row => row.hotnews_af).length || 0,
+      endorse: data?.filter(row => row.endorse_af).length || 0
     };
     
-    console.log('Data Alignment data from DB:', data);
+    console.log('Data Alignment data from Supabase:', dataAlignment);
     
     return {
       status: 'success',
-      data,
+      data: dataAlignment,
       timestamp: new Date().toISOString()
     };
   } catch (error) {
@@ -862,72 +825,66 @@ export async function getTop5IssueData(filters?: {
   cityFilter?: string;
 }): Promise<Top5IssueResponse> {
   try {
-    const client = await postgresPool.connect();
+    // Build Supabase query with filters
+    let query = supabase
+      .from('site_data_5g')
+      .select('issue_category')
+      .not('issue_category', 'is', null)
+      .neq('issue_category', '');
     
-    // Build WHERE clause for filters
-    const whereConditions: string[] = ['issue_category IS NOT NULL', `issue_category != ''`];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
-    
+    // Apply filters
     if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      whereConditions.push(`vendor_name = $${paramIndex}`);
-      queryParams.push(filters.vendorFilter);
-      paramIndex++;
+      query = query.eq('vendor_name', filters.vendorFilter);
     }
     
     if (filters?.programFilter && filters.programFilter !== 'all') {
-      whereConditions.push(`program_report = $${paramIndex}`);
-      queryParams.push(filters.programFilter);
-      paramIndex++;
+      query = query.eq('program_report', filters.programFilter);
     }
     
     if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      whereConditions.push(`imp_ttp = $${paramIndex}`);
-      queryParams.push(filters.cityFilter);
-      paramIndex++;
+      query = query.eq('imp_ttp', filters.cityFilter);
     }
     
-    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    const { data, error } = await query;
     
-    // Get top 5 issue categories by count
-    const query = `
-      SELECT 
-        issue_category as category,
-        COUNT(*) as count
-      FROM site_data_5g 
-      ${whereClause}
-      GROUP BY issue_category 
-      ORDER BY count DESC 
-      LIMIT 5
-    `;
+    if (error) {
+      console.error('Supabase Error:', error);
+      return {
+        status: 'error',
+        data: [],
+        top5Count: 0,
+        totalCount: 0,
+        timestamp: new Date().toISOString()
+      };
+    }
     
-    const result = await client.query(query, queryParams);
-    client.release();
+    // Count occurrences of each issue category
+    const categoryCounts: { [key: string]: number } = {};
+    data?.forEach(row => {
+      const category = row.issue_category;
+      categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+    });
     
-    // Get total count of all issues
-    const totalQuery = `
-      SELECT COUNT(*) as total
-      FROM site_data_5g 
-      ${whereClause}
-    `;
-    
-    const totalResult = await client.query(totalQuery, queryParams);
-    const totalCount = parseInt(totalResult.rows[0].total) || 0;
+    // Sort by count and get top 5
+    const sortedCategories = Object.entries(categoryCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5);
     
     // Define colors for segments
     const colors = ['#3B82F6', '#10B981', '#06B6D4', '#EF4444', '#8B5CF6'];
     
     // Process data with colors
-    const processedData: Top5IssueData[] = result.rows.map((row, index) => ({
-      category: row.category,
-      count: parseInt(row.count) || 0,
+    const processedData: Top5IssueData[] = sortedCategories.map(([category, count], index) => ({
+      category,
+      count,
       color: colors[index] || '#6B7280'
     }));
     
-    // Calculate top 5 count
+    // Calculate counts
     const top5Count = processedData.reduce((sum, item) => sum + item.count, 0);
+    const totalCount = data?.length || 0;
     
-    console.log('Top 5 Issue data from DB:', processedData);
+    console.log('Top 5 Issue data from Supabase:', processedData);
     console.log('Top 5 Count:', top5Count, 'Total Count:', totalCount);
     
     return {
@@ -956,113 +913,110 @@ export async function getNanoClusterData(filters?: {
   cityFilter?: string;
 }): Promise<NanoClusterResponse> {
   try {
-    const client = await postgresPool.connect();
+    // Build Supabase query with filters
+    let query = supabase
+      .from('site_data_5g')
+      .select('nano_cluster, imp_integ_af, rfs_af')
+      .not('nano_cluster', 'is', null)
+      .neq('nano_cluster', '');
     
-    // Build WHERE clause for filters
-    const whereConditions: string[] = ['nano_cluster IS NOT NULL', `nano_cluster != ''`];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
-    
+    // Apply filters
     if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      whereConditions.push(`vendor_name = $${paramIndex}`);
-      queryParams.push(filters.vendorFilter);
-      paramIndex++;
+      query = query.eq('vendor_name', filters.vendorFilter);
     }
     
     if (filters?.programFilter && filters.programFilter !== 'all') {
-      whereConditions.push(`program_report = $${paramIndex}`);
-      queryParams.push(filters.programFilter);
-      paramIndex++;
+      query = query.eq('program_report', filters.programFilter);
     }
     
     if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      whereConditions.push(`imp_ttp = $${paramIndex}`);
-      queryParams.push(filters.cityFilter);
-      paramIndex++;
+      query = query.eq('imp_ttp', filters.cityFilter);
     }
     
-    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    const { data, error } = await query;
     
-    // Get total unique nano clusters
-    const totalQuery = `
-      SELECT COUNT(DISTINCT nano_cluster) as total
-      FROM site_data_5g 
-      ${whereClause}
-    `;
+    if (error) {
+      console.error('Supabase Error:', error);
+      return {
+        status: 'error',
+        data: {
+          totalClusters: 0,
+          readinessLess50: 0,
+          readiness50to80: 0,
+          readiness80to99: 0,
+          readiness100: 0,
+          completed: 0
+        },
+        timestamp: new Date().toISOString()
+      };
+    }
     
-    const totalResult = await client.query(totalQuery, queryParams);
-    const totalClusters = parseInt(totalResult.rows[0].total) || 0;
+    // Process data to group by nano_cluster
+    const clusterData: { [key: string]: { totalSites: number; readySites: number; activatedSites: number } } = {};
     
-    // Get cluster readiness data based on imp_integ_af
-    const readinessQuery = `
-      WITH cluster_readiness AS (
-        SELECT 
-          nano_cluster,
-          COUNT(*) as total_sites,
-          COUNT(CASE WHEN imp_integ_af IS NOT NULL THEN 1 END) as ready_sites
-        FROM site_data_5g 
-        ${whereClause}
-        GROUP BY nano_cluster
-      ),
-      readiness_percentage AS (
-        SELECT 
-          nano_cluster,
-          total_sites,
-          ready_sites,
-          CASE 
-            WHEN total_sites = 0 THEN 0
-            ELSE (ready_sites::float / total_sites::float) * 100
-          END as readiness_percentage
-        FROM cluster_readiness
-      )
-      SELECT 
-        COUNT(CASE WHEN readiness_percentage < 50 THEN 1 END) as less_50,
-        COUNT(CASE WHEN readiness_percentage >= 50 AND readiness_percentage < 80 THEN 1 END) as between_50_80,
-        COUNT(CASE WHEN readiness_percentage >= 80 AND readiness_percentage < 99 THEN 1 END) as between_80_99,
-        COUNT(CASE WHEN readiness_percentage >= 99 AND readiness_percentage < 100 THEN 1 END) as between_99_100,
-        COUNT(CASE WHEN readiness_percentage = 100 THEN 1 END) as exactly_100
-      FROM readiness_percentage
-    `;
+    data?.forEach(row => {
+      const cluster = row.nano_cluster;
+      if (!clusterData[cluster]) {
+        clusterData[cluster] = { totalSites: 0, readySites: 0, activatedSites: 0 };
+      }
+      
+      clusterData[cluster].totalSites++;
+      
+      if (row.imp_integ_af) {
+        clusterData[cluster].readySites++;
+      }
+      
+      if (row.rfs_af) {
+        clusterData[cluster].activatedSites++;
+      }
+    });
     
-    const readinessResult = await client.query(readinessQuery, queryParams);
-    const readinessRow = readinessResult.rows[0];
+    // Calculate readiness percentages and categories
+    let readinessLess50 = 0;
+    let readiness50to80 = 0;
+    let readiness80to99 = 0;
+    let readiness100 = 0;
+    let completed = 0;
     
-    // Get completed clusters (100% 5G activated based on rfs_af)
-    const completedQuery = `
-      WITH cluster_activation AS (
-        SELECT 
-          nano_cluster,
-          COUNT(*) as total_sites,
-          COUNT(CASE WHEN rfs_af IS NOT NULL THEN 1 END) as activated_sites
-        FROM site_data_5g 
-        ${whereClause}
-        GROUP BY nano_cluster
-      )
-      SELECT COUNT(*) as completed
-      FROM cluster_activation 
-      WHERE total_sites > 0 
-        AND (activated_sites::float / total_sites::float) = 1.0
-    `;
+    Object.values(clusterData).forEach(cluster => {
+      const readinessPercentage = cluster.totalSites > 0 ? (cluster.readySites / cluster.totalSites) * 100 : 0;
+      const activationPercentage = cluster.totalSites > 0 ? (cluster.activatedSites / cluster.totalSites) * 100 : 0;
+      
+      // Categorize by readiness percentage
+      if (readinessPercentage < 50) {
+        readinessLess50++;
+      } else if (readinessPercentage >= 50 && readinessPercentage < 80) {
+        readiness50to80++;
+      } else if (readinessPercentage >= 80 && readinessPercentage < 99) {
+        readiness80to99++;
+      } else if (readinessPercentage >= 99 && readinessPercentage < 100) {
+        readiness100++;
+      } else if (readinessPercentage === 100) {
+        readiness100++;
+      }
+      
+      // Check if cluster is 100% activated
+      if (activationPercentage === 100) {
+        completed++;
+      }
+    });
     
-    const completedResult = await client.query(completedQuery, queryParams);
-    const completed = parseInt(completedResult.rows[0].completed) || 0;
+    const totalClusters = Object.keys(clusterData).length;
     
-    client.release();
-    
-    const data: NanoClusterData = {
+    const result: NanoClusterData = {
       totalClusters,
-      readinessLess50: parseInt(readinessRow.less_50) || 0,
-      readiness50to80: parseInt(readinessRow.between_50_80) || 0,
-      readiness80to99: parseInt(readinessRow.between_80_99) || 0,
-      readiness100: parseInt(readinessRow.exactly_100) || 0,
+      readinessLess50,
+      readiness50to80,
+      readiness80to99,
+      readiness100,
       completed
     };
     
-    console.log('Nano Cluster data from DB:', data);
+    console.log('Nano Cluster data from DB:', result);
     
     return {
       status: 'success',
-      data,
+      data: result,
       timestamp: new Date().toISOString()
     };
   } catch (error) {

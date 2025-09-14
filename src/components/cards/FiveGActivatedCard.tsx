@@ -209,18 +209,18 @@ export function FiveGActivatedCard({ rows, maxCities = 10 }: Props) {
   }
 
   return (
-    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col" style={{ padding: 'var(--wb-card-padding)' }}>
+    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'var(--wb-card-padding)' }}>
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <div className="bg-green-500/20 p-1.5 rounded-lg">
           <BarChart3 className="h-4 w-4 text-green-400" />
         </div>
-        <div className="text-xs font-medium bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full">
+        <div className="responsive-text-sm font-medium bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full">
           5G Activation by City
         </div>
       </div>
       
-      <div className="flex-1">
+      <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             layout="vertical"
