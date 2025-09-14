@@ -203,35 +203,35 @@ const ForecastDotWithLabel = (props: any) => {
   return (
     <g>
       {/* Dot */}
-      <circle cx={cx} cy={cy} r={4} fill="#8A5AA3" />
+      <circle cx={cx} cy={cy} r={3} fill="#8A5AA3" />
       
       {/* Background rectangle with purple color - Right of point */}
       <rect
-        x={cx + 8}
-        y={cy - 8}
-        width={20}
-        height={16}
+        x={cx + 6}
+        y={cy - 6}
+        width={16}
+        height={12}
         fill="rgba(138, 90, 163, 0.95)"
-        rx={4}
-        ry={4}
+        rx={3}
+        ry={3}
         stroke="rgba(255, 255, 255, 0.5)"
         strokeWidth={1}
         style={{
-          filter: 'drop-shadow(0px 0px 3px rgba(0,0,0,0.9))'
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
         }}
       />
       {/* Text label */}
       <text
-        x={cx + 18}
+        x={cx + 14}
         y={cy}
         textAnchor="middle"
         dominantBaseline="central"
         fill="#FFFFFF"
-        fontSize={10}
-        fontWeight={700}
+        fontSize={8}
+        fontWeight={600}
         style={{
-          filter: 'drop-shadow(0px 0px 3px rgba(0,0,0,1))',
-          textShadow: '0px 0px 4px rgba(0,0,0,1)'
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
+          textShadow: '0px 0px 3px rgba(0,0,0,1)'
         }}
       >
         {Number(value).toLocaleString()}
@@ -253,35 +253,35 @@ const ReadinessDotWithLabel = (props: any) => {
   return (
     <g>
       {/* Dot */}
-      <circle cx={cx} cy={cy} r={4} fill="#E53935" />
+      <circle cx={cx} cy={cy} r={3} fill="#E53935" />
       
       {/* Background rectangle with red color - Left of point */}
       <rect
-        x={cx - 28}
-        y={cy - 8}
-        width={20}
-        height={16}
+        x={cx - 22}
+        y={cy - 6}
+        width={16}
+        height={12}
         fill="rgba(229, 57, 53, 0.95)"
-        rx={4}
-        ry={4}
+        rx={3}
+        ry={3}
         stroke="rgba(255, 255, 255, 0.5)"
         strokeWidth={1}
         style={{
-          filter: 'drop-shadow(0px 0px 3px rgba(0,0,0,0.9))'
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
         }}
       />
       {/* Text label */}
       <text
-        x={cx - 18}
+        x={cx - 14}
         y={cy}
         textAnchor="middle"
         dominantBaseline="central"
         fill="#FFFFFF"
-        fontSize={10}
-        fontWeight={700}
+        fontSize={8}
+        fontWeight={600}
         style={{
-          filter: 'drop-shadow(0px 0px 3px rgba(0,0,0,1))',
-          textShadow: '0px 0px 4px rgba(0,0,0,1)'
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
+          textShadow: '0px 0px 3px rgba(0,0,0,1)'
         }}
       >
         {Number(value).toLocaleString()}
@@ -303,35 +303,35 @@ const ActivatedDotWithLabel = (props: any) => {
   return (
     <g>
       {/* Dot */}
-      <circle cx={cx} cy={cy} r={4} fill="#7CB342" />
+      <circle cx={cx} cy={cy} r={3} fill="#7CB342" />
       
       {/* Background rectangle with green color - Above point */}
       <rect
-        x={cx - 10}
-        y={cy - 20}
-        width={20}
-        height={16}
+        x={cx - 8}
+        y={cy - 16}
+        width={16}
+        height={12}
         fill="rgba(124, 179, 66, 0.95)"
-        rx={4}
-        ry={4}
+        rx={3}
+        ry={3}
         stroke="rgba(255, 255, 255, 0.5)"
         strokeWidth={1}
         style={{
-          filter: 'drop-shadow(0px 0px 3px rgba(0,0,0,0.9))'
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
         }}
       />
       {/* Text label */}
       <text
         x={cx}
-        y={cy - 12}
+        y={cy - 10}
         textAnchor="middle"
         dominantBaseline="central"
         fill="#FFFFFF"
-        fontSize={10}
-        fontWeight={700}
+        fontSize={8}
+        fontWeight={600}
         style={{
-          filter: 'drop-shadow(0px 0px 3px rgba(0,0,0,1))',
-          textShadow: '0px 0px 4px rgba(0,0,0,1)'
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
+          textShadow: '0px 0px 3px rgba(0,0,0,1)'
         }}
       >
         {Number(value).toLocaleString()}
@@ -348,31 +348,31 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
 
 
   return (
-    <div className={`rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full h-full flex flex-col min-w-0 ${className ?? ''}`}>
+    <div className={`rounded-xl bg-[#0F1630]/80 border border-white/5 p-1.5 w-full h-full flex flex-col min-w-0 ${className ?? ''}`}>
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
-        <div className="bg-orange-500/20 p-1.5 rounded-lg">
-          <TrendingUp className="h-4 w-4 text-orange-400" />
+      <div className="flex items-center gap-1.5 mb-1 flex-shrink-0">
+        <div className="bg-orange-500/20 p-1 rounded-md">
+          <TrendingUp className="h-3 w-3 text-orange-400" />
         </div>
-        <div className="responsive-text-sm font-medium bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">
+        <div className="text-[10px] font-medium bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded-full">
           Progress Curve
         </div>
       </div>
       
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0" style={{height: '100%'}}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 30 }}>
-            <CartesianGrid stroke="rgba(255,255,255,.08)" strokeDasharray="3 3" />
+          <LineChart data={data} margin={{ top: 5, right: 30, left: 8, bottom: 12 }}>
+            <CartesianGrid stroke="rgba(255,255,255,.06)" strokeDasharray="2 2" />
             <XAxis 
               dataKey="label" 
-              tick={{ fill:'#B0B7C3', fontSize:12 }}
-              height={40}
-              tickMargin={10}
+              tick={{ fill:'#B0B7C3', fontSize:8 }}
+              height={30}
+              tickMargin={6}
             />
             <YAxis 
-              tick={{ fill:'#B0B7C3', fontSize:12 }} 
+              tick={{ fill:'#B0B7C3', fontSize:8 }} 
               allowDecimals={false}
-              width={50}
+              width={35}
             />
             <Tooltip 
               formatter={(value) => Number(value).toLocaleString()} 
@@ -383,16 +383,16 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
                dataKey="forecast" 
                name="Forecast Accelerate" 
                stroke="#8A5AA3" 
-               strokeWidth={3} 
+               strokeWidth={2} 
                dot={<ForecastDotWithLabel />}
-               activeDot={{ r:5 }}
+               activeDot={{ r:4 }}
                isAnimationActive={false}
              />
              <Line 
                dataKey="ready" 
                name="Readiness" 
                stroke="#E53935" 
-               strokeWidth={2} 
+               strokeWidth={1.5} 
                dot={<ReadinessDotWithLabel />}
                isAnimationActive={false}
              />
@@ -400,16 +400,11 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
                dataKey="active" 
                name="Activated" 
                stroke="#7CB342" 
-               strokeWidth={2} 
+               strokeWidth={1.5} 
                dot={<ActivatedDotWithLabel />}
                isAnimationActive={false}
              />
-            <Legend 
-              verticalAlign="bottom" 
-              align="center" 
-              wrapperStyle={{ paddingTop: 8 }}
-              iconType="circle"
-            />
+            <Legend verticalAlign="bottom" align="center" wrapperStyle={{ marginTop: 2, paddingTop: 0 }} iconType="circle" iconSize={6} />
           </LineChart>
         </ResponsiveContainer>
       </div>

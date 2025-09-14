@@ -163,16 +163,16 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
   // Loading state
   if (isLoading) {
     return (
-      <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full h-full flex flex-col min-w-0">
-        <div className="flex items-center gap-2 mb-4 flex-shrink-0">
-          <div className="bg-yellow-500/20 p-1.5 rounded-lg">
-            <Trophy className="h-4 w-4 text-yellow-400" />
+      <div className="rounded-lg bg-[#0F1630]/80 border border-white/5 p-1.5 w-full h-full flex flex-col min-w-0">
+        <div className="flex items-center gap-1 mb-1.5 flex-shrink-0">
+          <div className="bg-yellow-500/20 p-0.5 rounded-sm">
+            <Trophy className="h-2.5 w-2.5 text-yellow-400" />
           </div>
-          <div className="responsive-text-sm font-medium bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded-full">
+          <div className="text-[8px] font-medium bg-yellow-500/20 text-yellow-300 px-1 py-0.5 rounded-full">
             Vendor Leaderboard
           </div>
         </div>
-        <div className="flex-1 flex items-center justify-center text-white/50">
+        <div className="flex-1 flex items-center justify-center text-white/50 text-xs">
           Loading...
         </div>
       </div>
@@ -180,24 +180,24 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
   }
 
   return (
-    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 p-4 w-full h-full flex flex-col min-w-0">
+    <div className="rounded-lg bg-[#0F1630]/80 border border-white/5 p-1.5 w-full h-full flex flex-col min-w-0">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
-        <div className="bg-yellow-500/20 p-1.5 rounded-lg">
-          <Trophy className="h-4 w-4 text-yellow-400" />
+      <div className="flex items-center gap-1 mb-1.5 flex-shrink-0">
+        <div className="bg-yellow-500/20 p-0.5 rounded-sm">
+          <Trophy className="h-2.5 w-2.5 text-yellow-400" />
         </div>
-        <div className="responsive-text-sm font-medium bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded-full">
+        <div className="text-[8px] font-medium bg-yellow-500/20 text-yellow-300 px-1 py-0.5 rounded-full">
           Vendor Leaderboard
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="space-y-3">
+        <div className="space-y-1">
           {vendorScores.slice(0, 10).map((vendor) => (
-            <div key={vendor.vendorName} className="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors min-w-0">
+            <div key={vendor.vendorName} className="flex items-center gap-1.5 p-1.5 rounded-sm bg-white/5 hover:bg-white/10 transition-colors min-w-0">
               {/* Rank */}
-              <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center responsive-text-sm font-bold"
+              <div className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
                    style={{
                      backgroundColor: vendor.rank === 1 ? '#FFD700' : 
                                     vendor.rank === 2 ? '#C0C0C0' : 
@@ -209,17 +209,17 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
 
               {/* Vendor Info */}
               <div className="flex-1 min-w-0">
-                <div className="responsive-text font-medium text-white truncate">
+                <div className="text-[10px] font-medium text-white truncate">
                   {vendor.vendorName}
                 </div>
-                <div className="responsive-text-sm text-[#B0B7C3]">
+                <div className="text-[8px] text-[#B0B7C3]">
                   {vendor.totalSites} sites • Score: {vendor.totalScore}%
                 </div>
               </div>
 
               {/* Score Breakdown */}
               <div className="flex-shrink-0 text-right">
-                <div className="responsive-text-sm text-[#B0B7C3] space-y-1">
+                <div className="text-[8px] text-[#B0B7C3] space-y-0.5">
                   <div>R: {vendor.readinessCount}</div>
                   <div>A: {vendor.activatedCount}</div>
                   <div>F: {vendor.forecastCount}</div>
@@ -230,15 +230,15 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
         </div>
 
         {vendorScores.length === 0 && (
-          <div className="flex-1 flex items-center justify-center text-white/50">
+          <div className="flex-1 flex items-center justify-center text-white/50 text-xs">
             No vendor data available
           </div>
         )}
       </div>
 
       {/* Footer with scoring explanation */}
-      <div className="mt-4 pt-3 border-t border-white/10 flex-shrink-0">
-        <div className="responsive-text-sm text-[#B0B7C3] space-y-1">
+      <div className="mt-1.5 pt-1.5 border-t border-white/10 flex-shrink-0">
+        <div className="text-[8px] text-[#B0B7C3] space-y-0.5">
           <div>Scoring: Readiness vs Forecast (20%) + Activated vs Forecast (50%) + Above Acceleration (15%) + First Time Right (15%)</div>
           <div>R: Readiness • A: Activated • F: Forecast</div>
         </div>

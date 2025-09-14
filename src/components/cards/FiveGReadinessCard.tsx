@@ -76,63 +76,53 @@ function CityTick(props: any) {
       dy="0.32em" 
       textAnchor="start" 
       fill="#E7ECF3" 
-      fontSize={12}
+      fontSize={10}
     >
       {item.city} ({item.total})
     </text>
   )
 }
 
-// Custom label untuk NY Readiness
+// Custom label untuk NY Readiness (selalu di dalam bar jika memungkinkan)
 const NyLabel = (props: any) => {
   const { x, y, width, height, value } = props
-  
-  // Jika nilai terlalu kecil, jangan tampilkan
-  if (value < 5) return null
-  
-  // Jika bar terlalu panjang, posisikan label di dalam bar
-  const isLongBar = width > 150
-  
+  if (value <= 0 || !width) return null
+  const insideThreshold = 36
+  const isInside = width >= insideThreshold
+  const posX = isInside ? (x + width - 6) : (x + width + 6)
+  const posY = y + height / 2
   return (
     <text
-      x={isLongBar ? x + width - 8 : x + width + 4}
-      y={y + height / 2}
+      x={posX}
+      y={posY}
       fill="#fff"
-      fontSize={10}
-      textAnchor={isLongBar ? "end" : "start"}
-      dominantBaseline="central"
-      style={{ 
-        filter: isLongBar ? 'drop-shadow(0px 0px 2px rgba(0,0,0,0.8))' : 'none',
-        textShadow: isLongBar ? '0px 0px 3px rgba(0,0,0,0.8)' : 'none'
-      }}
+      fontSize={7}
+      textAnchor={isInside ? 'end' : 'start'}
+      dominantBaseline={'central'}
+      style={{ filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.8))', textShadow: '0px 0px 3px rgba(0,0,0,0.8)' }}
     >
       {value.toLocaleString()}
     </text>
   )
 }
 
-// Custom label untuk Readiness (sisi kanan)
+// Custom label untuk Readiness (selalu di dalam bar jika memungkinkan)
 const ReadyLabel = (props: any) => {
   const { x, y, width, height, value } = props
-  
-  // Jika nilai terlalu kecil, jangan tampilkan
-  if (value < 5) return null
-  
-  // Jika bar terlalu panjang, posisikan label di dalam bar
-  const isLongBar = width > 150
-  
+  if (value <= 0 || !width) return null
+  const insideThreshold = 36
+  const isInside = width >= insideThreshold
+  const posX = isInside ? (x + width - 6) : (x + width + 6)
+  const posY = y + height / 2
   return (
     <text
-      x={isLongBar ? x + width - 8 : x + width + 4}
-      y={y + height / 2}
+      x={posX}
+      y={posY}
       fill="#fff"
-      fontSize={10}
-      textAnchor={isLongBar ? "end" : "start"}
-      dominantBaseline="central"
-      style={{ 
-        filter: isLongBar ? 'drop-shadow(0px 0px 2px rgba(0,0,0,0.8))' : 'none',
-        textShadow: isLongBar ? '0px 0px 3px rgba(0,0,0,0.8)' : 'none'
-      }}
+      fontSize={7}
+      textAnchor={isInside ? 'end' : 'start'}
+      dominantBaseline={'central'}
+      style={{ filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.8))', textShadow: '0px 0px 3px rgba(0,0,0,0.8)' }}
     >
       {value.toLocaleString()}
     </text>
@@ -209,11 +199,11 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
   }
 
   return (
-    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'var(--wb-card-padding)' }}>
+    <div className="readiness-card rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'calc(var(--wb-card-padding) - 4px)' }}>
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
-        <div className="bg-purple-500/20 p-1.5 rounded-lg">
-          <BarChart3 className="h-4 w-4 text-purple-400" />
+      <div className="flex items-center gap-2 mb-2 flex-shrink-0">
+        <div className="bg-purple-500/20 p-1 rounded-lg">
+          <BarChart3 className="h-3.5 w-3.5 text-purple-400" />
         </div>
         <div className="responsive-text-sm font-medium bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">
           5G Readiness by City
@@ -225,13 +215,14 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
           <BarChart
             layout="vertical"
             data={chartData}
-            margin={{ top: 5, right: 10, bottom: 20, left: 40 }}
-            barCategoryGap={6}
+            margin={{ top: 4, right: 8, bottom: 14, left: 28 }}
+            barCategoryGap={4}
           >
             <XAxis 
               type="number" 
               domain={[0, maxValue]} 
               tickFormatter={(v) => v.toLocaleString()}
+              tick={{ fontSize: 11, fill: '#B0B7C3' }}
             />
             <YAxis
               type="category"
@@ -240,7 +231,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
               axisLine={false}
               tickLine={false}
               interval={0}
-              width={140}
+              width={120}
               tick={renderCityTick}
             />
             <Tooltip
@@ -251,13 +242,13 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
             <Legend 
               verticalAlign="bottom" 
               align="center" 
-              wrapperStyle={{ paddingTop: "10px" }}
+              wrapperStyle={{ paddingTop: 6 }}
             />
             <Bar 
               dataKey="ny" 
               name="NY Readiness" 
               fill="#8A5AA3" 
-              barSize={16}
+              barSize={12}
               minPointSize={2}
             >
               <LabelList
@@ -268,7 +259,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
               dataKey="rdy" 
               name="Readiness" 
               fill="#7CB342" 
-              barSize={16}
+              barSize={12}
             >
               <LabelList
                 content={<ReadyLabel />}

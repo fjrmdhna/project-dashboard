@@ -110,12 +110,12 @@ export function MultiSelect({
   const getButtonWidth = () => {
     if (width !== "auto") return width;
     
-    // Default widths based on placeholder
+    // Compact widths based on placeholder
     switch (placeholder) {
-      case "Vendor": return "w-[120px]";
-      case "Program": return "w-[130px]";
-      case "City (imp_ttp)": return "w-[150px]";
-      default: return "w-[130px]";
+      case "Vendor": return "w-[100px]";
+      case "Program": return "w-[110px]";
+      case "City (imp_ttp)": return "w-[120px]";
+      default: return "w-[110px]";
     }
   }
 
@@ -180,12 +180,12 @@ export function MultiSelect({
       <button
         ref={buttonRef}
         type="button"
-        className={`bg-white/5 rounded-lg h-7 px-2 inline-flex items-center justify-between text-white min-w-0 ${getButtonWidth()}`}
+        className={`bg-white/5 rounded-md h-6 px-1.5 inline-flex items-center justify-between text-white min-w-0 ${getButtonWidth()}`}
         onClick={handleToggle}
         disabled={disabled}
       >
-        <span className="truncate max-w-[100px] responsive-text-sm text-left">{label}</span>
-        <ChevronDown className="h-3.5 w-3.5 opacity-70 flex-shrink-0" />
+        <span className="truncate max-w-[80px] text-xs text-left">{label}</span>
+        <ChevronDown className="h-3 w-3 opacity-70 flex-shrink-0" />
       </button>
 
       {open && isMounted && createPortal(<Menu />, document.body)}

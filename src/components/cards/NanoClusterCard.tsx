@@ -44,14 +44,14 @@ interface MetricItemProps {
 
 function MetricItem({ icon, value, label, bgColor, textColor, className = "" }: MetricItemProps) {
   return (
-    <div className={`flex flex-col items-center rounded-xl border border-white/5 p-3 transition-all hover:border-white/10 hover:bg-white/5 min-w-0 ${className}`}>
-      <div className={`${bgColor} p-3 rounded-xl mb-2 self-start`}>
+    <div className={`flex flex-col items-center rounded-md border border-white/5 p-1 transition-all hover:border-white/10 hover:bg-white/5 min-w-0 ${className}`}>
+      <div className={`${bgColor} p-1.5 rounded-md mb-1.5 self-start`}>
         {icon}
       </div>
-      <div className="responsive-text-3xl font-bold mb-1 self-start" style={{ color: textColor }}>
+      <div className="text-lg font-bold mb-0.5 self-start" style={{ color: textColor }}>
         {value.toLocaleString()}
       </div>
-      <div className="responsive-text-sm text-[#B0B7C3] self-start">
+      <div className="text-[8px] text-[#B0B7C3] self-start leading-tight">
         {label}
       </div>
     </div>
@@ -131,28 +131,28 @@ export function NanoClusterCard(props: NanoClusterCardProps) {
   }, [isFromRows(props) ? props.rows : null])
   
   return (
-    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col text-white min-w-0" style={{ padding: 'var(--wb-card-padding)' }}>
+    <div className="rounded-lg bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col text-white min-w-0 p-1.5">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="bg-indigo-500/20 p-1.5 rounded-lg">
-            <Hexagon className="h-4 w-4 text-indigo-400" />
+      <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
+        <div className="flex items-center gap-1">
+          <div className="bg-indigo-500/20 p-0.5 rounded-sm">
+            <Hexagon className="h-2.5 w-2.5 text-indigo-400" />
           </div>
-          <div className="responsive-text-sm font-medium bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full">
+          <div className="text-[8px] font-medium bg-indigo-500/20 text-indigo-300 px-1 py-0.5 rounded-full">
             NANO CLUSTER
           </div>
         </div>
-        <div className="bg-indigo-500/10 px-3 py-1.5 rounded-lg flex items-center">
-          <div className="responsive-text-sm text-indigo-300 mr-2">Total:</div>
-          <div className="responsive-text-2xl font-bold text-white">{metrics.totalClusters}</div>
+        <div className="bg-indigo-500/10 px-1.5 py-0.5 rounded-sm flex items-center">
+          <div className="text-[8px] text-indigo-300 mr-0.5">Total:</div>
+          <div className="text-sm font-bold text-white">{metrics.totalClusters}</div>
         </div>
       </div>
       
       {/* Grid of metrics - 3 in top row, 2 in bottom row */}
-      <div className="grid grid-cols-3 gap-3 flex-1 min-h-0">
+      <div className="grid grid-cols-3 gap-1.5 flex-1 min-h-0">
         {/* Top row: 3 items */}
         <MetricItem 
-          icon={<Hourglass className="h-5 w-5 text-amber-400" />} 
+          icon={<Hourglass className="h-4 w-4 text-amber-400" />} 
           value={metrics.count_lt50} 
           label="Cluster Readiness <50%" 
           bgColor="bg-amber-500/20"
@@ -161,7 +161,7 @@ export function NanoClusterCard(props: NanoClusterCardProps) {
         />
         
         <MetricItem 
-          icon={<Hourglass className="h-5 w-5 text-yellow-400" />} 
+          icon={<Hourglass className="h-4 w-4 text-yellow-400" />} 
           value={metrics.count_50_80} 
           label="Cluster Readiness 50-80%" 
           bgColor="bg-yellow-500/20"
@@ -170,7 +170,7 @@ export function NanoClusterCard(props: NanoClusterCardProps) {
         />
         
         <MetricItem 
-          icon={<Hourglass className="h-5 w-5 text-lime-400" />} 
+          icon={<Hourglass className="h-4 w-4 text-lime-400" />} 
           value={metrics.count_80_99} 
           label="Cluster Readiness 80-99%" 
           bgColor="bg-lime-500/20"
@@ -180,7 +180,7 @@ export function NanoClusterCard(props: NanoClusterCardProps) {
         
         {/* Bottom row: 2 items centered */}
         <MetricItem 
-          icon={<Hourglass className="h-5 w-5 text-green-400" />} 
+          icon={<Hourglass className="h-4 w-4 text-green-400" />} 
           value={metrics.count_100} 
           label="Cluster Readiness 100%" 
           bgColor="bg-green-500/20"
@@ -189,7 +189,7 @@ export function NanoClusterCard(props: NanoClusterCardProps) {
         />
         
         <MetricItem 
-          icon={<Target className="h-5 w-5 text-blue-400" />} 
+          icon={<Target className="h-4 w-4 text-blue-400" />} 
           value={metrics.count_completed} 
           label="Cluster Completed (100% Activated)" 
           bgColor="bg-blue-500/20"

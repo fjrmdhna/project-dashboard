@@ -15,10 +15,7 @@ import { useTopIssueData } from "@/hooks/useTopIssueData"
 import { useDailyRunrateData } from "@/hooks/useDailyRunrateData"
 import { useVendorLeaderboard } from "@/hooks/useVendorLeaderboard"
 import { Wallboard1080 } from "@/layouts/Wallboard1080"
-import { ScalingDebug } from "@/components/ScalingDebug"
-import { ViewportDebug } from "@/components/ViewportDebug"
-import { FitToScreenDebug } from "@/components/FitToScreenDebug"
-import { WallboardFitToScreenDebug } from "@/components/WallboardFitToScreenDebug"
+// Debug overlays removed for production-like view
 
 export default function Hermes5GPage() {
   // Menggunakan hook useSiteData untuk mengambil data berdasarkan filter
@@ -176,10 +173,7 @@ export default function Hermes5GPage() {
         nanoCluster={nanoClusterCard}
         leaderboard={vendorLeaderboardCard}
       />
-      <ScalingDebug />
-      <ViewportDebug />
-      <FitToScreenDebug />
-      <WallboardFitToScreenDebug />
+      {/* Debug overlays removed */}
     </>
   )
 } 

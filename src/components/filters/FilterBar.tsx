@@ -141,82 +141,83 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
   
   return (
     <div className="h-full flex flex-col min-w-0">
-      {/* Filter Controls - Distributed Evenly */}
-      <div className="flex items-center justify-between gap-3 responsive-text-sm flex-shrink-0">
-        {/* Left Side - Search Input */}
-        <div className="relative w-1/4 min-w-[220px]">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+      {/* Filter Controls - Responsive Layout */}
+      <div className="flex items-center gap-1.5 text-xs flex-shrink-0 min-w-0">
+        {/* Search Input - Flexible Width */}
+        <div className="relative flex-1 min-w-[150px] max-w-[250px]">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
           <input
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search sites, vendors..."
-            className="w-full bg-white/5 rounded-lg h-7 pl-7 pr-7 responsive-text-sm text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
+            className="w-full bg-white/5 rounded-md h-6 pl-6 pr-6 text-xs text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
           />
           {searchInput && (
             <button 
               onClick={() => setSearchInput("")}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-3 w-3" />
             </button>
           )}
         </div>
         
-        {/* Middle - Filter Dropdowns */}
-        <div className="flex items-center gap-3 flex-1 justify-center min-w-0">
-        {/* Vendor Filter */}
-        <MultiSelect
-          options={options.vendors}
-          selected={value.vendor_name}
-          placeholder="Vendor"
-          onChange={handleVendorChange}
-          disabled={isLoading}
-            width="w-[160px]"
-        />
-        
-        {/* Program Filter */}
-        <MultiSelect
-          options={options.programs}
-          selected={value.program_report}
-          placeholder="Program"
-          onChange={handleProgramChange}
-          disabled={isLoading}
-            width="w-[190px]"
-        />
-        
-        {/* City/IMP_TTP Filter */}
-        <MultiSelect
-          options={options.cities}
-          selected={value.imp_ttp}
-          placeholder="City (imp_ttp)"
-          onChange={handleCityChange}
-          disabled={isLoading}
-            width="w-[160px]"
-        />
+        {/* Filter Dropdowns - More Compact */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Vendor Filter */}
+          <MultiSelect
+            options={options.vendors}
+            selected={value.vendor_name}
+            placeholder="Vendor"
+            onChange={handleVendorChange}
+            disabled={isLoading}
+            width="w-[100px]"
+          />
+          
+          {/* Program Filter */}
+          <MultiSelect
+            options={options.programs}
+            selected={value.program_report}
+            placeholder="Program"
+            onChange={handleProgramChange}
+            disabled={isLoading}
+            width="w-[110px]"
+          />
+          
+          {/* City/IMP_TTP Filter */}
+          <MultiSelect
+            options={options.cities}
+            selected={value.imp_ttp}
+            placeholder="City"
+            onChange={handleCityChange}
+            disabled={isLoading}
+            width="w-[100px]"
+          />
         </div>
         
-        {/* Right - Reset Button */}
-        <div className="w-20 text-right">
-        {hasActiveFilters && (
-          <button
-            onClick={handleReset}
-              className="bg-white/5 hover:bg-white/10 rounded-lg h-7 px-2.5 text-xs text-white flex items-center gap-1 ml-auto"
-          >
-              Reset <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-        </div>
+        {/* Reset Button - Always Visible, More Compact */}
+        <button
+          onClick={handleReset}
+          className={`rounded-md h-6 px-1.5 text-xs flex items-center gap-1 flex-shrink-0 transition-colors ${
+            hasActiveFilters 
+              ? 'bg-white/5 hover:bg-white/10 text-white' 
+              : 'bg-white/5/50 text-gray-400 cursor-not-allowed'
+          }`}
+          disabled={!hasActiveFilters}
+        >
+          <X className="h-3 w-3" />
+        </button>
       </div>
 
-      {/* Active Filters Display - Compact and Truncated */}
+      {/* Active Filters Display - Ultra Compact with Smaller Font and Bottom Gap */}
       {hasActiveFilters && (
-        <div className="flex flex-wrap gap-1.5 responsive-text-sm mt-2 flex-shrink-0">
+        <div className="flex flex-wrap gap-[1.5px] text-[10px] mt-0.5 mb-1 flex-shrink-0">
           {value.q && (
-            <div className="bg-blue-500/20 text-blue-300 rounded-full px-2 py-0.5 flex items-center gap-1">
-              <span title={value.q}>Search: {truncateText(value.q, 25)}</span>
+            <div className="bg-blue-500/20 text-blue-300 rounded-full px-1 py-0.5 flex items-center gap-0.5">
+              <span title={value.q}>Search: {truncateText(value.q, 15)}</span>
               <X 
-                className="h-2.5 w-2.5 cursor-pointer" 
+                className="h-2 w-2 cursor-pointer" 
                 onClick={() => removeFilter('q')} 
               />
             </div>
@@ -225,12 +226,12 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
           {value.vendor_name.map(vendor => (
             <div 
               key={`vendor-${vendor}`} 
-              className="bg-purple-500/20 text-purple-300 rounded-full px-2 py-0.5 flex items-center gap-1"
+              className="bg-purple-500/20 text-purple-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
               title={`Vendor: ${vendor}`}
             >
-              <span>V: {truncateText(vendor, 15)}</span>
+              <span>V: {truncateText(vendor, 10)}</span>
               <X 
-                className="h-2.5 w-2.5 cursor-pointer" 
+                className="h-2 w-2 cursor-pointer" 
                 onClick={() => removeFilter('vendor_name', vendor)} 
               />
             </div>
@@ -239,12 +240,12 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
           {value.program_report.map(program => (
             <div 
               key={`program-${program}`} 
-              className="bg-green-500/20 text-green-300 rounded-full px-2 py-0.5 flex items-center gap-1"
+              className="bg-green-500/20 text-green-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
               title={`Program: ${program}`}
             >
-              <span>P: {truncateText(program, 20)}</span>
+              <span>P: {truncateText(program, 12)}</span>
               <X 
-                className="h-2.5 w-2.5 cursor-pointer" 
+                className="h-2 w-2 cursor-pointer" 
                 onClick={() => removeFilter('program_report', program)} 
               />
             </div>
@@ -253,12 +254,12 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
           {value.imp_ttp.map(city => (
             <div 
               key={`city-${city}`} 
-              className="bg-amber-500/20 text-amber-300 rounded-full px-2 py-0.5 flex items-center gap-1"
+              className="bg-amber-500/20 text-amber-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
               title={`City: ${city}`}
             >
-              <span>C: {truncateText(city, 15)}</span>
+              <span>C: {truncateText(city, 10)}</span>
               <X 
-                className="h-2.5 w-2.5 cursor-pointer" 
+                className="h-2 w-2 cursor-pointer" 
                 onClick={() => removeFilter('imp_ttp', city)} 
               />
             </div>

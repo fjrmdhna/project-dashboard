@@ -1,7 +1,6 @@
 "use client"
 
 import { ReactNode, useRef, useEffect } from "react"
-import { useUniversalScaling } from "@/hooks/useUniversalScaling"
 
 interface GridItemProps {
   children: ReactNode
@@ -46,13 +45,6 @@ export function Wallboard1080({
   leaderboard
 }: Wallboard1080Props) {
   const containerRef = useRef<HTMLDivElement>(null)
-  
-  // Apply universal scaling for consistent display across all devices
-  useUniversalScaling(containerRef, {
-    forceConsistentScaling: true, // Use consistent scaling instead of fill
-    minScale: 0.4, // Allow smaller scaling for mobile devices
-    maxScale: 3.0  // Allow larger scaling for ultra-wide screens
-  })
 
   // Prevent body scroll when wallboard is active
   useEffect(() => {
@@ -69,7 +61,7 @@ export function Wallboard1080({
 
   return (
     <div id="wb-wrapper" className="viewport-wrapper">
-      <div id="wb-canvas" ref={containerRef} className="wallboard-scale">
+      <div id="wb-canvas" ref={containerRef} className="wallboard-responsive">
         <div className="wallboard-grid">
           {/* Header - Full width, minimal height */}
           <div className="wallboard-header">
@@ -94,29 +86,29 @@ export function Wallboard1080({
             {/* Column 2: Filter, Matrix, Progress, Bottom Row (Middle) */}
             <div className="wallboard-middle-column">
               {/* Filter Bar - Auto height */}
-              <GridItem className="wallboard-middle-card">
+              <GridItem className="wallboard-middle-card wallboard-filter-card">
                 {filterBar}
               </GridItem>
               
               {/* Matrix Stats - 1fr */}
-              <GridItem className="wallboard-middle-card">
+              <GridItem className="wallboard-middle-card wallboard-matrix-card">
                 {matrixStats}
               </GridItem>
               
               {/* Progress Curve - 1fr */}
-              <GridItem className="wallboard-middle-card">
+              <GridItem className="wallboard-middle-card wallboard-progress-card">
                 {progressCurve}
               </GridItem>
               
               {/* Bottom Row - Auto height with nested grid */}
-              <div className="wallboard-grid-item" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--wb-grid-gap)' }}>
+              <div className="wallboard-grid-item wallboard-bottom-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--wb-grid-gap)' }}>
                 {/* Daily Runrate */}
-                <GridItem className="wallboard-middle-card">
+                <GridItem className="wallboard-middle-card wallboard-bottom-card">
                   {dailyRunrate}
                 </GridItem>
                 
                 {/* Top 5 Issue */}
-                <GridItem className="wallboard-middle-card">
+                <GridItem className="wallboard-middle-card wallboard-bottom-card">
                   {top5Issue}
                 </GridItem>
               </div>
