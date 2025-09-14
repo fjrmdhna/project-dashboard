@@ -104,17 +104,9 @@ export function useUniversalScaling(
       // Round to prevent subpixel rendering issues
       const preciseScale = Math.round(scale * 1000) / 1000
       
-      // Manual scale test - force scale to 0.5 for testing
-      const testScale = 0.5
-      console.log('🧪 Manual Scale Test:', {
-        calculatedScale: preciseScale,
-        testScale: testScale,
-        usingTestScale: true
-      })
-
       // Apply viewport scaling to target (usually documentElement)
-      // Use test scale for all CSS variables
-      target.style.setProperty('--viewport-scale', String(testScale))
+      target.style.setProperty('--viewport-scale', String(preciseScale))
+      target.style.setProperty('--wb-scale', String(preciseScale))
       target.style.setProperty('--viewport-width', `${viewportWidth}px`)
       target.style.setProperty('--viewport-height', `${viewportHeight}px`)
       target.style.setProperty('--device-pixel-ratio', String(devicePixelRatio))
@@ -124,9 +116,8 @@ export function useUniversalScaling(
       // Apply scale to canvas element for transform
       const canvasEl = containerRef?.current || document.getElementById('wb-canvas')
       if (canvasEl) {
-        // Use test scale for manual testing
-        const finalScale = testScale // Use test scale instead of preciseScale
-        
+        const finalScale = preciseScale
+
         canvasEl.style.setProperty('--wb-scale', String(finalScale))
         canvasEl.style.setProperty('--viewport-scale', String(finalScale))
         // Apply transform directly to canvas
@@ -150,8 +141,8 @@ export function useUniversalScaling(
       // Also apply to wrapper element for debug console
       const wrapperEl = document.getElementById('wb-wrapper')
       if (wrapperEl) {
-        wrapperEl.style.setProperty('--wb-scale', String(testScale))
-        wrapperEl.style.setProperty('--viewport-scale', String(testScale))
+        wrapperEl.style.setProperty('--wb-scale', String(preciseScale))
+        wrapperEl.style.setProperty('--viewport-scale', String(preciseScale))
       }
 
       // Debug info with enhanced logging
@@ -167,16 +158,15 @@ export function useUniversalScaling(
                         viewportAspectRatio < 1.0 ? 'portrait-conservative' : 
                         viewportAspectRatio > 1.8 && viewportAspectRatio < 2.0 ? 'widescreen-optimal' : 'standard',
         calculatedScale: preciseScale,
-        testScale: testScale,
-        finalScale: testScale, // Using test scale
+        finalScale: preciseScale,
         baseDimensions: `${finalConfig.baseWidth}x${finalConfig.baseHeight}`,
         fitToScreen: 'enabled',
         dpiCompensation: 'disabled', // DPI compensation disabled for fit-to-screen
-        canvasTransform: `scale(${testScale})`,
+        canvasTransform: `scale(${preciseScale})`,
         canvasPosition: 'top-left',
         debugOutlines: 'enabled'
       })
-      
+
       // Additional debug for canvas element
       if (canvasEl) {
         console.log('🎨 Canvas Element Debug:', {
@@ -188,8 +178,8 @@ export function useUniversalScaling(
           top: getComputedStyle(canvasEl).top,
           left: getComputedStyle(canvasEl).left,
           transformOrigin: getComputedStyle(canvasEl).transformOrigin,
-          appliedTestScale: testScale,
-          expectedTransform: `scale(${testScale})`
+          appliedScale: preciseScale,
+          expectedTransform: `scale(${preciseScale})`
         })
       }
     }
