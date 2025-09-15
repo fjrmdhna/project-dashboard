@@ -115,3 +115,5 @@ function getFirstTimeRightPercentage(vendorName: string): number {
   
   return firstTimeRightMap[vendorName] || 0.70 // Default 70%
 }
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'

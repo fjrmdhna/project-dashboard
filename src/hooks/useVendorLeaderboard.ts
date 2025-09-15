@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { FilterValue } from '@/components/filters/FilterBar'
+import { buildFilterParams } from '@/lib/filters'
 
 export interface VendorScore {
   vendorName: string
@@ -35,6 +36,8 @@ export function useVendorLeaderboard(options: UseVendorLeaderboardOptions = {}):
   const [error, setError] = useState<Error | null>(null)
   const [totalVendors, setTotalVendors] = useState(0)
 
+  const abortRef = useRef<AbortController | null>(null)
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
@@ -47,26 +50,16 @@ export function useVendorLeaderboard(options: UseVendorLeaderboardOptions = {}):
         imp_ttp: []
       }
 
-      // Build URL with filter parameters
-      const url = new URL('/api/hermes-5g/vendor-leaderboard', window.location.origin)
-      
-      // Add query parameters
-      if (filter.q) url.searchParams.append('q', filter.q)
-      
-      // Add multi-value parameters
-      filter.vendor_name.forEach(vendor => {
-        url.searchParams.append('vendor_name', vendor)
-      })
-      
-      filter.program_report.forEach(program => {
-        url.searchParams.append('program_report', program)
-      })
-      
-      filter.imp_ttp.forEach(city => {
-        url.searchParams.append('imp_ttp', city)
-      })
+      // Build URL with consistent filter parameters
+      const params = buildFilterParams(filter)
+      const url = `/api/hermes-5g/vendor-leaderboard?${params.toString()}`
 
-      const response = await fetch(url.toString())
+      // Abort any inflight request before starting a new one
+      if (abortRef.current) abortRef.current.abort()
+      const controller = new AbortController()
+      abortRef.current = controller
+
+      const response = await fetch(url, { signal: controller.signal })
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -81,6 +74,11 @@ export function useVendorLeaderboard(options: UseVendorLeaderboardOptions = {}):
         throw new Error(result.message || 'Failed to fetch vendor leaderboard data')
       }
     } catch (err) {
+      // Ignore user-triggered aborts from rapid filter changes
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setLoading(false)
+        return
+      }
       console.error('Error fetching vendor leaderboard data:', err)
       setError(err instanceof Error ? err : new Error('Unknown error'))
       setData([])
@@ -95,7 +93,11 @@ export function useVendorLeaderboard(options: UseVendorLeaderboardOptions = {}):
   }, [fetchData])
 
   useEffect(() => {
-    fetchData()
+    const t = setTimeout(() => { fetchData() }, 300)
+    return () => {
+      clearTimeout(t)
+      abortRef.current?.abort()
+    }
   }, [fetchData])
 
   return {

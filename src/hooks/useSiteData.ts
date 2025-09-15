@@ -38,25 +38,13 @@ export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn
 
   // Fungsi untuk membangun URL dengan filter
   const buildUrl = useCallback((filter: FilterValue) => {
-    const url = new URL('/api/hermes-5g/site-data', window.location.origin)
-    
-    // Tambahkan query parameter
-    if (filter.q) url.searchParams.append('q', filter.q)
-    
-    // Tambahkan multi-value parameters
-    filter.vendor_name.forEach(vendor => {
-      url.searchParams.append('vendor_name', vendor)
-    })
-    
-    filter.program_report.forEach(program => {
-      url.searchParams.append('program_report', program)
-    })
-    
-    filter.imp_ttp.forEach(city => {
-      url.searchParams.append('imp_ttp', city)
-    })
-    
-    return url.toString()
+    const params = new URLSearchParams()
+    if (filter.q) params.append('q', filter.q)
+    filter.vendor_name.forEach(vendor => params.append('vendor_name', vendor))
+    filter.program_report.forEach(program => params.append('program_report', program))
+    filter.imp_ttp.forEach(city => params.append('imp_ttp', city))
+    const qs = params.toString()
+    return qs ? `/api/hermes-5g/site-data?${qs}` : '/api/hermes-5g/site-data'
   }, [])
   
   // Fungsi untuk fetch data dengan race condition protection

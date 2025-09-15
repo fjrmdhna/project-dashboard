@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProgressCurveData } from '@/lib/hermes-5g-utils'
+import { parseFilterParams } from '@/lib/filters'
 
 export async function GET(request: NextRequest) {
   try {
     // Get filter parameters from query string
-    const { searchParams } = new URL(request.url)
-    const vendorFilter = searchParams.get('vendorFilter') || 'all'
-    const programFilter = searchParams.get('programFilter') || 'all'
-    const cityFilter = searchParams.get('cityFilter') || 'all'
-    
+    const url = new URL(request.url)
+    const { vendorNames, programReports, impTtps } = parseFilterParams(url)
     const result = await getProgressCurveData({
-      vendorFilter,
-      programFilter,
-      cityFilter
+      vendorNames,
+      programReports,
+      impTtps
     })
     
     return NextResponse.json(result)

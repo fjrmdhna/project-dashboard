@@ -348,31 +348,32 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
 
 
   return (
-    <div className={`rounded-xl bg-[#0F1630]/80 border border-white/5 p-1.5 w-full h-full flex flex-col min-w-0 ${className ?? ''}`}>
+    <div className={`rounded-lg bg-[#0F1630]/80 border border-white/5 p-0.5 w-full h-full flex flex-col min-w-0 ${className ?? ''}`}>
       {/* Header */}
-      <div className="flex items-center gap-1.5 mb-1 flex-shrink-0">
-        <div className="bg-orange-500/20 p-1 rounded-md">
-          <TrendingUp className="h-3 w-3 text-orange-400" />
+      <div className="flex items-center gap-0.5 mb-0 flex-shrink-0">
+        <div className="bg-orange-500/20 p-0.5 rounded-sm">
+          <TrendingUp className="h-2 w-2 text-orange-400" />
         </div>
-        <div className="text-[10px] font-medium bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded-full">
+        <div className="text-[8px] font-medium bg-orange-500/20 text-orange-300 px-0.5 py-0.5 rounded-full">
           Progress Curve
         </div>
       </div>
       
-      <div className="flex-1 min-h-0" style={{height: '100%'}}>
+      {/* Chart - Flexible Height */}
+      <div className="flex-1 flex flex-col min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 5, right: 30, left: 8, bottom: 12 }}>
+          <LineChart data={data} margin={{ top: 30, right: 30, left: 30, bottom: 5 }}>
             <CartesianGrid stroke="rgba(255,255,255,.06)" strokeDasharray="2 2" />
             <XAxis 
               dataKey="label" 
-              tick={{ fill:'#B0B7C3', fontSize:8 }}
-              height={30}
-              tickMargin={6}
+              tick={{ fill:'#B0B7C3', fontSize:6 }}
+              height={15}
+              tickMargin={2}
             />
             <YAxis 
-              tick={{ fill:'#B0B7C3', fontSize:8 }} 
+              tick={{ fill:'#B0B7C3', fontSize:6 }} 
               allowDecimals={false}
-              width={35}
+              width={20}
             />
             <Tooltip 
               formatter={(value) => Number(value).toLocaleString()} 
@@ -383,16 +384,16 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
                dataKey="forecast" 
                name="Forecast Accelerate" 
                stroke="#8A5AA3" 
-               strokeWidth={2} 
+               strokeWidth={1} 
                dot={<ForecastDotWithLabel />}
-               activeDot={{ r:4 }}
+               activeDot={{ r:2 }}
                isAnimationActive={false}
              />
              <Line 
                dataKey="ready" 
                name="Readiness" 
                stroke="#E53935" 
-               strokeWidth={1.5} 
+               strokeWidth={0.8} 
                dot={<ReadinessDotWithLabel />}
                isAnimationActive={false}
              />
@@ -400,11 +401,11 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
                dataKey="active" 
                name="Activated" 
                stroke="#7CB342" 
-               strokeWidth={1.5} 
+               strokeWidth={0.8} 
                dot={<ActivatedDotWithLabel />}
                isAnimationActive={false}
              />
-            <Legend verticalAlign="bottom" align="center" wrapperStyle={{ marginTop: 2, paddingTop: 0 }} iconType="circle" iconSize={6} />
+            <Legend verticalAlign="bottom" align="center" wrapperStyle={{ marginTop: 0, paddingTop: 0 }} iconType="circle" iconSize={3} />
           </LineChart>
         </ResponsiveContainer>
       </div>

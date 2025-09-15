@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { FilterValue } from '@/components/filters/FilterBar'
+import { buildFilterParams } from '@/lib/filters'
 
 export interface TopIssue {
   category: string
@@ -32,41 +33,21 @@ export function useTopIssueData(options: UseTopIssueDataOptions = {}): UseTopIss
   const filter = options.filter || { q: '', vendor_name: [], program_report: [], imp_ttp: [] }
 
   // Fungsi untuk fetch data dari API
+  const abortRef = useRef<AbortController | null>(null)
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      // Prepare filter parameters
-      const params = new URLSearchParams()
-      
-      // Add search term
-      if (filter.q) {
-        params.append('searchFilter', filter.q)
-      }
-      
-      // Add vendor filter
-      if (filter.vendor_name && filter.vendor_name.length > 0) {
-        params.append('vendorFilter', filter.vendor_name[0])
-      } else {
-        params.append('vendorFilter', 'all')
-      }
-      
-      // Add program filter
-      if (filter.program_report && filter.program_report.length > 0) {
-        params.append('programFilter', filter.program_report[0])
-      } else {
-        params.append('programFilter', 'all')
-      }
-      
-      // Add city filter
-      if (filter.imp_ttp && filter.imp_ttp.length > 0) {
-        params.append('cityFilter', filter.imp_ttp[0])
-      } else {
-        params.append('cityFilter', 'all')
-      }
+      // Build consistent filter params (supports multi-value)
+      const params = buildFilterParams(filter)
 
-      const response = await fetch(`/api/hermes-5g/top-5-issue?${params}`)
+      // Abort previous request if any
+      if (abortRef.current) abortRef.current.abort()
+      const controller = new AbortController()
+      abortRef.current = controller
+
+      const response = await fetch(`/api/hermes-5g/top-5-issue?${params.toString()}` , { signal: controller.signal })
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -82,6 +63,10 @@ export function useTopIssueData(options: UseTopIssueDataOptions = {}): UseTopIss
         throw new Error(result.message || 'Unknown error')
       }
     } catch (err) {
+      // Ignore aborted requests to avoid noisy errors when rapidly changing filters
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return
+      }
       console.error('Error fetching top issue data:', err)
       setError(err instanceof Error ? err : new Error('Unknown error'))
       setData([])
@@ -92,9 +77,13 @@ export function useTopIssueData(options: UseTopIssueDataOptions = {}): UseTopIss
     }
   }, [filter])
 
-  // Fetch data ketika filter berubah
+  // Fetch data ketika filter berubah (debounced)
   useEffect(() => {
-    fetchData()
+    const t = setTimeout(() => { fetchData() }, 300)
+    return () => {
+      clearTimeout(t)
+      abortRef.current?.abort()
+    }
   }, [fetchData])
 
   // Return data dan functions

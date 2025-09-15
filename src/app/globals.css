@@ -394,6 +394,14 @@ html, body {
   gap: var(--wb-grid-gap);
   padding: var(--wb-grid-gap);
   box-sizing: border-box;
+  align-items: stretch; /* ensure column wrappers stretch to full height */
+}
+
+/* Ensure each column wrapper fills the available content height */
+.wallboard-content > .wallboard-side-column,
+.wallboard-content > .wallboard-middle-column {
+  height: 100%;
+  min-height: 0; /* allow inner grids to use fr rows correctly */
 }
 
 /* Side columns (1 & 3) - 2 rows each */
@@ -407,7 +415,8 @@ html, body {
 /* Middle column (2) - 4 rows */
 .wallboard-middle-column {
   display: grid;
-  grid-template-rows: var(--wb-grid-rows-middle);
+  /* Make Matrix row responsive with minmax instead of auto */
+  grid-template-rows: auto minmax(72px, 0.1fr) minmax(150px, 1fr) minmax(180px, 1fr); /* Filter, Matrix(responsive), Progress(fill), Bottom(fill) */
   column-gap: var(--wb-grid-gap);
   row-gap: 0; /* eliminate vertical gap between Filter, Matrix, Progress */
   /* scale down inner content slightly for tighter frames */
@@ -450,16 +459,21 @@ html, body {
 }
 
 .wallboard-matrix-card {
-  height: 84px;
-  min-height: 84px;
-  max-height: 96px;
-  align-self: start;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  align-self: stretch;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Force MatrixStatsCard to be about half height */
+/* Make MatrixStatsCard responsive */
 .matrix-compact {
-  min-height: 72px !important;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Shrink typography inside compact matrix */
@@ -468,11 +482,33 @@ html, body {
 .matrix-compact .responsive-text-sm { font-size: calc(0.6rem * var(--viewport-scale, 1)); }
 
 /* Taller progress and bottom rows so the chart is prominent */
-.wallboard-progress-card { min-height: 320px; }
-.wallboard-bottom-card { min-height: 180px; }
+/* Make key sections responsive to viewport height while preserving sensible bounds */
+.wallboard-progress-card { 
+  min-height: clamp(150px, 28vh, 250px); 
+  height: 100%;
+}
+.wallboard-bottom-card { 
+  min-height: clamp(180px, 32vh, 280px); 
+  height: 100%;
+}
 
-/* Add just a small separation between Progress and bottom row */
-.wallboard-bottom-row { margin-top: 6px; }
+/* Minimal separation between Progress and bottom row */
+.wallboard-bottom-row {
+  margin-top: 0px;
+  height: 100%;
+  min-height: 0;
+  /* ensure it behaves consistently even without inline styles */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--wb-grid-gap);
+}
+
+/* Ensure bottom-row children stretch fully */
+.wallboard-bottom-row > .wallboard-grid-item,
+.wallboard-bottom-row > .wallboard-middle-card {
+  height: 100%;
+  min-height: 0;
+}
 
 /* Readiness card chart typography */
 .readiness-card .recharts-cartesian-axis-tick-value { font-size: 11px !important; fill: #B0B7C3; }
@@ -593,8 +629,11 @@ html, body {
 
   .wallboard-content { padding: var(--wb-grid-gap); }
 
-  /* Tighten middle column row heights so everything fits */
-  .wallboard-middle-column { grid-template-rows: auto auto 0.58fr 0.42fr; --mid-scale: 0.88; }
+  /* Compact: keep the same pattern but slightly downscale inner content */
+  .wallboard-middle-column {
+    grid-template-rows: auto auto 1fr auto;
+    --mid-scale: 0.88;
+  }
 
   /* Reduce side column card footprint */
   .wallboard-side-column {
@@ -605,8 +644,32 @@ html, body {
 /* Compact overrides for progress and bottom rows */
 @media screen and (max-height: 700px) {
   .wallboard-filter-card { min-height: 44px !important; }
-  .wallboard-matrix-card { height: 80px; min-height: 80px; max-height: 92px; }
-  .wallboard-progress-card { min-height: 220px; }
+  /* Remove fixed height constraints for matrix card */
+  .wallboard-middle-column {
+    grid-template-rows: auto minmax(60px, 0.08fr) minmax(130px, 1fr) minmax(180px, 1fr); /* Smaller Matrix row in compact mode */
+  }
+  .wallboard-progress-card { min-height: 130px; }
   .wallboard-progress-card .recharts-cartesian-axis-tick-value { font-size: 10px !important; }
-  .wallboard-bottom-card { min-height: 120px; }
+  .wallboard-bottom-card { min-height: 180px; }
+}
+
+/* Ultra compact mode for very small screens */
+@media screen and (max-height: 600px) {
+  /* Even smaller Matrix row in ultra-compact mode */
+  .wallboard-middle-column {
+    grid-template-rows: auto minmax(50px, 0.06fr) minmax(120px, 1fr) minmax(160px, 1fr);
+  }
+  .wallboard-progress-card { min-height: 120px; }
+  .wallboard-bottom-card { min-height: 160px; }
+  
+  /* Reduce padding and margins for all cards */
+  .wallboard-progress-card, .wallboard-bottom-card, .wallboard-side-card {
+    padding: 0.25rem !important;
+  }
+  
+  /* Reduce chart margins */
+  .wallboard-progress-card .recharts-wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
 }

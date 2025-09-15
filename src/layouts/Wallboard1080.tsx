@@ -61,7 +61,7 @@ export function Wallboard1080({
 
   return (
     <div id="wb-wrapper" className="viewport-wrapper">
-      <div id="wb-canvas" ref={containerRef} className="wallboard-responsive">
+      <div id="wb-canvas" ref={containerRef} className="wallboard-scale">
         <div className="wallboard-grid">
           {/* Header - Full width, minimal height */}
           <div className="wallboard-header">
@@ -90,25 +90,25 @@ export function Wallboard1080({
                 {filterBar}
               </GridItem>
               
-              {/* Matrix Stats - 1fr */}
-              <GridItem className="wallboard-middle-card wallboard-matrix-card">
+              {/* Matrix Stats - responsive height */}
+              <GridItem className="wallboard-middle-card wallboard-matrix-card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 {matrixStats}
               </GridItem>
               
-              {/* Progress Curve - 1fr */}
+              {/* Progress Curve - responsive height */}
               <GridItem className="wallboard-middle-card wallboard-progress-card">
                 {progressCurve}
               </GridItem>
               
               {/* Bottom Row - Auto height with nested grid */}
-              <div className="wallboard-grid-item wallboard-bottom-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--wb-grid-gap)' }}>
+              <div className="wallboard-grid-item wallboard-bottom-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--wb-grid-gap)', flex: '1 0 auto' }}>
                 {/* Daily Runrate */}
-                <GridItem className="wallboard-middle-card wallboard-bottom-card">
+                <GridItem className="wallboard-middle-card wallboard-bottom-card" style={{ height: '100%' }}>
                   {dailyRunrate}
                 </GridItem>
                 
                 {/* Top 5 Issue */}
-                <GridItem className="wallboard-middle-card wallboard-bottom-card">
+                <GridItem className="wallboard-middle-card wallboard-bottom-card" style={{ height: '100%' }}>
                   {top5Issue}
                 </GridItem>
               </div>

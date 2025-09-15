@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { format, subDays } from 'date-fns';
 import { supabase } from '@/lib/supabase';
+import { parseFilterParams } from '@/lib/filters';
 
 // Interface untuk date record
 interface DateRecord {
@@ -16,13 +17,8 @@ interface DataCountMap {
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    
-    // Parse filter parameters
-    const vendorFilter = searchParams.get('vendorFilter') || 'all';
-    const programFilter = searchParams.get('programFilter') || 'all';
-    const cityFilter = searchParams.get('cityFilter') || 'all';
-    const searchFilter = searchParams.get('searchFilter') || '';
+    const url = new URL(request.url);
+    const { q, vendorNames, programReports, impTtps } = parseFilterParams(url);
     
     // Generate dates for the last 7 days
     const today = new Date();
@@ -37,22 +33,18 @@ export async function GET(request: NextRequest) {
     
     // Build Supabase query with filters
     let query = supabase.from('site_data_5g').select('imp_integ_af, rfs_af');
-    
-    // Apply filters
-    if (searchFilter) {
-      query = query.or(`system_key.ilike.%${searchFilter}%,site_id.ilike.%${searchFilter}%,site_name.ilike.%${searchFilter}%,vendor_name.ilike.%${searchFilter}%`);
+    // Apply filters (multi-value support)
+    if (q) {
+      query = query.or(`system_key.ilike.%${q}%,site_id.ilike.%${q}%,site_name.ilike.%${q}%,vendor_name.ilike.%${q}%`);
     }
-    
-    if (vendorFilter && vendorFilter !== 'all') {
-      query = query.eq('vendor_name', vendorFilter);
+    if (vendorNames.length) {
+      query = query.in('vendor_name', vendorNames);
     }
-    
-    if (programFilter && programFilter !== 'all') {
-      query = query.eq('program_report', programFilter);
+    if (programReports.length) {
+      query = query.in('program_report', programReports);
     }
-    
-    if (cityFilter && cityFilter !== 'all') {
-      query = query.eq('imp_ttp', cityFilter);
+    if (impTtps.length) {
+      query = query.in('imp_ttp', impTtps);
     }
     
     // Get data from Supabase

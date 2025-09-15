@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { Trophy } from "lucide-react"
+import { Trophy, Medal, Crown, Award } from "lucide-react"
 import { Row } from "./MatrixStatsCard"
 
 export interface VendorLeaderboardCardProps {
@@ -146,6 +146,63 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
     return scores
   }, [rows, isLoading])
 
+  // Podium component for top 3 vendors
+  const PodiumDisplay = ({ vendors }: { vendors: VendorScore[] }) => {
+    const top3 = vendors.slice(0, 3)
+    
+    return (
+      <div className="flex items-end justify-center gap-1 mb-2">
+        {/* 2nd Place */}
+        {top3[1] && (
+          <div className="flex flex-col items-center">
+            <div className="w-8 h-8 bg-gradient-to-b from-gray-300 to-gray-500 rounded-t-lg flex items-center justify-center mb-1">
+              <Medal className="h-3 w-3 text-white" />
+            </div>
+            <div className="text-[7px] text-center text-white/80 font-medium truncate max-w-[40px]">
+              {top3[1].vendorName.split(' ')[0]}
+            </div>
+            <div className="text-[6px] text-gray-400">
+              {top3[1].totalScore}%
+            </div>
+          </div>
+        )}
+        
+        {/* 1st Place */}
+        {top3[0] && (
+          <div className="flex flex-col items-center">
+            <div className="w-10 h-10 bg-gradient-to-b from-yellow-300 to-yellow-600 rounded-t-lg flex items-center justify-center mb-1 relative">
+              <Crown className="h-4 w-4 text-yellow-900" />
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full flex items-center justify-center">
+                <span className="text-[6px] font-bold text-yellow-900">1</span>
+              </div>
+            </div>
+            <div className="text-[7px] text-center text-white font-bold truncate max-w-[50px]">
+              {top3[0].vendorName.split(' ')[0]}
+            </div>
+            <div className="text-[6px] text-yellow-400 font-medium">
+              {top3[0].totalScore}%
+            </div>
+          </div>
+        )}
+        
+        {/* 3rd Place */}
+        {top3[2] && (
+          <div className="flex flex-col items-center">
+            <div className="w-7 h-7 bg-gradient-to-b from-amber-600 to-amber-800 rounded-t-lg flex items-center justify-center mb-1">
+              <Award className="h-3 w-3 text-white" />
+            </div>
+            <div className="text-[7px] text-center text-white/80 font-medium truncate max-w-[35px]">
+              {top3[2].vendorName.split(' ')[0]}
+            </div>
+            <div className="text-[6px] text-amber-400">
+              {top3[2].totalScore}%
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // Manual First Time Right percentages per vendor
   // This should ideally come from a configuration or database
   function getFirstTimeRightPercentage(vendorName: string): number {
@@ -193,36 +250,52 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="space-y-1">
+        {/* Podium Display for Top 3 */}
+        {vendorScores.length >= 3 && (
+          <div className="mb-2">
+            <PodiumDisplay vendors={vendorScores} />
+          </div>
+        )}
+
+        {/* Full Leaderboard List */}
+        <div className="space-y-0.5">
           {vendorScores.slice(0, 10).map((vendor) => (
-            <div key={vendor.vendorName} className="flex items-center gap-1.5 p-1.5 rounded-sm bg-white/5 hover:bg-white/10 transition-colors min-w-0">
-              {/* Rank */}
-              <div className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+            <div key={vendor.vendorName} className={`flex items-center gap-1 p-1 rounded-sm transition-colors min-w-0 ${
+              vendor.rank <= 3 
+                ? 'bg-gradient-to-r from-white/10 to-white/5 border border-white/20' 
+                : 'bg-white/5 hover:bg-white/10'
+            }`}>
+              {/* Rank with special styling for top 3 */}
+              <div className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold"
                    style={{
                      backgroundColor: vendor.rank === 1 ? '#FFD700' : 
                                     vendor.rank === 2 ? '#C0C0C0' : 
                                     vendor.rank === 3 ? '#CD7F32' : '#4A5568',
                      color: vendor.rank <= 3 ? '#000000' : '#FFFFFF'
                    }}>
-                {vendor.rank}
+                {vendor.rank <= 3 ? (
+                  vendor.rank === 1 ? <Crown className="h-2 w-2" /> :
+                  vendor.rank === 2 ? <Medal className="h-2 w-2" /> :
+                  <Award className="h-2 w-2" />
+                ) : vendor.rank}
               </div>
 
               {/* Vendor Info */}
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-medium text-white truncate">
+                <div className={`text-[8px] font-medium truncate ${
+                  vendor.rank <= 3 ? 'text-white font-bold' : 'text-white/90'
+                }`}>
                   {vendor.vendorName}
                 </div>
-                <div className="text-[8px] text-[#B0B7C3]">
-                  {vendor.totalSites} sites • Score: {vendor.totalScore}%
+                <div className="text-[6px] text-[#B0B7C3]">
+                  {vendor.totalSites} sites • {vendor.totalScore}%
                 </div>
               </div>
 
-              {/* Score Breakdown */}
+              {/* Score Breakdown - Compact */}
               <div className="flex-shrink-0 text-right">
-                <div className="text-[8px] text-[#B0B7C3] space-y-0.5">
-                  <div>R: {vendor.readinessCount}</div>
-                  <div>A: {vendor.activatedCount}</div>
-                  <div>F: {vendor.forecastCount}</div>
+                <div className="text-[6px] text-[#B0B7C3]">
+                  R:{vendor.readinessCount} A:{vendor.activatedCount}
                 </div>
               </div>
             </div>
@@ -237,10 +310,10 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
       </div>
 
       {/* Footer with scoring explanation */}
-      <div className="mt-1.5 pt-1.5 border-t border-white/10 flex-shrink-0">
-        <div className="text-[8px] text-[#B0B7C3] space-y-0.5">
-          <div>Scoring: Readiness vs Forecast (20%) + Activated vs Forecast (50%) + Above Acceleration (15%) + First Time Right (15%)</div>
-          <div>R: Readiness • A: Activated • F: Forecast</div>
+      <div className="mt-1 pt-1 border-t border-white/10 flex-shrink-0">
+        <div className="text-[6px] text-[#B0B7C3] space-y-0.5">
+          <div>Scoring: R vs F (20%) + A vs F (50%) + Above Accel (15%) + FTR (15%)</div>
+          <div>R: Readiness • A: Activated • F: Forecast • FTR: First Time Right</div>
         </div>
       </div>
     </div>

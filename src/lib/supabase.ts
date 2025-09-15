@@ -33,9 +33,26 @@ export async function getSiteData5G(filters: {
   limit?: number
   offset?: number
 } = {}) {
+  // Select only the columns we actually use on the dashboard
+  const columns = [
+    'system_key',
+    'vendor_name',
+    'program_report',
+    'imp_ttp',
+    'nano_cluster',
+    'caf_approved',
+    'mos_af',
+    'ic_000040_af',
+    'imp_integ_af',
+    'rfs_af',
+    'rfs_forecast_lock',
+    'hotnews_af',
+    'endorse_af'
+  ].join(',')
+
   let query = supabase
     .from('site_data_5g')
-    .select('*')
+    .select(columns, { count: 'exact' })
 
   // Apply filters
   if (filters.vendor_name && filters.vendor_name.length > 0) {
@@ -55,13 +72,14 @@ export async function getSiteData5G(filters: {
   }
 
   // Apply pagination
-  if (filters.limit) {
+  if (filters.offset !== undefined && filters.limit) {
+    query = query.range(filters.offset, filters.offset + filters.limit - 1)
+  } else if (filters.limit) {
     query = query.limit(filters.limit)
   }
 
-  if (filters.offset) {
-    query = query.range(filters.offset, filters.offset + (filters.limit || 50) - 1)
-  }
+  // Provide a stable order to avoid inconsistent slices across environments
+  query = query.order('system_key', { ascending: true })
 
   const { data, error, count } = await query
 
@@ -69,8 +87,16 @@ export async function getSiteData5G(filters: {
     throw new Error(`Supabase error: ${error.message}`)
   }
 
+  // Ensure data is of the correct type or handle error case
+  if (!data || !Array.isArray(data)) {
+    return {
+      data: [] as SiteData5G[],
+      count: count || 0
+    }
+  }
+  
   return {
-    data: data as SiteData5G[],
+    data: data as unknown as SiteData5G[],
     count: count || 0
   }
 }
@@ -102,4 +128,3 @@ export async function getFilterOptions() {
     cities: [...new Set(cities.map(c => c.imp_ttp))].sort()
   }
 }
-

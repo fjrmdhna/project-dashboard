@@ -385,9 +385,9 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
 
 // Get 5G Readiness Chart Data
 export async function getReadinessChartData(filters?: {
-  vendorFilter?: string;
-  programFilter?: string;
-  cityFilter?: string;
+  vendorNames?: string[];
+  programReports?: string[];
+  impTtps?: string[];
 }): Promise<ReadinessChartResponse> {
   try {
     // Build Supabase query with filters
@@ -396,17 +396,15 @@ export async function getReadinessChartData(filters?: {
       .select('imp_ttp, imp_integ_af')
       .not('imp_ttp', 'is', null);
     
-    // Apply filters
-    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      query = query.eq('vendor_name', filters.vendorFilter);
+    // Apply filters (multi-value)
+    if (filters?.vendorNames && filters.vendorNames.length > 0) {
+      query = query.in('vendor_name', filters.vendorNames)
     }
-    
-    if (filters?.programFilter && filters.programFilter !== 'all') {
-      query = query.eq('program_report', filters.programFilter);
+    if (filters?.programReports && filters.programReports.length > 0) {
+      query = query.in('program_report', filters.programReports)
     }
-    
-    if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      query = query.eq('imp_ttp', filters.cityFilter);
+    if (filters?.impTtps && filters.impTtps.length > 0) {
+      query = query.in('imp_ttp', filters.impTtps)
     }
     
     const { data, error } = await query;
@@ -462,9 +460,9 @@ export async function getReadinessChartData(filters?: {
 
 // Get 5G Activated Chart Data
 export async function getActivatedChartData(filters?: {
-  vendorFilter?: string;
-  programFilter?: string;
-  cityFilter?: string;
+  vendorNames?: string[];
+  programReports?: string[];
+  impTtps?: string[];
 }): Promise<ActivatedChartResponse> {
   try {
     // Build Supabase query with filters
@@ -473,17 +471,15 @@ export async function getActivatedChartData(filters?: {
       .select('imp_ttp, rfs_af')
       .not('imp_ttp', 'is', null);
     
-    // Apply filters
-    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      query = query.eq('vendor_name', filters.vendorFilter);
+    // Apply filters (multi-value)
+    if (filters?.vendorNames && filters.vendorNames.length > 0) {
+      query = query.in('vendor_name', filters.vendorNames)
     }
-    
-    if (filters?.programFilter && filters.programFilter !== 'all') {
-      query = query.eq('program_report', filters.programFilter);
+    if (filters?.programReports && filters.programReports.length > 0) {
+      query = query.in('program_report', filters.programReports)
     }
-    
-    if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      query = query.eq('imp_ttp', filters.cityFilter);
+    if (filters?.impTtps && filters.impTtps.length > 0) {
+      query = query.in('imp_ttp', filters.impTtps)
     }
     
     const { data, error } = await query;
@@ -539,9 +535,9 @@ export async function getActivatedChartData(filters?: {
 
 // Get Progress Curve Data
 export async function getProgressCurveData(filters?: {
-  vendorFilter?: string;
-  programFilter?: string;
-  cityFilter?: string;
+  vendorNames?: string[];
+  programReports?: string[];
+  impTtps?: string[];
 }): Promise<ProgressCurveResponse> {
   try {
     // Build Supabase query with filters
@@ -550,17 +546,15 @@ export async function getProgressCurveData(filters?: {
       .select('rfs_forecast_lock, imp_integ_af, rfs_af')
       .not('rfs_forecast_lock', 'is', null);
     
-    // Apply filters
-    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      query = query.eq('vendor_name', filters.vendorFilter);
+    // Apply filters (multi-value)
+    if (filters?.vendorNames && filters.vendorNames.length > 0) {
+      query = query.in('vendor_name', filters.vendorNames)
     }
-    
-    if (filters?.programFilter && filters.programFilter !== 'all') {
-      query = query.eq('program_report', filters.programFilter);
+    if (filters?.programReports && filters.programReports.length > 0) {
+      query = query.in('program_report', filters.programReports)
     }
-    
-    if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      query = query.eq('imp_ttp', filters.cityFilter);
+    if (filters?.impTtps && filters.impTtps.length > 0) {
+      query = query.in('imp_ttp', filters.impTtps)
     }
     
     const { data, error } = await query;
@@ -737,9 +731,9 @@ export async function getDailyRunrateData(filters?: {
 
 // Get Data Alignment Data
 export async function getDataAlignmentData(filters?: {
-  vendorFilter?: string;
-  programFilter?: string;
-  cityFilter?: string;
+  vendorNames?: string[];
+  programReports?: string[];
+  impTtps?: string[];
 }): Promise<DataAlignmentResponse> {
   try {
     // Build Supabase query with filters
@@ -747,17 +741,15 @@ export async function getDataAlignmentData(filters?: {
       .from('site_data_5g')
       .select('caf_approved, mos_af, ic_000040_af, imp_integ_af, rfs_af, rfc_approved, hotnews_af, endorse_af');
     
-    // Apply filters
-    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      query = query.eq('vendor_name', filters.vendorFilter);
+    // Apply filters (multi-value)
+    if (filters?.vendorNames && filters.vendorNames.length > 0) {
+      query = query.in('vendor_name', filters.vendorNames)
     }
-    
-    if (filters?.programFilter && filters.programFilter !== 'all') {
-      query = query.eq('program_report', filters.programFilter);
+    if (filters?.programReports && filters.programReports.length > 0) {
+      query = query.in('program_report', filters.programReports)
     }
-    
-    if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      query = query.eq('imp_ttp', filters.cityFilter);
+    if (filters?.impTtps && filters.impTtps.length > 0) {
+      query = query.in('imp_ttp', filters.impTtps)
     }
     
     const { data, error } = await query;
@@ -908,9 +900,9 @@ export async function getTop5IssueData(filters?: {
 
 // Get Nano Cluster Data
 export async function getNanoClusterData(filters?: {
-  vendorFilter?: string;
-  programFilter?: string;
-  cityFilter?: string;
+  vendorNames?: string[];
+  programReports?: string[];
+  impTtps?: string[];
 }): Promise<NanoClusterResponse> {
   try {
     // Build Supabase query with filters
@@ -920,17 +912,15 @@ export async function getNanoClusterData(filters?: {
       .not('nano_cluster', 'is', null)
       .neq('nano_cluster', '');
     
-    // Apply filters
-    if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
-      query = query.eq('vendor_name', filters.vendorFilter);
+    // Apply filters (multi-value)
+    if (filters?.vendorNames && filters.vendorNames.length > 0) {
+      query = query.in('vendor_name', filters.vendorNames)
     }
-    
-    if (filters?.programFilter && filters.programFilter !== 'all') {
-      query = query.eq('program_report', filters.programFilter);
+    if (filters?.programReports && filters.programReports.length > 0) {
+      query = query.in('program_report', filters.programReports)
     }
-    
-    if (filters?.cityFilter && filters.cityFilter !== 'all') {
-      query = query.eq('imp_ttp', filters.cityFilter);
+    if (filters?.impTtps && filters.impTtps.length > 0) {
+      query = query.in('imp_ttp', filters.impTtps)
     }
     
     const { data, error } = await query;

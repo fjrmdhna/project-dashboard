@@ -82,3 +82,5 @@ export async function GET(request: NextRequest) {
     )
   }
 } 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
