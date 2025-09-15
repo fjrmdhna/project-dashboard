@@ -146,56 +146,172 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
     return scores
   }, [rows, isLoading])
 
-  // Podium component for top 3 vendors
+  // Get vendor logo
+  const getVendorLogo = (vendorName: string) => {
+    if (vendorName.toLowerCase().includes('huawei')) {
+      return '/Huawei_Standard_logo.svg.png'
+    } else if (vendorName.toLowerCase().includes('nokia')) {
+      return '/Nokia-Logo.png'
+    } else if (vendorName.toLowerCase().includes('ericsson')) {
+      return null // Will use icon fallback
+    } else if (vendorName.toLowerCase().includes('zte')) {
+      return null // Will use icon fallback
+    } else if (vendorName.toLowerCase().includes('samsung')) {
+      return null // Will use icon fallback
+    }
+    return null
+  }
+
+  // Get vendor icon fallback
+  const getVendorIcon = (vendorName: string) => {
+    if (vendorName.toLowerCase().includes('ericsson')) {
+      return <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-[8px] font-bold">E</div>
+    } else if (vendorName.toLowerCase().includes('zte')) {
+      return <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-[8px] font-bold">Z</div>
+    } else if (vendorName.toLowerCase().includes('samsung')) {
+      return <div className="w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center text-white text-[8px] font-bold">S</div>
+    }
+    return <Trophy className="h-3 w-3 text-white" />
+  }
+
+  // Podium component for top 3 vendors - Realistic design
   const PodiumDisplay = ({ vendors }: { vendors: VendorScore[] }) => {
     const top3 = vendors.slice(0, 3)
     
     return (
-      <div className="flex items-end justify-center gap-1 mb-2">
-        {/* 2nd Place */}
-        {top3[1] && (
-          <div className="flex flex-col items-center">
-            <div className="w-8 h-8 bg-gradient-to-b from-gray-300 to-gray-500 rounded-t-lg flex items-center justify-center mb-1">
-              <Medal className="h-3 w-3 text-white" />
-            </div>
-            <div className="text-[7px] text-center text-white/80 font-medium truncate max-w-[40px]">
-              {top3[1].vendorName.split(' ')[0]}
-            </div>
-            <div className="text-[6px] text-gray-400">
-              {top3[1].totalScore}%
-            </div>
-          </div>
-        )}
+      <div className="flex items-end justify-center gap-1 mb-0 relative pt-3">
+        {/* Podium Base */}
+        <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-gray-700 via-gray-600 to-gray-700 rounded-b-lg"></div>
         
-        {/* 1st Place */}
-        {top3[0] && (
-          <div className="flex flex-col items-center">
-            <div className="w-10 h-10 bg-gradient-to-b from-yellow-300 to-yellow-600 rounded-t-lg flex items-center justify-center mb-1 relative">
-              <Crown className="h-4 w-4 text-yellow-900" />
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full flex items-center justify-center">
-                <span className="text-[6px] font-bold text-yellow-900">1</span>
+        {/* 2nd Place - Left side */}
+        {top3[1] ? (
+          <div className="flex flex-col items-center relative z-10">
+            {/* Podium Block */}
+            <div className="w-10 h-16 bg-gradient-to-b from-gray-300 to-gray-500 rounded-t-lg flex flex-col items-center justify-center relative shadow-lg">
+              {/* Rank Badge */}
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                <span className="text-[8px] font-bold text-white">2</span>
+              </div>
+              {/* Logo */}
+              <div className="w-5 h-5 flex items-center justify-center mb-1">
+                {getVendorLogo(top3[1].vendorName) ? (
+                  <img 
+                    src={getVendorLogo(top3[1].vendorName)!} 
+                    alt={top3[1].vendorName}
+                    className="w-4 h-4 object-contain"
+                  />
+                ) : (
+                  getVendorIcon(top3[1].vendorName)
+                )}
               </div>
             </div>
-            <div className="text-[7px] text-center text-white font-bold truncate max-w-[50px]">
-              {top3[0].vendorName.split(' ')[0]}
+            {/* Vendor Info */}
+            <div className="text-center mt-1">
+              <div className="text-[8px] text-white font-bold truncate max-w-[50px]">
+                {top3[1].vendorName.split(' ')[0]}
+              </div>
+              <div className="text-[7px] text-blue-400 font-medium">
+                {top3[1].totalScore}%
+              </div>
             </div>
-            <div className="text-[6px] text-yellow-400 font-medium">
-              {top3[0].totalScore}%
+          </div>
+        ) : (
+          <div className="flex flex-col items-center relative z-10">
+            <div className="w-10 h-16 bg-gray-600 rounded-t-lg flex flex-col items-center justify-center relative shadow-lg">
+              <div className="text-white/50 text-sm font-bold">-</div>
+            </div>
+            <div className="text-center mt-1">
+              <div className="text-[8px] text-white/50 font-bold">No Data</div>
             </div>
           </div>
         )}
         
-        {/* 3rd Place */}
-        {top3[2] && (
-          <div className="flex flex-col items-center">
-            <div className="w-7 h-7 bg-gradient-to-b from-amber-600 to-amber-800 rounded-t-lg flex items-center justify-center mb-1">
-              <Award className="h-3 w-3 text-white" />
+        {/* 1st Place - Center (tallest) */}
+        {top3[0] ? (
+          <div className="flex flex-col items-center relative z-20">
+            {/* Crown */}
+            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 z-30">
+              <Crown className="h-4 w-4 text-yellow-400 drop-shadow-lg" />
             </div>
-            <div className="text-[7px] text-center text-white/80 font-medium truncate max-w-[35px]">
-              {top3[2].vendorName.split(' ')[0]}
+            {/* Podium Block */}
+            <div className="w-12 h-20 bg-gradient-to-b from-yellow-300 to-yellow-600 rounded-t-lg flex flex-col items-center justify-center relative shadow-xl">
+              {/* Rank Badge */}
+              <div className="absolute -top-2 -right-2 w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center">
+                <span className="text-[9px] font-bold text-yellow-900">1</span>
+              </div>
+              {/* Logo */}
+              <div className="w-6 h-6 flex items-center justify-center mb-1">
+                {getVendorLogo(top3[0].vendorName) ? (
+                  <img 
+                    src={getVendorLogo(top3[0].vendorName)!} 
+                    alt={top3[0].vendorName}
+                    className="w-5 h-5 object-contain"
+                  />
+                ) : (
+                  getVendorIcon(top3[0].vendorName)
+                )}
+              </div>
             </div>
-            <div className="text-[6px] text-amber-400">
-              {top3[2].totalScore}%
+            {/* Vendor Info */}
+            <div className="text-center mt-1">
+              <div className="text-[9px] text-white font-bold truncate max-w-[60px]">
+                {top3[0].vendorName.split(' ')[0]}
+              </div>
+              <div className="text-[8px] text-yellow-400 font-bold">
+                {top3[0].totalScore}%
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center relative z-20">
+            <div className="w-12 h-20 bg-gray-600 rounded-t-lg flex flex-col items-center justify-center relative shadow-xl">
+              <div className="text-white/50 text-sm font-bold">-</div>
+            </div>
+            <div className="text-center mt-1">
+              <div className="text-[9px] text-white/50 font-bold">No Data</div>
+            </div>
+          </div>
+        )}
+        
+        {/* 3rd Place - Right side */}
+        {top3[2] ? (
+          <div className="flex flex-col items-center relative z-10">
+            {/* Podium Block */}
+            <div className="w-8 h-12 bg-gradient-to-b from-amber-600 to-amber-800 rounded-t-lg flex flex-col items-center justify-center relative shadow-lg">
+              {/* Rank Badge */}
+              <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-green-500 rounded-full flex items-center justify-center">
+                <span className="text-[8px] font-bold text-white">3</span>
+              </div>
+              {/* Logo */}
+              <div className="w-4 h-4 flex items-center justify-center mb-1">
+                {getVendorLogo(top3[2].vendorName) ? (
+                  <img 
+                    src={getVendorLogo(top3[2].vendorName)!} 
+                    alt={top3[2].vendorName}
+                    className="w-3 h-3 object-contain"
+                  />
+                ) : (
+                  getVendorIcon(top3[2].vendorName)
+                )}
+              </div>
+            </div>
+            {/* Vendor Info */}
+            <div className="text-center mt-1">
+              <div className="text-[8px] text-white font-bold truncate max-w-[45px]">
+                {top3[2].vendorName.split(' ')[0]}
+              </div>
+              <div className="text-[7px] text-green-400 font-medium">
+                {top3[2].totalScore}%
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center relative z-10">
+            <div className="w-8 h-12 bg-gray-600 rounded-t-lg flex flex-col items-center justify-center relative shadow-lg">
+              <div className="text-white/50 text-xs font-bold">-</div>
+            </div>
+            <div className="text-center mt-1">
+              <div className="text-[8px] text-white/50 font-bold">No Data</div>
             </div>
           </div>
         )}
@@ -251,22 +367,22 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0">
         {/* Podium Display for Top 3 */}
-        {vendorScores.length >= 3 && (
-          <div className="mb-2">
+        {vendorScores.length > 0 && (
+          <div className="mb-0">
             <PodiumDisplay vendors={vendorScores} />
           </div>
         )}
 
         {/* Full Leaderboard List */}
-        <div className="space-y-0.5">
+        <div className="space-y-0">
           {vendorScores.slice(0, 10).map((vendor) => (
-            <div key={vendor.vendorName} className={`flex items-center gap-1 p-1 rounded-sm transition-colors min-w-0 ${
+            <div key={vendor.vendorName} className={`flex items-center gap-0.5 p-0.5 rounded-sm transition-colors min-w-0 ${
               vendor.rank <= 3 
                 ? 'bg-gradient-to-r from-white/10 to-white/5 border border-white/20' 
                 : 'bg-white/5 hover:bg-white/10'
             }`}>
               {/* Rank with special styling for top 3 */}
-              <div className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold"
+              <div className="flex-shrink-0 w-3 h-3 rounded-full flex items-center justify-center text-[6px] font-bold"
                    style={{
                      backgroundColor: vendor.rank === 1 ? '#FFD700' : 
                                     vendor.rank === 2 ? '#C0C0C0' : 
@@ -274,27 +390,27 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
                      color: vendor.rank <= 3 ? '#000000' : '#FFFFFF'
                    }}>
                 {vendor.rank <= 3 ? (
-                  vendor.rank === 1 ? <Crown className="h-2 w-2" /> :
-                  vendor.rank === 2 ? <Medal className="h-2 w-2" /> :
-                  <Award className="h-2 w-2" />
+                  vendor.rank === 1 ? <Crown className="h-1.5 w-1.5" /> :
+                  vendor.rank === 2 ? <Medal className="h-1.5 w-1.5" /> :
+                  <Award className="h-1.5 w-1.5" />
                 ) : vendor.rank}
               </div>
 
               {/* Vendor Info */}
               <div className="flex-1 min-w-0">
-                <div className={`text-[8px] font-medium truncate ${
+                <div className={`text-[7px] font-medium truncate ${
                   vendor.rank <= 3 ? 'text-white font-bold' : 'text-white/90'
                 }`}>
                   {vendor.vendorName}
                 </div>
-                <div className="text-[6px] text-[#B0B7C3]">
+                <div className="text-[5px] text-[#B0B7C3]">
                   {vendor.totalSites} sites • {vendor.totalScore}%
                 </div>
               </div>
 
-              {/* Score Breakdown - Compact */}
+              {/* Score Breakdown - Ultra Compact */}
               <div className="flex-shrink-0 text-right">
-                <div className="text-[6px] text-[#B0B7C3]">
+                <div className="text-[5px] text-[#B0B7C3]">
                   R:{vendor.readinessCount} A:{vendor.activatedCount}
                 </div>
               </div>
@@ -310,7 +426,7 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
       </div>
 
       {/* Footer with scoring explanation */}
-      <div className="mt-1 pt-1 border-t border-white/10 flex-shrink-0">
+      <div className="mt-1 pt-1 flex-shrink-0">
         <div className="text-[6px] text-[#B0B7C3] space-y-0.5">
           <div>Scoring: R vs F (20%) + A vs F (50%) + Above Accel (15%) + FTR (15%)</div>
           <div>R: Readiness • A: Activated • F: Forecast • FTR: First Time Right</div>
