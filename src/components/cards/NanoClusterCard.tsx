@@ -91,6 +91,17 @@ export function NanoClusterCard(props: NanoClusterCardProps) {
       clusterMap.set(clusterName, clusterData)
     })
     
+    // Debug logging untuk melihat data cluster
+    console.log(`NanoCluster Data: Total rows processed: ${rows.length}`)
+    console.log(`NanoCluster Data: Unique clusters found: ${clusterMap.size}`)
+    clusterMap.forEach((data, clusterName) => {
+      const readinessPct = data.total > 0 ? (data.ready / data.total) * 100 : 0
+      if (readinessPct === 100) {
+        console.log(`Cluster ${clusterName}: total=${data.total}, ready=${data.ready}, activated=${data.activated}`)
+      }
+    })
+    
+    
     // Hitung metrics berdasarkan persentase readiness dan activation
     let count_lt50 = 0
     let count_50_80 = 0
@@ -98,17 +109,16 @@ export function NanoClusterCard(props: NanoClusterCardProps) {
     let count_100 = 0
     let count_completed = 0
     
-    clusterMap.forEach(data => {
+    clusterMap.forEach((data, clusterName) => {
       const readinessPct = data.total > 0 ? (data.ready / data.total) * 100 : 0
       const activatedPct = data.total > 0 ? (data.activated / data.total) * 100 : 0
       
-      // Cluster yang 100% activated dihitung sebagai completed
-      if (activatedPct === 100) {
-        count_completed++
-        return
+      // Debug logging untuk cluster dengan readiness 100%
+      if (readinessPct === 100) {
+        console.log(`Cluster ${clusterName}: total=${data.total}, ready=${data.ready}, activated=${data.activated}, readinessPct=${readinessPct}%, activatedPct=${activatedPct}%`)
       }
       
-      // Binning berdasarkan persentase readiness
+      // Binning berdasarkan persentase readiness (tanpa return)
       if (readinessPct < 50) {
         count_lt50++
       } else if (readinessPct < 80) {
@@ -118,7 +128,16 @@ export function NanoClusterCard(props: NanoClusterCardProps) {
       } else if (readinessPct === 100) {
         count_100++
       }
+      
+      // Cluster yang 100% activated juga dihitung sebagai completed
+      if (activatedPct === 100) {
+        count_completed++
+      }
     })
+    
+    // Debug logging untuk total counts
+    console.log(`NanoCluster Debug: totalClusters=${clusterMap.size}, count_100=${count_100}, count_completed=${count_completed}`)
+    
     
     return {
       totalClusters: clusterMap.size,

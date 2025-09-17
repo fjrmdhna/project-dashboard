@@ -180,8 +180,6 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
     
     return (
       <div className="flex items-end justify-center gap-1 mb-0 relative pt-3">
-        {/* Podium Base */}
-        <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-gray-700 via-gray-600 to-gray-700 rounded-b-lg"></div>
         
         {/* 2nd Place - Left side */}
         {top3[1] ? (

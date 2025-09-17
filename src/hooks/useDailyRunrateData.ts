@@ -27,7 +27,7 @@ export function useDailyRunrateData(options: UseDailyRunrateDataOptions = {}): U
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
-  const filter = options.filter || { q: '', vendor_name: [], program_report: [], imp_ttp: [] }
+  const filter = options.filter || { q: '', vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [] }
 
   // Fungsi untuk fetch data dari API
   const abortRef = useRef<AbortController | null>(null)

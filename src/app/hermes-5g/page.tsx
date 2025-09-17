@@ -67,8 +67,29 @@ export default function Hermes5GPage() {
   // Header component
   const header = (
     <div className="flex items-center justify-between h-full w-full px-4">
-      {/* Logo Indosat di kiri */}
-      <div className="flex-shrink-0">
+      {/* Back button dan Logo Indosat di kiri */}
+      <div className="flex items-center gap-3 flex-shrink-0">
+        {/* Back Button */}
+        <button 
+          onClick={() => window.location.href = '/'}
+          className="flex items-center justify-center w-8 h-8 bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/30 rounded-full transition-all duration-200 group -ml-9 mt-3"
+        >
+          <svg 
+            className="w-4 h-4 text-white group-hover:text-white/90 transition-colors" 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M15 19l-7-7 7-7" 
+            />
+          </svg>
+        </button>
+        
+        {/* Logo Indosat */}
         <img 
           src="/logo indosat putih.png" 
           alt="Indosat Logo" 
@@ -81,8 +102,17 @@ export default function Hermes5GPage() {
         <h1 className="text-3xl font-bold text-white tracking-wide">DASHBOARD HERMES H2 2025</h1>
       </div>
       
-      {/* Bagian kanan (kosong untuk keseimbangan) */}
-      <div className="flex-shrink-0 w-20"></div>
+      {/* Tanggal hari ini */}
+      <div className="flex-shrink-0 text-right -mr-9 mt-2">
+        <div className="text-sm font-medium text-white">
+          {new Date().toLocaleDateString('id-ID', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })}
+        </div>
+      </div>
             </div>
   )
 

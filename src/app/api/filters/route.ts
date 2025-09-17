@@ -18,6 +18,7 @@ export async function GET() {
         vendors: filterOptions.data.vendors,
         programs: filterOptions.data.programs,
         cities: filterOptions.data.cities,
+        nanoClusters: filterOptions.data.nanoClusters,
       },
       timestamp: new Date().toISOString(),
     });

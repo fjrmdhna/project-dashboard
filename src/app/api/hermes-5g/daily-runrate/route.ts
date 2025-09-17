@@ -18,7 +18,7 @@ interface DataCountMap {
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
-    const { q, vendorNames, programReports, impTtps } = parseFilterParams(url);
+    const { q, vendorNames, programReports, impTtps, nanoClusters } = parseFilterParams(url);
     
     // Generate dates for the last 7 days
     const today = new Date();
@@ -45,6 +45,9 @@ export async function GET(request: NextRequest) {
     }
     if (impTtps.length) {
       query = query.in('imp_ttp', impTtps);
+    }
+    if (nanoClusters.length) {
+      query = query.in('nano_cluster', nanoClusters);
     }
     
     // Get data from Supabase

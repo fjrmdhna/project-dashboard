@@ -14,7 +14,7 @@ const ISSUE_COLORS = [
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
-    const { q, vendorNames, programReports, impTtps } = parseFilterParams(url);
+    const { q, vendorNames, programReports, impTtps, nanoClusters } = parseFilterParams(url);
     
     // Build Supabase query with filters
     let query = supabase
@@ -35,6 +35,9 @@ export async function GET(request: NextRequest) {
     }
     if (impTtps.length) {
       query = query.in('imp_ttp', impTtps);
+    }
+    if (nanoClusters.length) {
+      query = query.in('nano_cluster', nanoClusters);
     }
     
     // Get data from Supabase
@@ -76,6 +79,17 @@ export async function GET(request: NextRequest) {
     // Calculate totals
     const totalCount = data?.length || 0;
     const top5Count = result.reduce((sum, item) => sum + item.count, 0);
+    
+    // Debug logging
+    console.log('Top 5 Issue API Debug:', {
+      filter: { q, vendorNames, programReports, impTtps, nanoClusters },
+      totalRecords: data?.length || 0,
+      categoryCount,
+      sortedCategories,
+      result: result.map(r => ({ category: r.category, count: r.count })),
+      top5Count,
+      totalCount
+    });
     
     return NextResponse.json({
       status: 'success',

@@ -10,12 +10,14 @@ export async function GET(request: NextRequest) {
     const vendorNames = searchParams.getAll('vendor_name') || []
     const programReports = searchParams.getAll('program_report') || []
     const impTtps = searchParams.getAll('imp_ttp') || []
+    const nanoClusters = searchParams.getAll('nano_cluster') || []
     
     // Use Supabase to get site data
     const { data, count } = await getSiteData5G({
       vendor_name: vendorNames.length > 0 ? vendorNames : undefined,
       program_report: programReports.length > 0 ? programReports : undefined,
       imp_ttp: impTtps.length > 0 ? impTtps : undefined,
+      nano_cluster: nanoClusters.length > 0 ? nanoClusters : undefined,
       search: q || undefined,
       limit: 10000
     })
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
       status: 'success',
       data,
       timestamp: new Date().toISOString(),
-      filtered: vendorNames.length > 0 || programReports.length > 0 || impTtps.length > 0 || q.length > 0,
+      filtered: vendorNames.length > 0 || programReports.length > 0 || impTtps.length > 0 || nanoClusters.length > 0 || q.length > 0,
       count: data.length,
       totalCount: count,
       metrics: {

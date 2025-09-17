@@ -11,6 +11,7 @@ export interface FilterValue {
   vendor_name: string[]
   program_report: string[]
   imp_ttp: string[]
+  nano_cluster: string[]
 }
 
 // Props untuk FilterBar
@@ -25,6 +26,7 @@ interface FilterOptions {
   vendors: string[]
   programs: string[]
   cities: string[]
+  nanoClusters: string[]
 }
 
 // Fungsi helper untuk memendekkan teks yang terlalu panjang
@@ -41,7 +43,8 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
   const [options, setOptions] = useState<FilterOptions>({
     vendors: [],
     programs: [],
-    cities: []
+    cities: [],
+    nanoClusters: []
   })
   
   // State untuk loading
@@ -67,7 +70,8 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
             setOptions({
               vendors: data.data.vendors || [],
               programs: data.data.programs || [],
-              cities: data.data.cities || []
+              cities: data.data.cities || [],
+              nanoClusters: data.data.nanoClusters || []
             })
           }
         }
@@ -112,11 +116,17 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     onChange({ ...value, imp_ttp: selected })
   }, [onChange, value])
   
+  // Handler untuk nano cluster selection
+  const handleNanoClusterChange = useCallback((selected: string[]) => {
+    console.log('Nano cluster filter changed:', selected)
+    onChange({ ...value, nano_cluster: selected })
+  }, [onChange, value])
+  
   // Handler untuk reset semua filter
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [] })
   }
 
   // Handler untuk remove individual filter
@@ -137,14 +147,15 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     value.q !== "" || 
     value.vendor_name.length > 0 || 
     value.program_report.length > 0 || 
-    value.imp_ttp.length > 0
+    value.imp_ttp.length > 0 ||
+    value.nano_cluster.length > 0
   
   return (
     <div className="h-full flex flex-col min-w-0">
-      {/* Filter Controls - Responsive Layout */}
-      <div className="flex items-center gap-1.5 text-xs flex-shrink-0 min-w-0">
-        {/* Search Input - Flexible Width */}
-        <div className="relative flex-1 min-w-[150px] max-w-[250px]">
+      {/* Filter Controls - Grid Layout untuk mencegah tabrakan */}
+      <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] lg:grid-cols-[1fr_auto_auto_auto_auto_auto] md:grid-cols-[1fr_auto_auto_auto_auto] sm:grid-cols-[1fr_auto_auto_auto] gap-1.5 items-center text-xs flex-shrink-0 min-w-0 max-w-full overflow-hidden">
+        {/* Search Input - Takes remaining space */}
+        <div className="relative min-w-[150px] max-w-[250px]">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
           <input
             type="text"
@@ -163,43 +174,52 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
           )}
         </div>
         
-        {/* Filter Dropdowns - More Compact */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Vendor Filter */}
-          <MultiSelect
-            options={options.vendors}
-            selected={value.vendor_name}
-            placeholder="Vendor"
-            onChange={handleVendorChange}
-            disabled={isLoading}
-            width="w-[100px]"
-          />
-          
-          {/* Program Filter */}
-          <MultiSelect
-            options={options.programs}
-            selected={value.program_report}
-            placeholder="Program"
-            onChange={handleProgramChange}
-            disabled={isLoading}
-            width="w-[110px]"
-          />
-          
-          {/* City/IMP_TTP Filter */}
-          <MultiSelect
-            options={options.cities}
-            selected={value.imp_ttp}
-            placeholder="City"
-            onChange={handleCityChange}
-            disabled={isLoading}
-            width="w-[100px]"
-          />
-        </div>
+        {/* Vendor Filter */}
+        <MultiSelect
+          options={options.vendors}
+          selected={value.vendor_name}
+          placeholder="Vendor"
+          onChange={handleVendorChange}
+          disabled={isLoading}
+          width="w-[100px]"
+        />
         
-        {/* Reset Button - Always Visible, More Compact */}
+        {/* Program Filter */}
+        <MultiSelect
+          options={options.programs}
+          selected={value.program_report}
+          placeholder="Program"
+          onChange={handleProgramChange}
+          disabled={isLoading}
+          width="w-[110px]"
+        />
+        
+        {/* City/IMP_TTP Filter */}
+        <MultiSelect
+          options={options.cities}
+          selected={value.imp_ttp}
+          placeholder="City"
+          onChange={handleCityChange}
+          disabled={isLoading}
+          width="w-[100px]"
+          className="hidden sm:block"
+        />
+        
+        {/* Nano Cluster Filter */}
+        <MultiSelect
+          options={options.nanoClusters}
+          selected={value.nano_cluster}
+          placeholder="Cluster"
+          onChange={handleNanoClusterChange}
+          disabled={isLoading}
+          width="w-[100px]"
+          className="hidden md:block"
+        />
+        
+        {/* Reset Button - Fixed position, tidak akan bertabrakan */}
         <button
           onClick={handleReset}
-          className={`rounded-md h-6 px-1.5 text-xs flex items-center gap-1 flex-shrink-0 transition-colors ${
+          className={`rounded-md h-6 px-1.5 text-xs flex items-center gap-1 transition-colors justify-self-end ${
             hasActiveFilters 
               ? 'bg-white/5 hover:bg-white/10 text-white' 
               : 'bg-white/5/50 text-gray-400 cursor-not-allowed'
@@ -261,6 +281,20 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
               <X 
                 className="h-2 w-2 cursor-pointer" 
                 onClick={() => removeFilter('imp_ttp', city)} 
+              />
+            </div>
+          ))}
+          
+          {value.nano_cluster.map(cluster => (
+            <div 
+              key={`cluster-${cluster}`} 
+              className="bg-indigo-500/20 text-indigo-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`Nano Cluster: ${cluster}`}
+            >
+              <span>N: {truncateText(cluster, 10)}</span>
+              <X 
+                className="h-2 w-2 cursor-pointer" 
+                onClick={() => removeFilter('nano_cluster', cluster)} 
               />
             </div>
           ))}

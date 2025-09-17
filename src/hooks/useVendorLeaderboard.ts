@@ -47,7 +47,8 @@ export function useVendorLeaderboard(options: UseVendorLeaderboardOptions = {}):
         q: '',
         vendor_name: [],
         program_report: [],
-        imp_ttp: []
+        imp_ttp: [],
+        nano_cluster: []
       }
 
       // Build URL with consistent filter parameters

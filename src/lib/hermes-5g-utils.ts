@@ -173,6 +173,7 @@ export interface FilterOptionsData {
   vendors: string[]
   programs: string[]
   cities: string[]
+  nanoClusters: string[]
 }
 
 export interface FilterOptionsResponse {
@@ -351,15 +352,23 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
       .not('imp_ttp', 'is', null)
       .neq('imp_ttp', '');
     
-    if (vendorsError || programsError || citiesError) {
-      console.error('Supabase Error:', vendorsError || programsError || citiesError);
-      throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message}`);
+    // Get unique nano clusters from nano_cluster
+    const { data: nanoClustersData, error: nanoClustersError } = await supabase
+      .from('site_data_5g')
+      .select('nano_cluster')
+      .not('nano_cluster', 'is', null)
+      .neq('nano_cluster', '');
+    
+    if (vendorsError || programsError || citiesError || nanoClustersError) {
+      console.error('Supabase Error:', vendorsError || programsError || citiesError || nanoClustersError);
+      throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message || nanoClustersError?.message}`);
     }
     
     const data: FilterOptionsData = {
       vendors: [...new Set(vendorsData?.map(row => row.vendor_name) || [])].sort(),
       programs: [...new Set(programsData?.map(row => row.program_report) || [])].sort(),
-      cities: [...new Set(citiesData?.map(row => row.imp_ttp) || [])].sort()
+      cities: [...new Set(citiesData?.map(row => row.imp_ttp) || [])].sort(),
+      nanoClusters: [...new Set(nanoClustersData?.map(row => row.nano_cluster) || [])].sort()
     };
     
     console.log('Filter options from Supabase:', data);
@@ -376,7 +385,8 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
       data: {
         vendors: [],
         programs: [],
-        cities: []
+        cities: [],
+        nanoClusters: []
       },
       timestamp: new Date().toISOString()
     };

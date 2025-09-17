@@ -215,7 +215,7 @@ export function FiveGActivatedCard({ rows, maxCities = 10 }: Props) {
           <BarChart
             layout="vertical"
             data={chartData}
-            margin={{ top: 4, right: 8, bottom: 8, left: 28 }}
+            margin={{ top: 4, right: 0, bottom: 5, left: 28 }}
             barCategoryGap={4}
           >
             <XAxis 
@@ -235,6 +235,20 @@ export function FiveGActivatedCard({ rows, maxCities = 10 }: Props) {
               tick={renderCityTick}
             />
             <Tooltip
+              contentStyle={{
+                backgroundColor: 'white',
+                border: '1px solid #e5e7eb',
+                borderRadius: '6px',
+                fontSize: '10px',
+                padding: '6px 8px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+              }}
+              labelStyle={{
+                color: '#000000',
+                fontSize: '11px',
+                fontWeight: '600',
+                marginBottom: '2px'
+              }}
               formatter={(value, name) => {
                 return [value.toLocaleString(), name]
               }}

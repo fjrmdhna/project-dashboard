@@ -30,7 +30,7 @@ export function useTopIssueData(options: UseTopIssueDataOptions = {}): UseTopIss
   const [topIssuesTotal, setTopIssuesTotal] = useState(0)
   const [totalIssues, setTotalIssues] = useState(0)
 
-  const filter = options.filter || { q: '', vendor_name: [], program_report: [], imp_ttp: [] }
+  const filter = options.filter || { q: '', vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [] }
 
   // Fungsi untuk fetch data dari API
   const abortRef = useRef<AbortController | null>(null)

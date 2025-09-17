@@ -20,31 +20,46 @@ export interface TopIssueCardProps {
 
 export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = false }: TopIssueCardProps) {
   // Memproses data untuk chart
-  const { chartData, calculatedTopTotal } = useMemo(() => {
+  const { chartData, calculatedTopTotal, calculatedTotalIssues } = useMemo(() => {
     // Jika masih loading atau tidak ada data, kembalikan array kosong
     if (isLoading || !issues || issues.length === 0) {
       return {
         chartData: [],
-        calculatedTopTotal: 0
+        calculatedTopTotal: 0,
+        calculatedTotalIssues: 0
       }
     }
     
-    // Filter out items containing "no issue" (case insensitive)
+    // Filter out items containing "no issue" and "caf ny submit" (case insensitive)
     const filteredIssues = issues.filter(issue => 
-      !issue.category.toLowerCase().includes('no issue')
+      !issue.category.toLowerCase().includes('no issue') &&
+      !issue.category.toLowerCase().includes('caf ny submit')
     )
+    
+    // Debug logging
+    console.log('TopIssueCard Debug:', {
+      totalIssues: issues.length,
+      filteredIssuesCount: filteredIssues.length,
+      originalIssues: issues.map(i => ({ category: i.category, count: i.count })),
+      filteredIssuesData: filteredIssues.map(i => ({ category: i.category, count: i.count }))
+    })
     
     // Data sudah disorting dari API, jadi kita bisa langsung gunakan
     const topTotal = filteredIssues.reduce((sum, issue) => sum + issue.count, 0)
+    const totalIssuesFiltered = filteredIssues.reduce((sum, issue) => sum + issue.count, 0)
     
     return {
       chartData: filteredIssues,
-      calculatedTopTotal: topTotal
+      calculatedTopTotal: topTotal,
+      calculatedTotalIssues: totalIssuesFiltered
     }
   }, [issues, isLoading])
   
-  // Total top issues (gunakan dari props jika ada, atau dari kalkulasi)
-  const topTotal = topIssuesTotal !== undefined ? topIssuesTotal : calculatedTopTotal
+  // Total top issues (selalu gunakan kalkulasi yang sudah difilter)
+  const topTotal = calculatedTopTotal
+  
+  // Total issues yang sudah difilter (untuk display dan tooltip)
+  const totalIssuesFiltered = calculatedTotalIssues
 
   // Custom renderer untuk label di dalam slice
   const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, value }: any) => {
@@ -78,13 +93,13 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const item = payload[0].payload
-      const percentage = ((item.count / totalIssues) * 100).toFixed(1)
+      const percentage = totalIssuesFiltered > 0 ? ((item.count / totalIssuesFiltered) * 100).toFixed(1) : '0.0'
       
       return (
-        <div className="bg-[#1A2340] border border-white/10 px-3 py-2 rounded-md text-xs">
-          <p className="text-white/90 font-medium">{item.category}</p>
-          <p className="text-white/80">Count: {item.count}</p>
-          <p className="text-white/80">Percentage: {percentage}%</p>
+        <div className="bg-[#1A2340] border border-white/10 px-2 py-1.5 rounded-md text-[10px]">
+          <p className="text-white/90 font-semibold text-[11px] mb-0.5">{item.category}</p>
+          <p className="text-white/80 text-[9px]">Count: {item.count}</p>
+          <p className="text-white/80 text-[9px]">Percentage: {percentage}%</p>
         </div>
       )
     }
@@ -132,7 +147,7 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
           </div>
           
           <div className="text-right">
-            <div className="text-sm font-bold text-white">{totalIssues}</div>
+            <div className="text-sm font-bold text-white">{totalIssuesFiltered}</div>
             <div className="text-[8px] text-[#B0B7C3]">Total Issue</div>
           </div>
         </div>

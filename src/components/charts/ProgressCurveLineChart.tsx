@@ -8,6 +8,7 @@ export type Row = {
   rfs_forecast_lock?: string | null; // forecast date
   imp_integ_af?: string | null;      // readiness date
   rfs_af?: string | null;            // activated date
+  mocn_activation_forecast?: string | null; // plan 5G readiness date
 };
 
 export type ProgressCurveProps = {
@@ -44,14 +45,51 @@ const getWeekNumber = (date: Date): number => {
 type Bucket = { key: string; label: string; start: Date; end: Date };
 
 // Function to build hybrid buckets (all months with data)
-function buildHybridBuckets(anchorDate?: string, span: 3|5 = 3): Bucket[] {
+function buildHybridBuckets(anchorDate?: string, span: 3|5 = 3, rows: Row[] = []): Bucket[] {
   const anchor = toStart(anchorDate ? new Date(anchorDate) : new Date());
-  const months: Date[] = [];
   
-  // Create buckets for all months from September 2025 to February 2026
-  // Based on actual data in database
-  const startMonth = new Date(2025, 8, 1); // September 2025
-  const endMonth = new Date(2026, 1, 1);   // February 2026
+  // Extract all dates from the data
+  const allDates: Date[] = [];
+  
+  rows.forEach(row => {
+    // Add all date fields to the collection
+    const dates = [
+      row.rfs_forecast_lock,
+      row.imp_integ_af,
+      row.rfs_af,
+      row.mocn_activation_forecast
+    ];
+    
+    dates.forEach(dateStr => {
+      if (dateStr) {
+        const date = safeDate(dateStr);
+        if (date) {
+          allDates.push(date);
+        }
+      }
+    });
+  });
+  
+  // If no data, fallback to hardcoded range
+  if (allDates.length === 0) {
+    const startMonth = new Date(2025, 8, 1); // September 2025
+    const endMonth = new Date(2026, 1, 1);   // February 2026
+    
+    let currentMonth = new Date(startMonth);
+    while (currentMonth <= endMonth) {
+      allDates.push(new Date(currentMonth));
+      currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+    }
+  }
+  
+  // Get min and max dates from actual data
+  const minDate = allDates.length > 0 ? new Date(Math.min(...allDates.map(d => d.getTime()))) : new Date(2025, 8, 1);
+  const maxDate = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : new Date(2026, 1, 1);
+  
+  // Create months array from min to max date
+  const months: Date[] = [];
+  const startMonth = toStart(minDate);
+  const endMonth = toStart(maxDate);
   
   let currentMonth = new Date(startMonth);
   while (currentMonth <= endMonth) {
@@ -64,9 +102,14 @@ function buildHybridBuckets(anchorDate?: string, span: 3|5 = 3): Bucket[] {
     const start = toStart(m), end = toEnd(m);
     const isCurrent = start.getMonth() === anchor.getMonth() && start.getFullYear() === anchor.getFullYear();
     
-    // For September 2025 (current month), use weekly breakdown
+    // For current month (anchor month), use weekly breakdown if it has data
     // For other months, use monthly view
-    if (start.getFullYear() === 2025 && start.getMonth() === 8) { // September 2025
+    const isCurrentMonth = start.getMonth() === anchor.getMonth() && start.getFullYear() === anchor.getFullYear();
+    const hasDataInCurrentMonth = allDates.some(d => 
+      d.getMonth() === start.getMonth() && d.getFullYear() === start.getFullYear()
+    );
+    
+    if (isCurrentMonth && hasDataInCurrentMonth) {
       const ranges = [
         { 
           s: new Date(start), 
@@ -112,7 +155,7 @@ function buildHybridBuckets(anchorDate?: string, span: 3|5 = 3): Bucket[] {
 }
 
 // Type for aggregated data points
-type Point = { key: string; label: string; forecast: number | null; ready: number | null; active: number | null };
+type Point = { key: string; label: string; forecast: number | null; ready: number | null; active: number | null; planReadiness: number | null };
 
 // Function to aggregate data into buckets with cumulative values
 function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
@@ -128,12 +171,14 @@ function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
     forecast: rows.reduce((n, r) => n + (inRange(r.rfs_forecast_lock, b.start, b.end) ? 1 : 0), 0),
     ready: rows.reduce((n, r) => n + (inRange(r.imp_integ_af, b.start, b.end) ? 1 : 0), 0),
     active: rows.reduce((n, r) => n + (inRange(r.rfs_af, b.start, b.end) ? 1 : 0), 0),
+    planReadiness: rows.reduce((n, r) => n + (inRange(r.mocn_activation_forecast, b.start, b.end) ? 1 : 0), 0),
   }));
   
   // Find the last bucket that has any data for each metric
   let lastForecastIndex = -1;
   let lastReadyIndex = -1;
   let lastActiveIndex = -1;
+  let lastPlanReadinessIndex = -1;
   
   for (let i = bucketData.length - 1; i >= 0; i--) {
     if (bucketData[i].forecast > 0 && lastForecastIndex === -1) {
@@ -145,10 +190,13 @@ function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
     if (bucketData[i].active > 0 && lastActiveIndex === -1) {
       lastActiveIndex = i;
     }
+    if (bucketData[i].planReadiness > 0 && lastPlanReadinessIndex === -1) {
+      lastPlanReadinessIndex = i;
+    }
   }
   
   // Find the overall last data index
-  const lastDataIndex = Math.max(lastForecastIndex, lastReadyIndex, lastActiveIndex);
+  const lastDataIndex = Math.max(lastForecastIndex, lastReadyIndex, lastActiveIndex, lastPlanReadinessIndex);
   
   // If no data found, return empty array
   if (lastDataIndex === -1) {
@@ -162,16 +210,19 @@ function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
   let cumulativeForecast = 0;
   let cumulativeReady = 0;
   let cumulativeActive = 0;
+  let cumulativePlanReadiness = 0;
   
   return trimmedBuckets.map((bucket, index) => {
     cumulativeForecast += bucket.forecast;
     cumulativeReady += bucket.ready;
     cumulativeActive += bucket.active;
+    cumulativePlanReadiness += bucket.planReadiness;
     
     // Set values to null after the last data point for each metric
     const forecast = index <= lastForecastIndex ? cumulativeForecast : null;
     const ready = index <= lastReadyIndex ? cumulativeReady : null;
     const active = index <= lastActiveIndex ? cumulativeActive : null;
+    const planReadiness = index <= lastPlanReadinessIndex ? cumulativePlanReadiness : null;
     
     return {
       key: bucket.key,
@@ -179,6 +230,7 @@ function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
       forecast,
       ready,
       active,
+      planReadiness,
     };
   });
 }
@@ -290,7 +342,7 @@ const ReadinessDotWithLabel = (props: any) => {
   );
 };
 
-// Custom dot with label for Activated (Green) - Label above point
+// Custom dot with label for Activated (Green) - Label above left of point
 const ActivatedDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.active;
@@ -305,9 +357,9 @@ const ActivatedDotWithLabel = (props: any) => {
       {/* Dot */}
       <circle cx={cx} cy={cy} r={3} fill="#7CB342" />
       
-      {/* Background rectangle with green color - Above point */}
+      {/* Background rectangle with green color - Above left of point */}
       <rect
-        x={cx - 8}
+        x={cx - 22}
         y={cy - 16}
         width={16}
         height={12}
@@ -322,7 +374,57 @@ const ActivatedDotWithLabel = (props: any) => {
       />
       {/* Text label */}
       <text
-        x={cx}
+        x={cx - 14}
+        y={cy - 10}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="#FFFFFF"
+        fontSize={8}
+        fontWeight={600}
+        style={{
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
+          textShadow: '0px 0px 3px rgba(0,0,0,1)'
+        }}
+      >
+        {Number(value).toLocaleString()}
+      </text>
+    </g>
+  );
+};
+
+// Custom dot with label for Plan 5G Readiness (Blue) - Label above right of point
+const PlanReadinessDotWithLabel = (props: any) => {
+  const { cx, cy, payload } = props;
+  const value = payload?.planReadiness;
+  
+  // Don't render if value is null, 0, or empty
+  if (value === null || !value || value === '0' || value === '') {
+    return null; // Don't render dot at all for null values
+  }
+  
+  return (
+    <g>
+      {/* Dot */}
+      <circle cx={cx} cy={cy} r={3} fill="#2196F3" />
+      
+      {/* Background rectangle with blue color - Above right of point */}
+      <rect
+        x={cx + 6}
+        y={cy - 16}
+        width={16}
+        height={12}
+        fill="rgba(33, 150, 243, 0.95)"
+        rx={3}
+        ry={3}
+        stroke="rgba(255, 255, 255, 0.5)"
+        strokeWidth={1}
+        style={{
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
+        }}
+      />
+      {/* Text label */}
+      <text
+        x={cx + 14}
         y={cy - 10}
         textAnchor="middle"
         dominantBaseline="central"
@@ -343,7 +445,7 @@ const ActivatedDotWithLabel = (props: any) => {
 // Main component
 export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, className }: ProgressCurveProps) {
   // Memoize buckets and data to prevent unnecessary recalculations
-  const buckets = useMemo(() => buildHybridBuckets(anchorDate, monthsSpan as 3|5), [anchorDate, monthsSpan]);
+  const buckets = useMemo(() => buildHybridBuckets(anchorDate, monthsSpan as 3|5, rows ?? []), [anchorDate, monthsSpan, rows]);
   const data = useMemo(() => aggregate(rows ?? [], buckets), [rows, buckets]);
 
 
@@ -377,12 +479,23 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
             />
             <Tooltip 
               formatter={(value) => Number(value).toLocaleString()} 
-              contentStyle={{ backgroundColor: '#1A2035', borderColor: 'rgba(255,255,255,0.1)' }}
-              labelStyle={{ color: '#B0B7C3' }}
+              contentStyle={{ 
+                backgroundColor: '#1A2035', 
+                borderColor: 'rgba(255,255,255,0.1)',
+                fontSize: '10px',
+                padding: '6px 8px',
+                borderRadius: '6px'
+              }}
+              labelStyle={{ 
+                color: '#B0B7C3',
+                fontSize: '11px',
+                fontWeight: '600',
+                marginBottom: '2px'
+              }}
             />
              <Line 
                dataKey="forecast" 
-               name="Forecast Accelerate" 
+               name="Plan 5G Activated" 
                stroke="#8A5AA3" 
                strokeWidth={1} 
                dot={<ForecastDotWithLabel />}
@@ -403,6 +516,14 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
                stroke="#7CB342" 
                strokeWidth={0.8} 
                dot={<ActivatedDotWithLabel />}
+               isAnimationActive={false}
+             />
+             <Line 
+               dataKey="planReadiness" 
+               name="Plan 5G Readiness" 
+               stroke="#2196F3" 
+               strokeWidth={0.8} 
+               dot={<PlanReadinessDotWithLabel />}
                isAnimationActive={false}
              />
             <Legend verticalAlign="bottom" align="center" wrapperStyle={{ marginTop: 0, paddingTop: 0 }} iconType="circle" iconSize={3} />

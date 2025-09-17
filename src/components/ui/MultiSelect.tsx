@@ -73,13 +73,15 @@ export function MultiSelect({
     if (!open) return
 
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
       if (
         containerRef.current && 
-        !containerRef.current.contains(event.target as Node) &&
+        !containerRef.current.contains(target) &&
         menuRef.current && 
-        !menuRef.current.contains(event.target as Node)
+        !menuRef.current.contains(target)
       ) {
         setOpen(false)
+        setSearchTerm("") // Clear search when closing
       }
     }
 
@@ -129,12 +131,17 @@ export function MultiSelect({
         left: `${menuPosition.left}px`, 
         minWidth: `${menuPosition.width}px` 
       }}
+      onMouseDown={(e) => e.preventDefault()}
     >
       <div className="flex items-center justify-between mb-1.5">
         <div className="responsive-text-sm uppercase tracking-wider text-gray-400 px-1">Options</div>
         {selected.length > 0 && (
           <button 
-            onClick={handleClearAll}
+            onClick={(e) => {
+              e.stopPropagation()
+              handleClearAll()
+            }}
+            onMouseDown={(e) => e.preventDefault()}
             className="responsive-text-sm text-gray-400 hover:text-white flex items-center gap-0.5"
           >
             Clear <X className="h-2.5 w-2.5" />
@@ -148,8 +155,11 @@ export function MultiSelect({
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          onMouseDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
           placeholder="Search..."
           className="w-full bg-white/5 rounded responsive-text-sm px-2 py-1 text-white placeholder:text-gray-500 outline-none focus:ring-1 focus:ring-white/20"
+          autoFocus
         />
       </div>
       
@@ -162,7 +172,11 @@ export function MultiSelect({
               key={option} 
               type="button"
               className="w-full text-left flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/5 cursor-pointer select-none min-w-0"
-              onClick={() => handleOptionClick(option)}
+              onClick={(e) => {
+                e.stopPropagation()
+                handleOptionClick(option)
+              }}
+              onMouseDown={(e) => e.preventDefault()}
             >
               <div className="flex-shrink-0 w-3.5 h-3.5 border rounded flex items-center justify-center border-white/20">
                 {selected.includes(option) && <Check className="h-2.5 w-2.5 text-blue-500" />}

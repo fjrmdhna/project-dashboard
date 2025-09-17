@@ -18,6 +18,7 @@ export interface SiteData5G {
   imp_integ_af?: string
   rfs_af?: string
   rfs_forecast_lock?: string
+  mocn_activation_forecast?: string
   hotnews_af?: string
   endorse_af?: string
   created_at?: string
@@ -29,6 +30,7 @@ export async function getSiteData5G(filters: {
   vendor_name?: string[]
   program_report?: string[]
   imp_ttp?: string[]
+  nano_cluster?: string[]
   search?: string
   limit?: number
   offset?: number
@@ -46,6 +48,7 @@ export async function getSiteData5G(filters: {
     'imp_integ_af',
     'rfs_af',
     'rfs_forecast_lock',
+    'mocn_activation_forecast',
     'hotnews_af',
     'endorse_af'
   ].join(',')
@@ -65,6 +68,10 @@ export async function getSiteData5G(filters: {
 
   if (filters.imp_ttp && filters.imp_ttp.length > 0) {
     query = query.in('imp_ttp', filters.imp_ttp)
+  }
+
+  if (filters.nano_cluster && filters.nano_cluster.length > 0) {
+    query = query.in('nano_cluster', filters.nano_cluster)
   }
 
   if (filters.search) {
@@ -118,13 +125,19 @@ export async function getFilterOptions() {
     .select('imp_ttp')
     .not('imp_ttp', 'is', null)
 
-  if (vendorError || programError || cityError) {
-    throw new Error(`Supabase error: ${vendorError?.message || programError?.message || cityError?.message}`)
+  const { data: nanoClusters, error: nanoClusterError } = await supabase
+    .from('site_data_5g')
+    .select('nano_cluster')
+    .not('nano_cluster', 'is', null)
+
+  if (vendorError || programError || cityError || nanoClusterError) {
+    throw new Error(`Supabase error: ${vendorError?.message || programError?.message || cityError?.message || nanoClusterError?.message}`)
   }
 
   return {
     vendors: [...new Set(vendors.map(v => v.vendor_name))].sort(),
     programs: [...new Set(programs.map(p => p.program_report))].sort(),
-    cities: [...new Set(cities.map(c => c.imp_ttp))].sort()
+    cities: [...new Set(cities.map(c => c.imp_ttp))].sort(),
+    nanoClusters: [...new Set(nanoClusters.map(nc => nc.nano_cluster))].sort()
   }
 }
