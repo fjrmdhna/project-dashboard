@@ -64,8 +64,14 @@ export async function GET(request: NextRequest) {
       }
     });
     
-    // Sort by count and get top 5
-    const sortedCategories = Object.entries(categoryCount)
+    // Filter out "No Issue" and "CAF NY Submit" categories
+    const filteredCategories = Object.entries(categoryCount).filter(([category]) => 
+      !category.toLowerCase().includes('no issue') &&
+      !category.toLowerCase().includes('caf ny submit')
+    );
+    
+    // Sort by count and get top 5 categories (excluding filtered ones)
+    const sortedCategories = filteredCategories
       .sort(([, a], [, b]) => b - a)
       .slice(0, 5);
     
@@ -79,6 +85,7 @@ export async function GET(request: NextRequest) {
     // Calculate totals
     const totalCount = data?.length || 0;
     const top5Count = result.reduce((sum, item) => sum + item.count, 0);
+    const filteredTotalCount = filteredCategories.reduce((sum, [, count]) => sum + count, 0);
     
     // Debug logging
     console.log('Top 5 Issue API Debug:', {
@@ -88,6 +95,7 @@ export async function GET(request: NextRequest) {
       sortedCategories,
       result: result.map(r => ({ category: r.category, count: r.count })),
       top5Count,
+      filteredTotalCount,
       totalCount
     });
     
@@ -95,6 +103,7 @@ export async function GET(request: NextRequest) {
       status: 'success',
       data: result,
       top5Count,
+      filteredTotalCount,
       totalCount,
       timestamp: new Date().toISOString()
     });

@@ -58,7 +58,7 @@ export function useTopIssueData(options: UseTopIssueDataOptions = {}): UseTopIss
       if (result.status === 'success') {
         setData(result.data || [])
         setTopIssuesTotal(result.top5Count || 0)
-        setTotalIssues(result.totalCount || 0)
+        setTotalIssues(result.filteredTotalCount || 0)
       } else {
         throw new Error(result.message || 'Unknown error')
       }

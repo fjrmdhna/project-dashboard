@@ -30,30 +30,21 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
       }
     }
     
-    // Filter out items containing "no issue" and "caf ny submit" (case insensitive)
-    const filteredIssues = issues.filter(issue => 
-      !issue.category.toLowerCase().includes('no issue') &&
-      !issue.category.toLowerCase().includes('caf ny submit')
-    )
-    
     // Debug logging
     console.log('TopIssueCard Debug:', {
       totalIssues: issues.length,
-      filteredIssuesCount: filteredIssues.length,
-      originalIssues: issues.map(i => ({ category: i.category, count: i.count })),
-      filteredIssuesData: filteredIssues.map(i => ({ category: i.category, count: i.count }))
+      originalIssues: issues.map(i => ({ category: i.category, count: i.count }))
     })
     
-    // Data sudah disorting dari API, jadi kita bisa langsung gunakan
-    const topTotal = filteredIssues.reduce((sum, issue) => sum + issue.count, 0)
-    const totalIssuesFiltered = filteredIssues.reduce((sum, issue) => sum + issue.count, 0)
+    // Data sudah disorting dari API, jadi kita bisa langsung gunakan semua data
+    const allIssuesTotal = issues.reduce((sum, issue) => sum + issue.count, 0)
     
     return {
-      chartData: filteredIssues,
-      calculatedTopTotal: topTotal,
-      calculatedTotalIssues: totalIssuesFiltered
+      chartData: issues,
+      calculatedTopTotal: allIssuesTotal,
+      calculatedTotalIssues: totalIssues // Gunakan totalIssues prop yang berisi filteredTotalCount
     }
-  }, [issues, isLoading])
+  }, [issues, totalIssues, isLoading])
   
   // Total top issues (selalu gunakan kalkulasi yang sudah difilter)
   const topTotal = calculatedTopTotal
