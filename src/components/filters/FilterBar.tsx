@@ -153,7 +153,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
   return (
     <div className="h-full flex flex-col min-w-0">
       {/* Filter Controls - Grid Layout untuk mencegah tabrakan */}
-      <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] lg:grid-cols-[1fr_auto_auto_auto_auto_auto] md:grid-cols-[1fr_auto_auto_auto_auto] sm:grid-cols-[1fr_auto_auto_auto] gap-1.5 items-center text-xs flex-shrink-0 min-w-0 max-w-full overflow-hidden">
+      <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] xl:grid-cols-[1fr_auto_auto_auto_auto_auto] lg:grid-cols-[1fr_auto_auto_auto_auto] md:grid-cols-[1fr_auto_auto_auto] sm:grid-cols-[1fr_auto_auto] gap-1.5 items-center text-xs flex-shrink-0 min-w-0 max-w-full overflow-hidden">
         {/* Search Input - Takes remaining space */}
         <div className="relative min-w-[150px] max-w-[250px]">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
@@ -191,7 +191,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
           placeholder="Program"
           onChange={handleProgramChange}
           disabled={isLoading}
-          width="w-[110px]"
+          width="w-[90px]"
         />
         
         {/* City/IMP_TTP Filter */}
@@ -201,8 +201,8 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
           placeholder="City"
           onChange={handleCityChange}
           disabled={isLoading}
-          width="w-[100px]"
-          className="hidden sm:block"
+          width="w-[80px]"
+          className="hidden lg:block"
         />
         
         {/* Nano Cluster Filter */}
@@ -212,8 +212,8 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
           placeholder="Cluster"
           onChange={handleNanoClusterChange}
           disabled={isLoading}
-          width="w-[100px]"
-          className="hidden md:block"
+          width="w-[90px]"
+          className="hidden xl:block"
         />
         
         {/* Reset Button - Fixed position, tidak akan bertabrakan */}
