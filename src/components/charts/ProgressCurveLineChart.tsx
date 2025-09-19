@@ -157,6 +157,20 @@ function buildHybridBuckets(anchorDate?: string, span: 3|5 = 3, rows: Row[] = []
 // Type for aggregated data points
 type Point = { key: string; label: string; forecast: number | null; ready: number | null; active: number | null; planReadiness: number | null };
 
+// Hardcoded data for Plan 5G Readiness and Plan 5G Activated
+const hardcodedData = [
+  { label: "W36-Sep", planReadiness: 0, forecast: 0 },
+  { label: "W37-Sep", planReadiness: 20, forecast: 0 },
+  { label: "W38-Sep", planReadiness: 300, forecast: 15 },
+  { label: "W39-Sep", planReadiness: 650, forecast: 300 },
+  { label: "W40-Sep", planReadiness: 1050, forecast: 1018 },
+  { label: "Oct", planReadiness: 3671, forecast: 3255 },
+  { label: "Nov", planReadiness: 6140, forecast: 5613 },
+  { label: "Dec", planReadiness: 7336, forecast: 7334 },
+  { label: "Jan", planReadiness: 7355, forecast: 7346 },
+  { label: "Feb", planReadiness: 7386, forecast: 7386 }
+];
+
 // Function to aggregate data into buckets with cumulative values
 function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
   const inRange = (val?: string | null, s?: Date, e?: Date) => {
@@ -164,73 +178,80 @@ function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
     return !!(d && s && e && d >= s && d <= e);
   };
   
-  // First, calculate individual bucket values
+  // First, calculate individual bucket values for actual data (ready and active)
   const bucketData = buckets.map((b) => ({
     key: b.key,
     label: b.label,
-    forecast: rows.reduce((n, r) => n + (inRange(r.rfs_forecast_lock, b.start, b.end) ? 1 : 0), 0),
     ready: rows.reduce((n, r) => n + (inRange(r.imp_integ_af, b.start, b.end) ? 1 : 0), 0),
     active: rows.reduce((n, r) => n + (inRange(r.rfs_af, b.start, b.end) ? 1 : 0), 0),
-    planReadiness: rows.reduce((n, r) => n + (inRange(r.mocn_activation_forecast, b.start, b.end) ? 1 : 0), 0),
   }));
   
-  // Find the last bucket that has any data for each metric
-  let lastForecastIndex = -1;
+  // Find the last bucket that has any data for actual metrics
   let lastReadyIndex = -1;
   let lastActiveIndex = -1;
-  let lastPlanReadinessIndex = -1;
   
   for (let i = bucketData.length - 1; i >= 0; i--) {
-    if (bucketData[i].forecast > 0 && lastForecastIndex === -1) {
-      lastForecastIndex = i;
-    }
     if (bucketData[i].ready > 0 && lastReadyIndex === -1) {
       lastReadyIndex = i;
     }
     if (bucketData[i].active > 0 && lastActiveIndex === -1) {
       lastActiveIndex = i;
     }
-    if (bucketData[i].planReadiness > 0 && lastPlanReadinessIndex === -1) {
-      lastPlanReadinessIndex = i;
-    }
   }
   
-  // Find the overall last data index
-  const lastDataIndex = Math.max(lastForecastIndex, lastReadyIndex, lastActiveIndex, lastPlanReadinessIndex);
+  // Find the overall last data index for actual data
+  const lastDataIndex = Math.max(lastReadyIndex, lastActiveIndex);
   
-  // If no data found, return empty array
+  // If no actual data found, use hardcoded data only
   if (lastDataIndex === -1) {
-    return [];
+    return hardcodedData.map((item, index) => ({
+      key: `hardcoded-${index}`,
+      label: item.label,
+      forecast: item.forecast,
+      ready: null,
+      active: null,
+      planReadiness: item.planReadiness,
+    }));
   }
   
-  // Trim to only include buckets up to the last data point
+  // Trim to only include buckets up to the last data point for actual data
   const trimmedBuckets = bucketData.slice(0, lastDataIndex + 1);
   
-  // Then, make them cumulative
-  let cumulativeForecast = 0;
+  // Make actual data cumulative
   let cumulativeReady = 0;
   let cumulativeActive = 0;
-  let cumulativePlanReadiness = 0;
   
-  return trimmedBuckets.map((bucket, index) => {
-    cumulativeForecast += bucket.forecast;
+  const actualData = trimmedBuckets.map((bucket, index) => {
     cumulativeReady += bucket.ready;
     cumulativeActive += bucket.active;
-    cumulativePlanReadiness += bucket.planReadiness;
     
-    // Set values to null after the last data point for each metric
-    const forecast = index <= lastForecastIndex ? cumulativeForecast : null;
     const ready = index <= lastReadyIndex ? cumulativeReady : null;
     const active = index <= lastActiveIndex ? cumulativeActive : null;
-    const planReadiness = index <= lastPlanReadinessIndex ? cumulativePlanReadiness : null;
     
     return {
       key: bucket.key,
       label: bucket.label,
-      forecast,
       ready,
       active,
-      planReadiness,
+    };
+  });
+  
+  // Combine hardcoded data with actual data
+  // Use hardcoded labels but merge with actual data where available
+  return hardcodedData.map((hardcodedItem, index) => {
+    // Find matching actual data by label or use null
+    const actualItem = actualData.find(actual => 
+      actual.label === hardcodedItem.label || 
+      actual.label.includes(hardcodedItem.label.split('-')[0]) // Match by month
+    );
+    
+    return {
+      key: `combined-${index}`,
+      label: hardcodedItem.label,
+      forecast: hardcodedItem.forecast, // Plan 5G Activated (hardcoded)
+      ready: actualItem?.ready || null, // Actual Readiness
+      active: actualItem?.active || null, // Actual Activated
+      planReadiness: hardcodedItem.planReadiness, // Plan 5G Readiness (hardcoded)
     };
   });
 }
