@@ -152,10 +152,10 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
   
   return (
     <div className="h-full flex flex-col min-w-0">
-      {/* Filter Controls - Grid Layout untuk mencegah tabrakan */}
-      <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] xl:grid-cols-[1fr_auto_auto_auto_auto_auto] lg:grid-cols-[1fr_auto_auto_auto_auto] md:grid-cols-[1fr_auto_auto_auto] sm:grid-cols-[1fr_auto_auto] gap-1.5 items-center text-xs flex-shrink-0 min-w-0 max-w-full overflow-hidden">
-        {/* Search Input - Takes remaining space */}
-        <div className="relative min-w-[150px] max-w-[250px]">
+      {/* Filter Controls - Responsive grid layout */}
+      <div className="grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2">
+        {/* Search Input */}
+        <div className="col-span-2 md:col-span-1 relative min-w-0">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
           <input
             type="text"
@@ -173,60 +173,74 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
             </button>
           )}
         </div>
-        
-        {/* Vendor Filter */}
+
         <MultiSelect
           options={options.vendors}
           selected={value.vendor_name}
           placeholder="Vendor"
           onChange={handleVendorChange}
           disabled={isLoading}
-          width="w-[100px]"
+          width="w-full"
+          className="col-span-2 sm:col-span-1 md:col-span-1"
         />
-        
-        {/* Program Filter */}
+
         <MultiSelect
           options={options.programs}
           selected={value.program_report}
           placeholder="Program"
           onChange={handleProgramChange}
           disabled={isLoading}
-          width="w-[90px]"
+          width="w-full"
+          className="col-span-2 sm:col-span-1 md:col-span-1"
         />
-        
-        {/* City/IMP_TTP Filter */}
+
         <MultiSelect
           options={options.cities}
           selected={value.imp_ttp}
           placeholder="City"
           onChange={handleCityChange}
           disabled={isLoading}
-          width="w-[80px]"
-          className="hidden lg:block"
+          width="w-full"
+          className="col-span-2 sm:col-span-1 md:col-span-1"
         />
-        
-        {/* Nano Cluster Filter */}
+
         <MultiSelect
           options={options.nanoClusters}
           selected={value.nano_cluster}
           placeholder="Cluster"
           onChange={handleNanoClusterChange}
           disabled={isLoading}
-          width="w-[90px]"
-          className="hidden xl:block"
+          width="w-full"
+          className="col-span-2 sm:col-span-1 md:col-span-1"
         />
-        
-        {/* Reset Button - Fixed position, tidak akan bertabrakan */}
+
         <button
           onClick={handleReset}
-          className={`rounded-md h-6 px-1.5 text-xs flex items-center gap-1 transition-colors justify-self-end ${
-            hasActiveFilters 
-              ? 'bg-white/5 hover:bg-white/10 text-white' 
-              : 'bg-white/5/50 text-gray-400 cursor-not-allowed'
+          className={`hidden md:inline-flex items-center justify-center md:col-span-1 md:justify-self-end rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${
+            hasActiveFilters
+              ? 'border-white/20 bg-white/10 text-white hover:bg-white/20'
+              : 'border-white/5 bg-transparent text-gray-400 cursor-not-allowed'
+          }`}
+          disabled={!hasActiveFilters}
+          aria-label="Reset filters"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+
+      {/* Reset button row */}
+      <div className="mt-3 flex justify-start md:hidden">
+        <button
+          onClick={handleReset}
+          className={`rounded-md h-8 px-3 text-xs font-semibold inline-flex items-center gap-1 transition-colors border ${
+            hasActiveFilters
+              ? 'border-white/20 bg-white/10 text-white hover:bg-white/20'
+              : 'border-white/5 bg-transparent text-gray-400 cursor-not-allowed'
           }`}
           disabled={!hasActiveFilters}
         >
-          <X className="h-3 w-3" />
+          <X className="h-3.5 w-3.5" />
+          <span>Reset</span>
         </button>
       </div>
 
@@ -303,3 +317,12 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     </div>
   )
 } 
+
+
+
+
+
+
+
+
+

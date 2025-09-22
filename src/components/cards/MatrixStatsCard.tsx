@@ -3,7 +3,6 @@
 import { useMemo } from "react"
 import { BarChart3 } from "lucide-react"
 
-// Tipe data untuk row dari site_data_5g
 export interface Row {
   system_key: string
   caf_approved?: string | null
@@ -19,24 +18,46 @@ export interface Row {
   imp_ttp?: string
 }
 
-// Props untuk MatrixStatsCard
 export interface MatrixStatsCardProps {
   rows: Row[]
   patpCount?: number
 }
 
-// Komponen untuk menampilkan metrik tunggal
-function MetricItem({ label, value }: { label: string; value: number }) {
+const METRIC_CONFIG = [
+  { key: "caf", label: "CAF" },
+  { key: "mos", label: "MOS" },
+  { key: "install", label: "INSTALL" },
+  { key: "readiness", label: "READINESS" },
+  { key: "activated", label: "ACTIVATED" },
+  { key: "patp", label: "PATP" },
+  { key: "hotnews", label: "HOT NEWS" },
+  { key: "endorse", label: "ENDORSE" }
+] as const
+
+type MetricKey = (typeof METRIC_CONFIG)[number]["key"]
+
+type MetricMap = Record<MetricKey, number>
+
+function MetricItem({
+  label,
+  value
+}: {
+  label: string
+  value: number
+}) {
   return (
-    <div className="text-center flex flex-col items-center justify-center min-w-0">
-      <div className="text-xs font-bold">{value.toLocaleString()}</div>
-      <div className="text-[7px] text-[#B0B7C3] leading-none">{label}</div>
+    <div className="flex flex-col items-center text-center min-w-[56px]">
+      <span className="text-[11px] font-semibold text-white leading-tight">
+        {value.toLocaleString()}
+      </span>
+      <span className="text-[7px] uppercase tracking-[0.16em] text-[#90A0C4] leading-tight">
+        {label}
+      </span>
     </div>
   )
 }
 
 export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
-  // Menghitung statistik dari rows yang difilter
   const stats = useMemo(() => {
     const totalSites = rows.length
     const caf = rows.filter(row => row.caf_approved).length
@@ -46,7 +67,7 @@ export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
     const activated = rows.filter(row => row.rfs_af).length
     const hotnews = rows.filter(row => row.hotnews_af).length
     const endorse = rows.filter(row => row.endorse_af).length
-    const patp = patpCount // Menggunakan nilai dari props
+    const patp = patpCount
 
     return {
       totalSites,
@@ -61,37 +82,44 @@ export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
     }
   }, [rows, patpCount])
 
+  const metrics: MetricMap = {
+    caf: stats.caf,
+    mos: stats.mos,
+    install: stats.install,
+    readiness: stats.readiness,
+    activated: stats.activated,
+    patp: stats.patp,
+    hotnews: stats.hotnews,
+    endorse: stats.endorse
+  }
+
   return (
-    <div className="rounded-lg bg-[#0F1630]/80 border border-white/5 p-1 w-full h-full flex flex-col min-w-0 matrix-compact mb-1">
-      {/* Header */}
-      <div className="flex items-center gap-0.5 mb-0 flex-shrink-0">
-        <div className="bg-blue-500/20 p-0.5 rounded-sm">
-          <BarChart3 className="h-2 w-2 text-blue-400" />
-        </div>
-        <div className="text-[7px] font-medium bg-blue-500/20 text-blue-300 px-1 py-0.5 rounded-full">
-          Matrix Statistics
-        </div>
-      </div>
-      
-      <div className="flex flex-col md:flex-row items-center flex-1 min-h-0">
-        <div className="flex items-center gap-1 mb-0.5 md:mb-0 md:mr-2 flex-shrink-0">
-          <div>
-            <div className="text-sm font-bold">{stats.totalSites}</div>
-            <div className="text-[7px] text-[#B0B7C3] leading-none">Total Sites</div>
+    <div className="rounded-2xl bg-[#0F1630]/85 border border-white/5 w-full h-full matrix-compact text-white px-3 py-2">
+      <div className="flex h-full flex-col gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <div className="bg-blue-500/15 p-0.5 rounded-sm">
+            <BarChart3 className="h-2.5 w-2.5 text-blue-300" />
+          </div>
+          <div className="text-[8px] font-semibold uppercase tracking-[0.18em] bg-blue-500/15 text-blue-200 px-1.5 py-0.5 rounded-full whitespace-nowrap leading-tight">
+            Matrix Statistics
           </div>
         </div>
-        
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-0.5 w-full">
-          <MetricItem label="CAF" value={stats.caf} />
-          <MetricItem label="MOS" value={stats.mos} />
-          <MetricItem label="INSTALL" value={stats.install} />
-          <MetricItem label="READINESS" value={stats.readiness} />
-          <MetricItem label="ACTIVATED" value={stats.activated} />
-          <MetricItem label="PATP" value={stats.patp} />
-          <MetricItem label="HOT NEWS" value={stats.hotnews} />
-          <MetricItem label="ENDORSE" value={stats.endorse} />
+
+        <div className="flex flex-wrap items-end gap-3 gap-y-1">
+          <div className="flex flex-col items-center text-center min-w-[64px]">
+            <span className="text-lg font-bold leading-none">
+              {stats.totalSites.toLocaleString()}
+            </span>
+            <span className="text-[8px] uppercase tracking-[0.18em] text-[#90A0C4]">
+              Total Sites
+            </span>
+          </div>
+
+          {METRIC_CONFIG.map(({ key, label }) => (
+            <MetricItem key={key} label={label} value={metrics[key]} />
+          ))}
         </div>
       </div>
     </div>
   )
-} 
+}

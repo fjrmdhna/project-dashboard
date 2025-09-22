@@ -89,11 +89,11 @@ export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardPr
   return (
     <div className="rounded-xl bg-[#0F1630]/80 border border-white/5 p-2 w-full h-full flex flex-col min-w-0">
       {/* Header */}
-      <div className="flex items-center gap-1.5 mb-2 flex-shrink-0">
+      <div className="flex items-center gap-1.5 mb-1.5 flex-shrink-0">
         <div className="bg-blue-500/20 p-1 rounded-md">
           <BarChart className="h-3 w-3 text-blue-400" />
         </div>
-        <div className="text-[10px] font-medium bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">
+        <div className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">
           Daily Runrate – Last 7 Days
         </div>
       </div>

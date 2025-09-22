@@ -153,11 +153,11 @@ export function NanoClusterCard(props: NanoClusterCardProps) {
     <div className="rounded-lg bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col text-white min-w-0 p-1.5">
       {/* Header */}
       <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <div className="bg-indigo-500/20 p-0.5 rounded-sm">
             <Hexagon className="h-2.5 w-2.5 text-indigo-400" />
           </div>
-          <div className="text-[8px] font-medium bg-indigo-500/20 text-indigo-300 px-1 py-0.5 rounded-full">
+          <div className="text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded-full">
             NANO CLUSTER
           </div>
         </div>

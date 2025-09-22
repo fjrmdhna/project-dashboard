@@ -473,11 +473,11 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
   return (
     <div className={`rounded-lg bg-[#0F1630]/80 border border-white/5 p-0.5 w-full h-full flex flex-col min-w-0 ${className ?? ''}`}>
       {/* Header */}
-      <div className="flex items-center gap-0.5 mb-0 flex-shrink-0">
+      <div className="flex items-center gap-1 mb-1 flex-shrink-0">
         <div className="bg-orange-500/20 p-0.5 rounded-sm">
           <TrendingUp className="h-2 w-2 text-orange-400" />
         </div>
-        <div className="text-[8px] font-medium bg-orange-500/20 text-orange-300 px-0.5 py-0.5 rounded-full">
+        <div className="text-[10px] font-semibold bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded-full">
           Progress Curve
         </div>
       </div>

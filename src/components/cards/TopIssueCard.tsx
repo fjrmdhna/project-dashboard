@@ -126,7 +126,7 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
           <div className="bg-red-500/20 p-0.5 rounded-sm">
             <AlertTriangle className="h-2.5 w-2.5 text-red-400" />
           </div>
-          <div className="text-[8px] font-medium bg-red-500/20 text-red-300 px-1 py-0.5 rounded-full">
+          <div className="text-[10px] font-semibold bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded-full">
             5 Top Issue
           </div>
         </div>

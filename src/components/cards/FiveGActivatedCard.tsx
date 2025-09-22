@@ -201,11 +201,11 @@ export function FiveGActivatedCard({ rows, maxCities = 10 }: Props) {
   return (
     <div className="activated-card rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'calc(var(--wb-card-padding) - 4px)' }}>
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2 flex-shrink-0">
+      <div className="flex items-center gap-2 mb-1.5 flex-shrink-0">
         <div className="bg-green-500/20 p-1 rounded-lg">
           <BarChart3 className="h-3.5 w-3.5 text-green-400" />
         </div>
-        <div className="responsive-text-sm font-medium bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full">
+        <div className="text-[10px] font-semibold bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full">
           5G Activation by City
         </div>
       </div>

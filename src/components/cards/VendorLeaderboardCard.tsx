@@ -353,11 +353,11 @@ export function VendorLeaderboardCard({ rows, isLoading = false }: VendorLeaderb
   return (
     <div className="rounded-lg bg-[#0F1630]/80 border border-white/5 p-1.5 w-full h-full flex flex-col min-w-0">
       {/* Header */}
-      <div className="flex items-center gap-1 mb-1.5 flex-shrink-0">
+      <div className="flex items-center gap-1.5 mb-1.5 flex-shrink-0">
         <div className="bg-yellow-500/20 p-0.5 rounded-sm">
           <Trophy className="h-2.5 w-2.5 text-yellow-400" />
         </div>
-        <div className="text-[8px] font-medium bg-yellow-500/20 text-yellow-300 px-1 py-0.5 rounded-full">
+        <div className="text-[10px] font-semibold bg-yellow-500/20 text-yellow-300 px-1.5 py-0.5 rounded-full">
           Vendor Leaderboard
         </div>
       </div>

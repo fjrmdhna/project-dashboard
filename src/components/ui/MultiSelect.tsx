@@ -27,7 +27,7 @@ export function MultiSelect({
   const containerRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 0 })
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 0, alignRight: false })
   const [isMounted, setIsMounted] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
 
@@ -35,10 +35,15 @@ export function MultiSelect({
   const updateMenuPosition = () => {
     if (!buttonRef.current) return
     const rect = buttonRef.current.getBoundingClientRect()
+    const desiredWidth = Math.max(200, rect.width)
+    const viewportWidth = window.innerWidth
+    const spaceOnRight = viewportWidth - rect.left - desiredWidth
+
     setMenuPosition({
       top: rect.bottom + window.scrollY + 4,
-      left: rect.left + window.scrollX,
-      width: Math.max(180, rect.width)
+      left: spaceOnRight >= 0 ? rect.left + window.scrollX : rect.right + window.scrollX - desiredWidth,
+      width: desiredWidth,
+      alignRight: spaceOnRight < 0
     })
   }
 
@@ -125,7 +130,7 @@ export function MultiSelect({
   const Menu = () => (
     <div
       ref={menuRef}
-      className="fixed z-[9999] max-h-60 overflow-auto rounded-lg border border-white/10 bg-[#0F1630] p-2 shadow-lg min-w-0"
+      className={`fixed z-[9999] max-h-60 overflow-auto rounded-lg border border-white/10 bg-[#0F1630] p-2 shadow-lg min-w-0 ${menuPosition.alignRight ? 'origin-top-right' : 'origin-top-left'}`}
       style={{ 
         top: `${menuPosition.top}px`, 
         left: `${menuPosition.left}px`, 
