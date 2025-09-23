@@ -73,7 +73,7 @@ function DashboardCard({
     <Link
       href={dashboard.href}
       className={cn(
-        "group relative flex h-72 min-h-[18rem] w-full overflow-hidden rounded-[28px] border border-white/10 bg-[#081025] text-white shadow-[0_25px_50px_-20px_rgba(15,23,42,0.7)]",
+        "group relative flex h-64 min-h-[16rem] w-full overflow-hidden rounded-[28px] border border-white/10 bg-[#081025] text-white shadow-[0_25px_50px_-20px_rgba(15,23,42,0.7)] sm:h-72 sm:min-h-[18rem]",
         heroMode &&
           "border-white/20 bg-white/10 text-white shadow-[0_35px_60px_-25px_rgba(0,0,0,0.65)] backdrop-blur-md"
       )}

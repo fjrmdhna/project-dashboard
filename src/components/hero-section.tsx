@@ -14,7 +14,7 @@ export function HeroSection() {
       </div>
 
       <div className="relative z-10 flex w-full items-center">
-        <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+        <div className="container mx-auto px-4 py-12 sm:px-6 md:py-16 lg:px-8 lg:py-24">
           <div className="flex flex-col gap-10 lg:flex-row lg:items-center lg:gap-16">
             <div className="max-w-2xl text-white">
               <span className="text-[11px] font-semibold uppercase tracking-[0.45em] text-white/70">
@@ -33,7 +33,7 @@ export function HeroSection() {
               </div>
             </div>
 
-            <div className="w-full max-w-4xl lg:max-w-[60%] xl:max-w-[65%]">
+            <div className="w-full max-w-4xl mx-auto lg:mx-0 lg:max-w-[60%] xl:max-w-[65%]">
               <DashboardCarousel variant="hero" hideHeading className="max-w-none" />
             </div>
           </div>
