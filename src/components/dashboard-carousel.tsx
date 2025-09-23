@@ -23,7 +23,7 @@ const DASHBOARDS: DashboardCardData[] = [
     tagline: "Network Migration",
     description: "Realtime oversight for nationwide 5G rollout metrics.",
     href: "/hermes-5g",
-    image: "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1200&q=80",
+    image: "/Hermes_thumbnail.png",
     accent: "Jakarta, Indonesia"
   },
   {
@@ -32,7 +32,7 @@ const DASHBOARDS: DashboardCardData[] = [
     tagline: "Program Operations",
     description: "Unified performance cockpit for daily field execution.",
     href: "#",
-    image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
+    image: "/Fusion_thumbnail.png",
     accent: "Bandung, Indonesia"
   },
   {
@@ -41,7 +41,7 @@ const DASHBOARDS: DashboardCardData[] = [
     tagline: "Infra Delivery",
     description: "End-to-end visibility for civil, mechanical, electrical tasks.",
     href: "#",
-    image: "https://images.unsplash.com/photo-1514477917009-389c76a86b68?auto=format&fit=crop&w=1200&q=80",
+    image: "/CME_thumbnail.png",
     accent: "Makassar, Indonesia"
   },
   {
@@ -50,7 +50,7 @@ const DASHBOARDS: DashboardCardData[] = [
     tagline: "Tower Lifecycle",
     description: "Asset lifecycle intelligence for upgrade and maintenance.",
     href: "#",
-    image: "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1200&q=80",
+    image: "/TLM_thumbnail.png",
     accent: "Surabaya, Indonesia"
   }
 ]
@@ -93,23 +93,11 @@ function DashboardCard({
       />
 
       <div className="relative flex h-full w-full flex-col justify-between p-6">
-        <span
-          className={cn(
-            "text-[10px] uppercase tracking-[0.4em] text-white/65",
-            heroMode && "text-white/80"
-          )}
-        >
-          {dashboard.accent}
-        </span>
-
-        <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-[0.32em] text-white/55">
-            {dashboard.tagline}
-          </p>
+        <div className="space-y-3">
           <h3 className="text-xl font-semibold leading-tight sm:text-2xl">
             {dashboard.name}
           </h3>
-          <p className="max-w-[18rem] text-xs text-white/75 sm:text-sm">
+          <p className="max-w-[18rem] text-sm text-white/80 sm:text-base">
             {dashboard.description}
           </p>
         </div>
