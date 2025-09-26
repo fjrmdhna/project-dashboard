@@ -265,7 +265,7 @@ export default function Hermes5GPage() {
           </button>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
-          <span className="text-white/60">File akan mengikuti filter yang diterapkan.</span>
+          <span className="text-white/60">File will follow the applied filters.</span>
           {exportStatus && (
             <span className={exportStatus.type === 'success' ? 'text-emerald-300' : 'text-rose-300'}>{exportStatus.message}</span>
           )}

@@ -133,7 +133,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const rows = (data || []) as Record<string, unknown>[]
+    const rows = (data || []) as unknown as Record<string, unknown>[]
     const buffer = toWorkbookBuffer(rows, type === 'activation' ? 'Activation' : 'On-Air')
 
     const timestamp = new Date().toISOString().replace(/[:T]/g, '-').split('.')[0]
