@@ -1,7 +1,7 @@
 "use client"
 
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react"
-import { ChevronDown, SlidersHorizontal } from "lucide-react"
+import { ChevronDown, SlidersHorizontal, Download } from "lucide-react"
 import { FilterBar, FilterValue } from "@/components/filters/FilterBar"
 import { MatrixStatsCard } from "@/components/cards/MatrixStatsCard"
 import { FiveGReadinessCard } from "@/components/cards/FiveGReadinessCard"
@@ -58,9 +58,26 @@ export default function Hermes5GPage() {
   const [hasMounted, setHasMounted] = useState(false)
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
 
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportStatus, setExportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
   useEffect(() => {
     setHasMounted(true)
   }, [])
+
+  useEffect(() => {
+    if (!exportStatus) {
+      return
+    }
+
+    const timeout = setTimeout(() => {
+      setExportStatus(null)
+    }, 5000)
+
+    return () => {
+      clearTimeout(timeout)
+    }
+  }, [exportStatus])
 
   const currentDate = new Date()
   const formattedDate = currentDate.toLocaleDateString('id-ID', {
@@ -135,6 +152,128 @@ export default function Hermes5GPage() {
     // Reset sudah ditangani di FilterBar component
   }
 
+  const buildExportParams = () => {
+    const params = new URLSearchParams()
+    params.set('type', 'activation')
+
+    if (filter.q) {
+      params.set('q', filter.q)
+    }
+
+    filter.vendor_name.forEach((value) => {
+      params.append('vendor_name', value)
+    })
+
+    filter.program_report.forEach((value) => {
+      params.append('program_report', value)
+    })
+
+    filter.imp_ttp.forEach((value) => {
+      params.append('imp_ttp', value)
+    })
+
+    filter.nano_cluster.forEach((value) => {
+      params.append('nano_cluster', value)
+    })
+
+    return params
+  }
+
+  const handleExport = async () => {
+    const exportType = 'activation'
+
+    try {
+      setExportStatus(null)
+      setIsExporting(true)
+
+      const params = buildExportParams()
+      const response = await fetch(`/api/hermes-5g/export?${params.toString()}`)
+
+      if (!response.ok) {
+        let errorMessage = 'Gagal mengekspor data.'
+        const contentType = response.headers.get('Content-Type') || response.headers.get('content-type') || ''
+
+        try {
+          if (contentType.includes('application/json')) {
+            const payload = await response.json()
+            if (payload?.message) {
+              errorMessage = payload.message
+            }
+          } else {
+            const text = await response.text()
+            if (text) {
+              errorMessage = text
+            }
+          }
+        } catch {
+          // ignore parse failure and fall back to the default message
+        }
+
+        throw new Error(errorMessage)
+      }
+
+      const blob = await response.blob()
+      const disposition = response.headers.get('Content-Disposition') || response.headers.get('content-disposition')
+      let filename = `hermes-5g-${exportType}-export.xlsx`
+
+      if (disposition) {
+        const match = disposition.match(/filename="?([^";]+)"?/i)
+        if (match?.[1]) {
+          filename = match[1]
+        }
+      }
+
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      setExportStatus({
+        type: 'success',
+        message: 'Data Activation berhasil diunduh.'
+      })
+    } catch (error) {
+      console.error('Failed to export Hermes 5G data', error)
+      const message = error instanceof Error ? error.message : 'Terjadi kesalahan saat ekspor.'
+      setExportStatus({
+        type: 'error',
+        message
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const renderExportControls = (extraClassName = '') => {
+    const baseButtonClass = 'inline-flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60'
+
+    return (
+      <div className={`flex flex-col gap-1 ${extraClassName}`}>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={handleExport}
+            className={`${baseButtonClass} border-emerald-400/40 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/20`}
+            disabled={isExporting}
+          >
+            <Download className="h-3.5 w-3.5" />
+            {isExporting ? 'Mengunduh...' : 'Export Activation'}
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
+          <span className="text-white/60">File akan mengikuti filter yang diterapkan.</span>
+          {exportStatus && (
+            <span className={exportStatus.type === 'success' ? 'text-emerald-300' : 'text-rose-300'}>{exportStatus.message}</span>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   // Header component
   const header = (
     <div className="flex items-center justify-between h-full w-full px-4">
@@ -179,18 +318,19 @@ export default function Hermes5GPage() {
           {formattedDate}
         </div>
       </div>
-            </div>
+      </div>
   )
 
   // FilterBar component
   const filterBar = (
-    <div className="h-full">
-      <FilterBar 
+    <div className="flex h-full flex-col gap-3">
+      <FilterBar
         value={filter}
         onChange={handleFilterChange}
         onReset={handleFilterReset}
-                  />
-                </div>
+      />
+      {renderExportControls()}
+    </div>
   )
 
   // MatrixStats component
@@ -318,6 +458,7 @@ export default function Hermes5GPage() {
                   onChange={handleFilterChange}
                   onReset={handleFilterReset}
                 />
+                {renderExportControls('mt-3')}
               </div>
             )}
           </div>

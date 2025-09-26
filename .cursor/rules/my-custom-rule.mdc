@@ -1,23 +1,6 @@
-# Project Rules — Telco Dashboard (Next.js + TS + Tailwind + Recharts)
-
-## 0) Tujuan
-Bangun dashboard telco dark-theme, reaktif, **tanpa angka hard‑code**, dan siap dijalankan di **Docker** (dev & prod). Semua angka berasal dari **props/data** dan util agregasi. **Seluruh komponen bila digabung harus muat dalam 1 layar 1920×1080 (Wallboard Mode)**.
-
 ---
-
-## 1) Tech Stack & Quality
-- **App**: Next.js (App Router) + **TypeScript**
-- **UI**: Tailwind CSS
-- **Charts**: Recharts (Line/Bar/Pie/LabelList/Tooltip/Legend/CartesianGrid)
-- **DB**: PostgreSQL 16
-- **Cache**: Redis 7 (key/value + pre‑aggregation)
-- **Ikon**: `lucide-react`
-- **Lint/Format**: ESLint + Prettier
-- **State**: props/colocation
-- **Node.js**: v20 LTS
-
+alwaysApply: false
 ---
-
 ## 2) Tema & Desain
 - Background utama: `#0D1221`
 - Teks utama: `#FFFFFF`; teks sekunder: `#B0B7C3`
