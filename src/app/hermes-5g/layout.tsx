@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { Hermes5GProvider } from '@/contexts/Hermes5GContext'
+import { FilterProvider } from '@/contexts/FilterContext'
 
 export const metadata: Metadata = {
   title: "Hermes 5G Dashboard",
@@ -12,8 +13,10 @@ export default function Hermes5GLayout({
   children: React.ReactNode
 }) {
   return (
-    <Hermes5GProvider>
-      {children}
-    </Hermes5GProvider>
+    <FilterProvider>
+      <Hermes5GProvider>
+        {children}
+      </Hermes5GProvider>
+    </FilterProvider>
   )
 } 

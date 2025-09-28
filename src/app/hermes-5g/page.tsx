@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react"
 import { ChevronDown, SlidersHorizontal, Download } from "lucide-react"
 import { FilterBar, FilterValue } from "@/components/filters/FilterBar"
@@ -12,6 +13,8 @@ import { TopIssueCard } from "@/components/cards/TopIssueCard"
 import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
 import { VendorLeaderboardCard } from "@/components/cards/VendorLeaderboardCard"
 import { useSiteData } from "@/hooks/useSiteData"
+import { useFilter } from "@/contexts/FilterContext"
+import { useMemo } from "react"
 import { useTopIssueData } from "@/hooks/useTopIssueData"
 import { useDailyRunrateData } from "@/hooks/useDailyRunrateData"
 import { useVendorLeaderboard } from "@/hooks/useVendorLeaderboard"
@@ -20,6 +23,18 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 // Debug overlays removed for production-like view
 
 export default function Hermes5GPage() {
+  // Menggunakan shared filter context
+  const filterContext = useFilter()
+  
+  // Convert filter context to FilterValue format
+  const currentFilter: FilterValue = useMemo(() => ({
+    q: filterContext.searchTerm,
+    vendor_name: filterContext.vendorFilter !== 'all' ? [filterContext.vendorFilter] : [],
+    program_report: filterContext.programFilter !== 'all' ? [filterContext.programFilter] : [],
+    imp_ttp: filterContext.cityFilter !== 'all' ? [filterContext.cityFilter] : [],
+    nano_cluster: []
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter])
+  
   // Menggunakan hook useSiteData untuk mengambil data berdasarkan filter
   const { 
     rows, 
@@ -28,7 +43,7 @@ export default function Hermes5GPage() {
     count, 
     filter, 
     updateFilter 
-  } = useSiteData()
+  } = useSiteData({ initialFilter: currentFilter })
 
   // Menggunakan hook useTopIssueData untuk mengambil data top 5 issue
   // Meneruskan filter yang sama dengan useSiteData
@@ -143,13 +158,18 @@ export default function Hermes5GPage() {
   // Handler untuk perubahan filter
   const handleFilterChange = (newFilters: FilterValue) => {
     console.log("Filter changed:", newFilters)
+    // Update filter context
+    filterContext.setSearchTerm(newFilters.q)
+    filterContext.setVendorFilter(newFilters.vendor_name.length > 0 ? newFilters.vendor_name[0] : 'all')
+    filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report[0] : 'all')
+    filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp[0] : 'all')
     updateFilter(newFilters)
   }
 
   // Handler untuk reset filter
   const handleFilterReset = () => {
     console.log("Filters reset")
-    // Reset sudah ditangani di FilterBar component
+    filterContext.resetFilters()
   }
 
   const buildExportParams = () => {
@@ -313,9 +333,18 @@ export default function Hermes5GPage() {
       </div>
       
       {/* Tanggal hari ini */}
-      <div className="flex-shrink-0 text-right -mr-9 mt-2">
+      <div className="flex-shrink-0 -mr-9 mt-2 flex flex-col items-end gap-2 text-right">
         <div className="text-sm font-medium text-white">
           {formattedDate}
+        </div>
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.32em]">
+          <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-3 py-1 font-semibold text-[#34D399]">Overview</span>
+          <Link
+            href="/hermes-5g/map"
+            className="rounded-full border border-white/20 px-3 py-1 font-medium text-white/80 transition hover:bg-white/10"
+          >
+            Map
+          </Link>
         </div>
       </div>
       </div>
@@ -427,6 +456,15 @@ export default function Hermes5GPage() {
         <h1 className="mt-4 text-center text-xl font-semibold tracking-wide text-white">
           DASHBOARD HERMES H2 2025
         </h1>
+        <div className="mt-3 flex justify-center gap-3 text-[11px] uppercase tracking-[0.32em]">
+          <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-3 py-1 font-semibold text-[#34D399]">Overview</span>
+          <Link
+            href="/hermes-5g/map"
+            className="rounded-full border border-white/20 px-3 py-1 font-medium text-white/80 transition hover:bg-white/10"
+          >
+            Map
+          </Link>
+        </div>
       </header>
 
       <main className="flex-1 overflow-y-auto pb-8">
@@ -496,11 +534,22 @@ export default function Hermes5GPage() {
     </div>
   )
 
-  if (hasMounted && isMobile) {
-    return mobileLayout
+  // Show loading state until hydration is complete
+  if (!filterContext.isHydrated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#070F2B] via-[#050B1B] to-[#050B1B] text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white/60">Loading dashboard...</p>
+        </div>
+      </div>
+    )
   }
 
-  return (
+  // Conditional rendering based on mobile/desktop
+  return hasMounted && isMobile ? (
+    mobileLayout
+  ) : (
     <Wallboard1080
       header={header}
       filterBar={filterBar}

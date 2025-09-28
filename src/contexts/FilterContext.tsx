@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react'
 import { FilterState, FilterActions, FilterContextType, DEFAULT_FILTERS } from '@/types/filter'
 
 // Create Filter Context
@@ -13,7 +13,36 @@ interface FilterProviderProps {
 
 // Filter Provider Component
 export function FilterProvider({ children }: FilterProviderProps) {
+  const [isHydrated, setIsHydrated] = useState(false)
+  
+  // Load filters from localStorage on initialization
   const [filters, setFiltersState] = useState<FilterState>(DEFAULT_FILTERS)
+
+  // Handle hydration
+  useEffect(() => {
+    setIsHydrated(true)
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('hermes-filter-state')
+        if (saved) {
+          setFiltersState(JSON.parse(saved))
+        }
+      } catch (error) {
+        console.warn('Failed to load filter state from localStorage:', error)
+      }
+    }
+  }, [])
+
+  // Save to localStorage whenever filters change
+  useEffect(() => {
+    if (isHydrated && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('hermes-filter-state', JSON.stringify(filters))
+      } catch (error) {
+        console.warn('Failed to save filter state to localStorage:', error)
+      }
+    }
+  }, [filters, isHydrated])
 
   // Filter Actions
   const setVendorFilter = useCallback((vendor: string) => {
@@ -52,6 +81,7 @@ export function FilterProvider({ children }: FilterProviderProps) {
   const contextValue: FilterContextType = {
     // State
     ...filters,
+    isHydrated,
     
     // Actions
     setVendorFilter,

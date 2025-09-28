@@ -21,6 +21,10 @@ export interface SiteData5G {
   mocn_activation_forecast?: string
   hotnews_af?: string
   endorse_af?: string
+  site_id?: string
+  site_name?: string
+  lat?: number | null
+  long?: number | null
   created_at?: string
   updated_at?: string
 }
@@ -50,7 +54,11 @@ export async function getSiteData5G(filters: {
     'rfs_forecast_lock',
     'mocn_activation_forecast',
     'hotnews_af',
-    'endorse_af'
+    'endorse_af',
+    'site_id',
+    'site_name',
+    'lat',
+    'long'
   ].join(',')
 
   let query = supabase

@@ -21,7 +21,9 @@ export interface FilterActions {
 }
 
 // Filter Context Interface
-export interface FilterContextType extends FilterState, FilterActions {}
+export interface FilterContextType extends FilterState, FilterActions {
+  isHydrated?: boolean
+}
 
 // Filter Options Interface
 export interface FilterOptions {
