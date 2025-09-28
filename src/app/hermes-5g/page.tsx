@@ -32,8 +32,8 @@ export default function Hermes5GPage() {
     vendor_name: filterContext.vendorFilter !== 'all' ? [filterContext.vendorFilter] : [],
     program_report: filterContext.programFilter !== 'all' ? [filterContext.programFilter] : [],
     imp_ttp: filterContext.cityFilter !== 'all' ? [filterContext.cityFilter] : [],
-    nano_cluster: []
-  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter])
+    nano_cluster: filterContext.nanoClusterFilter !== 'all' ? [filterContext.nanoClusterFilter] : []
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter])
   
   // Menggunakan hook useSiteData untuk mengambil data berdasarkan filter
   const { 
@@ -163,6 +163,7 @@ export default function Hermes5GPage() {
     filterContext.setVendorFilter(newFilters.vendor_name.length > 0 ? newFilters.vendor_name[0] : 'all')
     filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report[0] : 'all')
     filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp[0] : 'all')
+    filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster[0] : 'all')
     updateFilter(newFilters)
   }
 

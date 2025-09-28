@@ -30,7 +30,8 @@ interface FilterOptions {
 }
 
 // Fungsi helper untuk memendekkan teks yang terlalu panjang
-const truncateText = (text: string, maxLength: number = 20): string => {
+const truncateText = (text: string | undefined | null, maxLength: number = 20): string => {
+  if (!text || typeof text !== 'string') return '';
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength - 3) + '...';
 }
@@ -145,10 +146,10 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
   // Cek apakah ada filter aktif
   const hasActiveFilters = 
     value.q !== "" || 
-    value.vendor_name.length > 0 || 
-    value.program_report.length > 0 || 
-    value.imp_ttp.length > 0 ||
-    value.nano_cluster.length > 0
+    (value.vendor_name?.length || 0) > 0 || 
+    (value.program_report?.length || 0) > 0 || 
+    (value.imp_ttp?.length || 0) > 0 ||
+    (value.nano_cluster?.length || 0) > 0
   
   return (
     <div className="h-full flex flex-col min-w-0">
@@ -257,7 +258,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
             </div>
           )}
           
-          {value.vendor_name.map(vendor => (
+          {value.vendor_name?.map(vendor => (
             <div 
               key={`vendor-${vendor}`} 
               className="bg-purple-500/20 text-purple-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
@@ -271,7 +272,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
             </div>
           ))}
           
-          {value.program_report.map(program => (
+          {value.program_report?.map(program => (
             <div 
               key={`program-${program}`} 
               className="bg-green-500/20 text-green-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
@@ -285,7 +286,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
             </div>
           ))}
           
-          {value.imp_ttp.map(city => (
+          {value.imp_ttp?.map(city => (
             <div 
               key={`city-${city}`} 
               className="bg-amber-500/20 text-amber-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
@@ -299,7 +300,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
             </div>
           ))}
           
-          {value.nano_cluster.map(cluster => (
+          {value.nano_cluster?.map(cluster => (
             <div 
               key={`cluster-${cluster}`} 
               className="bg-indigo-500/20 text-indigo-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
@@ -317,6 +318,10 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     </div>
   )
 } 
+
+
+
+
 
 
 

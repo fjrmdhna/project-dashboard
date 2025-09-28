@@ -57,6 +57,10 @@ export function FilterProvider({ children }: FilterProviderProps) {
     setFiltersState(prev => ({ ...prev, cityFilter: city }))
   }, [])
 
+  const setNanoClusterFilter = useCallback((nanoCluster: string) => {
+    setFiltersState(prev => ({ ...prev, nanoClusterFilter: nanoCluster }))
+  }, [])
+
   const setSearchTerm = useCallback((search: string) => {
     setFiltersState(prev => ({ ...prev, searchTerm: search }))
   }, [])
@@ -87,6 +91,7 @@ export function FilterProvider({ children }: FilterProviderProps) {
     setVendorFilter,
     setProgramFilter,
     setCityFilter,
+    setNanoClusterFilter,
     setSearchTerm,
     setStatusFilter,
     setRegionFilter,

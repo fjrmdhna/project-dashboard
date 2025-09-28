@@ -16,6 +16,8 @@ export interface Row {
   vendor_name?: string
   program_report?: string
   imp_ttp?: string
+  lat?: number | null
+  long?: number | null
 }
 
 export interface MatrixStatsCardProps {

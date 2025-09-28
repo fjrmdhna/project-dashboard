@@ -1,9 +1,23 @@
-"use client"
+﻿"use client"
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { RefreshCw } from 'lucide-react'
-import Hermes5GMap, { type HermesMapPoint, type StatusLabel } from '@/components/maps/Hermes5GMap'
+import dynamic from 'next/dynamic'
+
+const Hermes5GMap = dynamic(() => import('@/components/maps/Hermes5GMap').then(mod => ({ default: mod.default })), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+        <p className="text-white/60">Loading map...</p>
+      </div>
+    </div>
+  )
+})
+
+import type { HermesMapPoint, StatusLabel } from '@/components/maps/Hermes5GMap'
 import { useFilter } from '@/contexts/FilterContext'
 import { FilterBar, FilterValue } from '@/components/filters/FilterBar'
 
@@ -78,8 +92,8 @@ export default function Hermes5GMapPage() {
     vendor_name: filterContext.vendorFilter !== 'all' ? [filterContext.vendorFilter] : [],
     program_report: filterContext.programFilter !== 'all' ? [filterContext.programFilter] : [],
     imp_ttp: filterContext.cityFilter !== 'all' ? [filterContext.cityFilter] : [],
-    nano_cluster: []
-  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter])
+    nano_cluster: filterContext.nanoClusterFilter !== 'all' ? [filterContext.nanoClusterFilter] : []
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter])
 
   const totalSites = useMemo(() => points.length, [points])
 
@@ -169,6 +183,7 @@ export default function Hermes5GMapPage() {
     filterContext.setVendorFilter(newFilters.vendor_name.length > 0 ? newFilters.vendor_name[0] : 'all')
     filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report[0] : 'all')
     filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp[0] : 'all')
+    filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster[0] : 'all')
   }
 
   // Handler untuk reset filter
@@ -299,7 +314,7 @@ export default function Hermes5GMapPage() {
               {invalidCoordinates > 0 && (
                 <div className="mt-3 pt-3 border-t border-white/10">
                   <p className="text-amber-300 font-medium">
-                    ⚠️ {invalidCoordinates} sites excluded from map due to invalid coordinates
+                    âš ï¸ {invalidCoordinates} sites excluded from map due to invalid coordinates
                   </p>
                 </div>
               )}

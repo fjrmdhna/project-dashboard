@@ -3,6 +3,7 @@ export interface FilterState {
   vendorFilter: string;
   programFilter: string;
   cityFilter: string;
+  nanoClusterFilter: string;
   searchTerm: string;
   statusFilter: string;
   regionFilter: string;
@@ -13,6 +14,7 @@ export interface FilterActions {
   setVendorFilter: (vendor: string) => void;
   setProgramFilter: (program: string) => void;
   setCityFilter: (city: string) => void;
+  setNanoClusterFilter: (nanoCluster: string) => void;
   setSearchTerm: (search: string) => void;
   setStatusFilter: (status: string) => void;
   setRegionFilter: (region: string) => void;
@@ -39,6 +41,7 @@ export const DEFAULT_FILTERS: FilterState = {
   vendorFilter: 'all',
   programFilter: 'all',
   cityFilter: 'all',
+  nanoClusterFilter: 'all',
   searchTerm: '',
   statusFilter: 'all',
   regionFilter: 'all'

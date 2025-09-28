@@ -86,7 +86,7 @@ function getStage(row: Row): Stage {
 export default function HermesProgressMap({ rows, isLoading = false }: HermesProgressMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
-  const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null)
+  const clusterGroupRef = useRef<any>(null)
 
   const stageIcons = useMemo(() => {
     return STAGE_PRIORITY.reduce((acc, stage) => {
@@ -148,7 +148,7 @@ export default function HermesProgressMap({ rows, isLoading = false }: HermesPro
     return { markers, totals, bounds }
   }, [rows])
 
-  const createClusterIcon = useCallback((cluster: L.MarkerCluster) => {
+  const createClusterIcon = useCallback((cluster: any) => {
     const childMarkers = cluster.getAllChildMarkers() as Array<L.Marker>
     const stageCounts: Record<Stage, number> = {
       SOW: 0,
@@ -223,7 +223,7 @@ export default function HermesProgressMap({ rows, isLoading = false }: HermesPro
       map.removeLayer(clusterGroupRef.current)
     }
 
-    const clusterGroup = L.markerClusterGroup({
+    const clusterGroup = (L as any).markerClusterGroup({
       chunkedLoading: true,
       maxClusterRadius: 60,
       iconCreateFunction: createClusterIcon,
