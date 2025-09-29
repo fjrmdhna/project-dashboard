@@ -29,6 +29,7 @@ interface Wallboard1080Props {
   dailyRunrate?: ReactNode
   top5Issue?: ReactNode
   nanoCluster?: ReactNode
+  newFeature?: ReactNode
   leaderboard?: ReactNode
 }
 
@@ -42,6 +43,7 @@ export function Wallboard1080({
   dailyRunrate,
   top5Issue,
   nanoCluster,
+  newFeature,
   leaderboard
 }: Wallboard1080Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -114,14 +116,19 @@ export function Wallboard1080({
               </div>
             </div>
             
-            {/* Column 3: Nano Cluster & Leaderboard (Right) */}
-            <div className="wallboard-side-column">
-              {/* Nano Cluster - Top half */}
+            {/* Column 3: Nano Cluster, New Feature & Leaderboard (Right) */}
+            <div className="wallboard-side-column wallboard-side-column-3" style={{ gridTemplateRows: '1fr 1fr 1fr' }}>
+              {/* Nano Cluster - Top third */}
               <GridItem className="wallboard-side-card">
                 {nanoCluster}
               </GridItem>
               
-              {/* Leaderboard - Bottom half */}
+              {/* New Feature - Middle third */}
+              <GridItem className="wallboard-side-card">
+                {newFeature}
+              </GridItem>
+              
+              {/* Leaderboard - Bottom third */}
               <GridItem className="wallboard-side-card">
                 {leaderboard}
               </GridItem>

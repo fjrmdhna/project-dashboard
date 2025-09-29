@@ -12,6 +12,7 @@ import ProgressCurveLineChart from "@/components/charts/ProgressCurveLineChart"
 import { TopIssueCard } from "@/components/cards/TopIssueCard"
 import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
 import { VendorLeaderboardCard } from "@/components/cards/VendorLeaderboardCard"
+import { NanoClusterListCard } from "@/components/cards/NewFeatureCard"
 import { useSiteData } from "@/hooks/useSiteData"
 import { useFilter } from "@/contexts/FilterContext"
 import { useMemo } from "react"
@@ -407,6 +408,13 @@ export default function Hermes5GPage() {
     />
   )
 
+  // Nano Cluster List component
+  const newFeatureCard = (
+    <NanoClusterListCard 
+      rows={rows}
+    />
+  )
+
   // Vendor Leaderboard component
   const vendorLeaderboardCard = (
     <VendorLeaderboardCard 
@@ -518,8 +526,9 @@ export default function Hermes5GPage() {
             {renderMobileCard(topIssueCard, 280)}
           </div>
 
-          {renderMobileCard(nanoClusterCard, 240)}
-          {renderMobileCard(vendorLeaderboardCard, 320)}
+          {renderMobileCard(nanoClusterCard, 200)}
+          {renderMobileCard(newFeatureCard, 200)}
+          {renderMobileCard(vendorLeaderboardCard, 280)}
         </section>
       </main>
     </div>
@@ -561,6 +570,7 @@ export default function Hermes5GPage() {
       dailyRunrate={dailyRunrateCard}
       top5Issue={topIssueCard}
       nanoCluster={nanoClusterCard}
+      newFeature={newFeatureCard}
       leaderboard={vendorLeaderboardCard}
     />
   )

@@ -48,7 +48,7 @@ function MetricItem({
   value: number
 }) {
   return (
-    <div className="flex flex-col items-center text-center min-w-[56px]">
+    <div className="flex flex-col items-center text-center min-w-[56px] justify-center">
       <span className="text-[11px] font-semibold text-white leading-tight">
         {value.toLocaleString()}
       </span>
@@ -107,8 +107,8 @@ export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 gap-y-1">
-          <div className="flex flex-col items-center text-center min-w-[64px]">
+        <div className="flex flex-wrap items-center justify-center gap-3 gap-y-1">
+          <div className="flex flex-col items-center text-center min-w-[64px] justify-center">
             <span className="text-lg font-bold leading-none">
               {stats.totalSites.toLocaleString()}
             </span>

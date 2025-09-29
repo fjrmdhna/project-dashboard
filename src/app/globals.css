@@ -414,6 +414,66 @@ html, body {
   min-height: 0;
 }
 
+/* Special styling for 3-row side column (Column 3) */
+.wallboard-side-column[style*="grid-template-rows: 1fr 1fr 1fr"] {
+  grid-template-rows: 1fr 1fr 1fr !important;
+  gap: var(--wb-grid-gap);
+}
+
+/* Alternative approach - target the third column specifically */
+.wallboard-content > .wallboard-side-column:last-child {
+  grid-template-rows: 1fr 1fr 1fr !important;
+}
+
+/* Specific targeting for column 3 with 3 rows */
+.wallboard-side-column-3 {
+  grid-template-rows: 1fr 1fr 1fr !important;
+  gap: var(--wb-grid-gap);
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+/* Reduce min-height for cards in column 3 to fit 3 rows */
+.wallboard-side-column-3 .wallboard-side-card {
+  min-height: 120px !important;
+  height: 100% !important;
+  flex: 1 1 0 !important;
+}
+
+/* Responsive content for NanoClusterCard */
+.wallboard-side-column-3 .wallboard-side-card .grid {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+.wallboard-side-column-3 .wallboard-side-card .grid > div {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Custom scrollbar styling for cluster list */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
 /* Middle column (2) - 4 rows */
 .wallboard-middle-column {
   display: grid;
@@ -641,6 +701,27 @@ html, body {
   .wallboard-side-column {
     grid-template-rows: 1fr 1fr;
   }
+  
+  /* Override for column 3 in compact mode */
+  .wallboard-side-column-3 {
+    grid-template-rows: 1fr 1fr 1fr !important;
+  }
+  
+  .wallboard-side-column-3 .wallboard-side-card {
+    min-height: 100px !important;
+  }
+  
+  /* Responsive content for NanoClusterCard in compact mode */
+  .wallboard-side-column-3 .wallboard-side-card .grid {
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+  
+  .wallboard-side-column-3 .wallboard-side-card .grid > div {
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
 }
 
 /* Compact overrides for progress and bottom rows */
@@ -673,6 +754,27 @@ html, body {
   .wallboard-progress-card .recharts-wrapper {
     margin: 0 !important;
     padding: 0 !important;
+  }
+  
+  /* Ultra compact mode for column 3 */
+  .wallboard-side-column-3 {
+    grid-template-rows: 1fr 1fr 1fr !important;
+  }
+  
+  .wallboard-side-column-3 .wallboard-side-card {
+    min-height: 80px !important;
+  }
+  
+  /* Responsive content for NanoClusterCard in ultra compact mode */
+  .wallboard-side-column-3 .wallboard-side-card .grid {
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+  
+  .wallboard-side-column-3 .wallboard-side-card .grid > div {
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
   }
 }
 
