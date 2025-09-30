@@ -27,6 +27,7 @@ interface MapPoint {
   siteId?: string | null
   programReport?: string | null
   impTtp?: string | null
+  issueCategory?: string | null
 }
 
 function parseCoordinate(value: unknown): number | null {
@@ -108,7 +109,8 @@ export async function GET(request: NextRequest) {
         siteName: row.site_name ?? null,
         siteId: row.site_id ?? null,
         programReport: row.program_report ?? null,
-        impTtp: row.imp_ttp ?? null
+        impTtp: row.imp_ttp ?? null,
+        issueCategory: (row as any).issue_category ?? null
       })
     }
 

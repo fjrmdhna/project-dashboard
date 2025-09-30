@@ -12,6 +12,7 @@ export interface SiteData5G {
   program_report?: string
   imp_ttp?: string
   nano_cluster?: string
+  issue_category?: string | null
   caf_approved?: string
   mos_af?: string
   ic_000040_af?: string
@@ -46,6 +47,7 @@ export async function getSiteData5G(filters: {
     'program_report',
     'imp_ttp',
     'nano_cluster',
+    'issue_category',
     'caf_approved',
     'mos_af',
     'ic_000040_af',

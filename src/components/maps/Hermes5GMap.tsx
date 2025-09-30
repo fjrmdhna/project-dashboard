@@ -16,6 +16,7 @@ export interface HermesMapPoint {
   siteId?: string | null
   programReport?: string | null
   impTtp?: string | null
+  issueCategory?: string | null
 }
 
 export interface Hermes5GMapProps {
@@ -55,6 +56,8 @@ function formatPopup(point: HermesMapPoint) {
   if (point.impTtp) {
     rows.push(`IMP TTP: ${point.impTtp}`)
   }
+
+  rows.push(`Issue: ${point.issueCategory ? point.issueCategory : 'No issue recorded'}`)
 
   rows.push(`Lat: ${point.lat.toFixed(4)} / Long: ${point.long.toFixed(4)}`)
 
