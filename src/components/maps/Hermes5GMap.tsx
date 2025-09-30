@@ -59,7 +59,10 @@ function formatPopup(point: HermesMapPoint) {
 
   rows.push(`Issue: ${point.issueCategory ? point.issueCategory : 'No issue recorded'}`)
 
-  rows.push(`Lat: ${point.lat.toFixed(4)} / Long: ${point.long.toFixed(4)}`)
+  const latText = point.lat.toFixed(4)
+  const longText = point.long.toFixed(4)
+  const gmaps = `https://www.google.com/maps?q=${point.lat},${point.long}`
+  rows.push(`Location: <a href="${gmaps}" target="_blank" rel="noopener noreferrer">${latText}, ${longText}</a>`)
 
   return rows.join('<br />')
 }
