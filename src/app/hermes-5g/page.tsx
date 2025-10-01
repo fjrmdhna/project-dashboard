@@ -27,13 +27,13 @@ export default function Hermes5GPage() {
   // Menggunakan shared filter context
   const filterContext = useFilter()
   
-  // Convert filter context to FilterValue format
+  // Convert filter context to FilterValue format - support multiselect
   const currentFilter: FilterValue = useMemo(() => ({
     q: filterContext.searchTerm,
-    vendor_name: filterContext.vendorFilter !== 'all' ? [filterContext.vendorFilter] : [],
-    program_report: filterContext.programFilter !== 'all' ? [filterContext.programFilter] : [],
-    imp_ttp: filterContext.cityFilter !== 'all' ? [filterContext.cityFilter] : [],
-    nano_cluster: filterContext.nanoClusterFilter !== 'all' ? [filterContext.nanoClusterFilter] : []
+    vendor_name: filterContext.vendorFilter !== 'all' ? filterContext.vendorFilter.split(',').filter(Boolean) : [],
+    program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
+    imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
+    nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : []
   }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter])
   
   // Menggunakan hook useSiteData untuk mengambil data berdasarkan filter
@@ -159,12 +159,12 @@ export default function Hermes5GPage() {
   // Handler untuk perubahan filter
   const handleFilterChange = (newFilters: FilterValue) => {
     console.log("Filter changed:", newFilters)
-    // Update filter context
+    // Update filter context - support multiselect by joining arrays
     filterContext.setSearchTerm(newFilters.q)
-    filterContext.setVendorFilter(newFilters.vendor_name.length > 0 ? newFilters.vendor_name[0] : 'all')
-    filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report[0] : 'all')
-    filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp[0] : 'all')
-    filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster[0] : 'all')
+    filterContext.setVendorFilter(newFilters.vendor_name.length > 0 ? newFilters.vendor_name.join(',') : 'all')
+    filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report.join(',') : 'all')
+    filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp.join(',') : 'all')
+    filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster.join(',') : 'all')
     updateFilter(newFilters)
   }
 
