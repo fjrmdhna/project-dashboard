@@ -64,11 +64,12 @@ export async function GET(request: NextRequest) {
       }
     });
     
-    // Filter out "No Issue", "CAF NY Submit", and "20. 5G Activation Done" categories
+    // Filter out "No Issue", "CAF NY Submit", "20. 5G Activation Done", and "18c. 5G Integration Done" categories
     const filteredCategories = Object.entries(categoryCount).filter(([category]) => 
       !category.toLowerCase().includes('no issue') &&
       !category.toLowerCase().includes('caf ny submit') &&
-      !category.toLowerCase().includes('20. 5g activation done')
+      !category.toLowerCase().includes('20. 5g activation done') &&
+      !category.toLowerCase().includes('18c. 5g integration done')
     );
     
     // Sort by count and get top 5 categories (excluding filtered ones)

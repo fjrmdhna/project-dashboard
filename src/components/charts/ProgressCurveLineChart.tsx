@@ -26,6 +26,7 @@ const clampRange = (s: Date, e: Date, min: Date, max: Date) => ({
   end: new Date(Math.min(+e, +max)),
 });
 const fmtMonth = (d: Date) => d.toLocaleString('en', { month: 'short' });
+const addMonths = (d: Date, amount: number) => new Date(d.getFullYear(), d.getMonth() + amount, 1, 0, 0, 0, 0);
 const safeDate = (v?: string | null) => {
   if (!v) return undefined;
   const d = new Date(v);
@@ -42,216 +43,172 @@ const getWeekNumber = (date: Date): number => {
 };
 
 // Type for date buckets
-type Bucket = { key: string; label: string; start: Date; end: Date };
+type Bucket = { key: string; label: string; start: Date; end: Date; kind: 'month' | 'week' };
 
-// Function to build hybrid buckets (all months with data)
-function buildHybridBuckets(anchorDate?: string, span: 3|5 = 3, rows: Row[] = []): Bucket[] {
+function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = []): Bucket[] {
   const anchor = toStart(anchorDate ? new Date(anchorDate) : new Date());
+
+  const collectedDates = rows
+    .flatMap((row) => [
+      safeDate(row.rfs_forecast_lock),
+      safeDate(row.imp_integ_af),
+      safeDate(row.rfs_af),
+      safeDate(row.mocn_activation_forecast),
+    ])
+    .filter((value): value is Date => Boolean(value));
+
+  // Set September as the minimum start month
+  const currentYear = anchor.getFullYear();
+  const septemberStart = new Date(currentYear, 8, 1); // September is month 8 (0-indexed)
   
-  // Extract all dates from the data
-  const allDates: Date[] = [];
-  
-  rows.forEach(row => {
-    // Add all date fields to the collection
-    const dates = [
-      row.rfs_forecast_lock,
-      row.imp_integ_af,
-      row.rfs_af,
-      row.mocn_activation_forecast
-    ];
-    
-    dates.forEach(dateStr => {
-      if (dateStr) {
-        const date = safeDate(dateStr);
-        if (date) {
-          allDates.push(date);
-        }
-      }
-    });
-  });
-  
-  // If no data, fallback to hardcoded range
-  if (allDates.length === 0) {
-    const startMonth = new Date(2025, 8, 1); // September 2025
-    const endMonth = new Date(2026, 1, 1);   // February 2026
-    
-    let currentMonth = new Date(startMonth);
-    while (currentMonth <= endMonth) {
-      allDates.push(new Date(currentMonth));
-      currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
-    }
-  }
-  
-  // Get min and max dates from actual data
-  const minDate = allDates.length > 0 ? new Date(Math.min(...allDates.map(d => d.getTime()))) : new Date(2025, 8, 1);
-  const maxDate = allDates.length > 0 ? new Date(Math.max(...allDates.map(d => d.getTime()))) : new Date(2026, 1, 1);
-  
-  // Create months array from min to max date
-  const months: Date[] = [];
-  const startMonth = toStart(minDate);
-  const endMonth = toStart(maxDate);
-  
-  let currentMonth = new Date(startMonth);
-  while (currentMonth <= endMonth) {
-    months.push(new Date(currentMonth));
-    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
-  }
+  const monthsBefore = Math.floor(span / 2);
+  const monthsAfter = span - monthsBefore - 1;
+
+  const baseRangeStart = toStart(addMonths(anchor, -monthsBefore));
+  const baseRangeEnd = toEnd(addMonths(anchor, monthsAfter));
+
+  // Ensure we don't start before September
+  const adjustedBaseRangeStart = baseRangeStart < septemberStart ? septemberStart : baseRangeStart;
+
+  const actualRangeStart = collectedDates.length
+    ? toStart(new Date(Math.min(...collectedDates.map((d) => d.getTime()))))
+    : adjustedBaseRangeStart;
+  const actualRangeEnd = collectedDates.length
+    ? toEnd(new Date(Math.max(...collectedDates.map((d) => d.getTime()))))
+    : baseRangeEnd;
+
+  // Ensure range start is not before September
+  const rangeStart = actualRangeStart < septemberStart ? septemberStart : actualRangeStart;
+  const rangeEnd = actualRangeEnd > baseRangeEnd ? actualRangeEnd : baseRangeEnd;
 
   const buckets: Bucket[] = [];
-  months.forEach((m) => {
-    const start = toStart(m), end = toEnd(m);
-    const isCurrent = start.getMonth() === anchor.getMonth() && start.getFullYear() === anchor.getFullYear();
-    
-    // For current month (anchor month), use weekly breakdown if it has data
-    // For other months, use monthly view
-    const isCurrentMonth = start.getMonth() === anchor.getMonth() && start.getFullYear() === anchor.getFullYear();
-    const hasDataInCurrentMonth = allDates.some(d => 
-      d.getMonth() === start.getMonth() && d.getFullYear() === start.getFullYear()
-    );
-    
-    if (isCurrentMonth && hasDataInCurrentMonth) {
-      const ranges = [
-        { 
-          s: new Date(start), 
-          e: new Date(start.getFullYear(), start.getMonth(), 7, 23, 59, 59, 999) 
-        },
-        { 
-          s: new Date(start.getFullYear(), start.getMonth(), 8), 
-          e: new Date(start.getFullYear(), start.getMonth(), 14, 23, 59, 59, 999) 
-        },
-        { 
-          s: new Date(start.getFullYear(), start.getMonth(), 15), 
-          e: new Date(start.getFullYear(), start.getMonth(), 21, 23, 59, 59, 999) 
-        },
-        { 
-          s: new Date(start.getFullYear(), start.getMonth(), 22), 
-          e: new Date(end) 
-        },
-      ];
-      
-      ranges.forEach((r, i) => {
-        const { start: s, end: e } = clampRange(r.s, r.e, start, end);
-        // Menghitung nomor minggu aktual dalam tahun
-        const weekNumber = getWeekNumber(s);
-        buckets.push({ 
-          key: `${start.getFullYear()}-${start.getMonth()+1}-W${weekNumber}`, 
-          label: `W${weekNumber}-${fmtMonth(start)}`, 
-          start: s, 
-          end: e 
-        });
-      });
+  let cursor = toStart(rangeStart);
+
+  while (cursor <= rangeEnd) {
+    const monthStart = toStart(cursor);
+    const monthEnd = toEnd(cursor);
+    const { start, end } = clampRange(monthStart, monthEnd, rangeStart, rangeEnd);
+
+    if (start > end) {
+      cursor = addMonths(cursor, 1);
+      continue;
+    }
+
+    const isAnchorMonth =
+      monthStart.getFullYear() === anchor.getFullYear() && monthStart.getMonth() === anchor.getMonth();
+
+    if (isAnchorMonth) {
+      buckets.push(...buildWeekBuckets(start, end, rangeStart, rangeEnd));
     } else {
-      // Monthly view for other months
-      buckets.push({ 
-        key: `${start.getFullYear()}-${start.getMonth()+1}`, 
-        label: fmtMonth(start), 
-        start, 
-        end 
+      buckets.push({
+        key: `${monthStart.getFullYear()}-${monthStart.getMonth() + 1}`,
+        label: fmtMonth(monthStart),
+        start,
+        end,
+        kind: 'month',
       });
     }
-  });
-  
+
+    cursor = addMonths(cursor, 1);
+  }
+
   return buckets;
 }
 
-// Type for aggregated data points
-type Point = { key: string; label: string; forecast: number | null; ready: number | null; active: number | null; planReadiness: number | null };
+function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, rangeEnd: Date): Bucket[] {
+  const weeks: Bucket[] = [];
+  let cursor = new Date(monthStart);
 
-// Hardcoded data for Plan 5G Readiness and Plan 5G Activated
-const hardcodedData = [
-  { label: "W36-Sep", planReadiness: 0, forecast: 0 },
-  { label: "W37-Sep", planReadiness: 20, forecast: 0 },
-  { label: "W38-Sep", planReadiness: 300, forecast: 15 },
-  { label: "W39-Sep", planReadiness: 650, forecast: 300 },
-  { label: "W40-Sep", planReadiness: 1050, forecast: 1018 },
-  { label: "Oct", planReadiness: 3671, forecast: 3255 },
-  { label: "Nov", planReadiness: 6140, forecast: 5613 },
-  { label: "Dec", planReadiness: 7336, forecast: 7334 },
-  { label: "Jan", planReadiness: 7355, forecast: 7346 },
-  { label: "Feb", planReadiness: 7386, forecast: 7386 }
-];
+  while (cursor <= monthEnd) {
+    const weekStart = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate(), 0, 0, 0, 0);
+    const weekEndWithinMonth = new Date(weekStart);
+    weekEndWithinMonth.setDate(weekEndWithinMonth.getDate() + 6);
+    weekEndWithinMonth.setHours(23, 59, 59, 999);
+
+    const monthLimitedEnd = weekEndWithinMonth.getTime() > monthEnd.getTime() ? monthEnd : weekEndWithinMonth;
+    const { start, end } = clampRange(weekStart, monthLimitedEnd, rangeStart, rangeEnd);
+
+    if (start <= end) {
+      const weekNumber = getWeekNumber(start);
+      weeks.push({
+        key: `${start.getFullYear()}-${start.getMonth() + 1}-w${weekNumber}`,
+        label: `W${weekNumber}`,
+        start,
+        end,
+        kind: 'week',
+      });
+    }
+
+    const nextStart = new Date(weekStart);
+    nextStart.setDate(nextStart.getDate() + 7);
+    cursor = nextStart;
+  }
+
+  return weeks;
+}
+
+// Type for aggregated data points
+type Point = {
+  key: string;
+  label: string;
+  forecast: number | null;
+  ready: number | null;
+  active: number | null;
+  planReadiness: number | null;
+};
 
 // Function to aggregate data into buckets with cumulative values
 function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
+  if (!buckets.length) return [];
+
   const inRange = (val?: string | null, s?: Date, e?: Date) => {
     const d = safeDate(val);
     return !!(d && s && e && d >= s && d <= e);
   };
-  
-  // First, calculate individual bucket values for actual data (ready and active)
-  const bucketData = buckets.map((b) => ({
-    key: b.key,
-    label: b.label,
-    ready: rows.reduce((n, r) => n + (inRange(r.imp_integ_af, b.start, b.end) ? 1 : 0), 0),
-    active: rows.reduce((n, r) => n + (inRange(r.rfs_af, b.start, b.end) ? 1 : 0), 0),
-  }));
-  
-  // Find the last bucket that has any data for actual metrics
-  let lastReadyIndex = -1;
-  let lastActiveIndex = -1;
-  
-  for (let i = bucketData.length - 1; i >= 0; i--) {
-    if (bucketData[i].ready > 0 && lastReadyIndex === -1) {
-      lastReadyIndex = i;
-    }
-    if (bucketData[i].active > 0 && lastActiveIndex === -1) {
-      lastActiveIndex = i;
-    }
-  }
-  
-  // Find the overall last data index for actual data
-  const lastDataIndex = Math.max(lastReadyIndex, lastActiveIndex);
-  
-  // If no actual data found, use hardcoded data only
-  if (lastDataIndex === -1) {
-    return hardcodedData.map((item, index) => ({
-      key: `hardcoded-${index}`,
-      label: item.label,
-      forecast: item.forecast,
-      ready: null,
-      active: null,
-      planReadiness: item.planReadiness,
-    }));
-  }
-  
-  // Trim to only include buckets up to the last data point for actual data
-  const trimmedBuckets = bucketData.slice(0, lastDataIndex + 1);
-  
-  // Make actual data cumulative
-  let cumulativeReady = 0;
-  let cumulativeActive = 0;
-  
-  const actualData = trimmedBuckets.map((bucket, index) => {
-    cumulativeReady += bucket.ready;
-    cumulativeActive += bucket.active;
-    
-    const ready = index <= lastReadyIndex ? cumulativeReady : null;
-    const active = index <= lastActiveIndex ? cumulativeActive : null;
-    
+
+  const perBucket = buckets.map((bucket) => {
+    const { start, end } = bucket;
     return {
-      key: bucket.key,
-      label: bucket.label,
-      ready,
-      active,
+      forecast: rows.reduce((total, row) => total + (inRange(row.rfs_forecast_lock, start, end) ? 1 : 0), 0),
+      ready: rows.reduce((total, row) => total + (inRange(row.imp_integ_af, start, end) ? 1 : 0), 0),
+      active: rows.reduce((total, row) => total + (inRange(row.rfs_af, start, end) ? 1 : 0), 0),
+      planReadiness: rows.reduce(
+        (total, row) => total + (inRange(row.mocn_activation_forecast, start, end) ? 1 : 0),
+        0,
+      ),
     };
   });
-  
-  // Combine hardcoded data with actual data
-  // Use hardcoded labels but merge with actual data where available
-  return hardcodedData.map((hardcodedItem, index) => {
-    // Find matching actual data by label or use null
-    const actualItem = actualData.find(actual => 
-      actual.label === hardcodedItem.label || 
-      actual.label.includes(hardcodedItem.label.split('-')[0]) // Match by month
-    );
-    
+
+  let lastForecastIndex = -1;
+  let lastReadyIndex = -1;
+  let lastActiveIndex = -1;
+  let lastPlanReadinessIndex = -1;
+
+  perBucket.forEach((values, index) => {
+    if (values.forecast > 0) lastForecastIndex = index;
+    if (values.ready > 0) lastReadyIndex = index;
+    if (values.active > 0) lastActiveIndex = index;
+    if (values.planReadiness > 0) lastPlanReadinessIndex = index;
+  });
+
+  let cumulativeForecast = 0;
+  let cumulativeReady = 0;
+  let cumulativeActive = 0;
+  let cumulativePlanReadiness = 0;
+
+  return perBucket.map((values, index) => {
+    cumulativeForecast += values.forecast;
+    cumulativeReady += values.ready;
+    cumulativeActive += values.active;
+    cumulativePlanReadiness += values.planReadiness;
+
     return {
-      key: `combined-${index}`,
-      label: hardcodedItem.label,
-      forecast: hardcodedItem.forecast, // Plan 5G Activated (hardcoded)
-      ready: actualItem?.ready || null, // Actual Readiness
-      active: actualItem?.active || null, // Actual Activated
-      planReadiness: hardcodedItem.planReadiness, // Plan 5G Readiness (hardcoded)
+      key: buckets[index].key,
+      label: buckets[index].label,
+      forecast: index <= lastForecastIndex ? cumulativeForecast : null,
+      ready: index <= lastReadyIndex ? cumulativeReady : null,
+      active: index <= lastActiveIndex ? cumulativeActive : null,
+      planReadiness: index <= lastPlanReadinessIndex ? cumulativePlanReadiness : null,
     };
   });
 }
