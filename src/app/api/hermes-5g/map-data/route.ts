@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
     const programReports = searchParams.getAll('program_report') || []
     const impTtps = searchParams.getAll('imp_ttp') || []
     const nanoClusters = searchParams.getAll('nano_cluster') || []
+    const statusFilters = searchParams.getAll('status') || []
 
     const { data } = await getSiteData5G({
       vendor_name: vendorNames.length ? vendorNames : undefined,
@@ -75,6 +76,7 @@ export async function GET(request: NextRequest) {
       imp_ttp: impTtps.length ? impTtps : undefined,
       nano_cluster: nanoClusters.length ? nanoClusters : undefined,
       search: q || undefined,
+      status: statusFilters.length ? statusFilters : undefined,
       limit: 20000
     })
 

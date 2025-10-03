@@ -73,6 +73,10 @@ export function FilterProvider({ children }: FilterProviderProps) {
     setFiltersState(prev => ({ ...prev, regionFilter: region }))
   }, [])
 
+  const setStatusFilters = useCallback((statuses: string[]) => {
+    setFiltersState(prev => ({ ...prev, statusFilters: statuses }))
+  }, [])
+
   const resetFilters = useCallback(() => {
     setFiltersState(DEFAULT_FILTERS)
   }, [])
@@ -95,6 +99,7 @@ export function FilterProvider({ children }: FilterProviderProps) {
     setSearchTerm,
     setStatusFilter,
     setRegionFilter,
+    setStatusFilters,
     resetFilters,
     setFilters
   }

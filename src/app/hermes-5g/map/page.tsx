@@ -80,6 +80,7 @@ export default function Hermes5GMapPage() {
   
   const [points, setPoints] = useState<HermesMapPoint[]>([])
   const [counts, setCounts] = useState<Record<StatusLabel, number>>(() => ({ ...DEFAULT_COUNTS }))
+  const [totalCounts, setTotalCounts] = useState<Record<StatusLabel, number>>(() => ({ ...DEFAULT_COUNTS })) // Total counts untuk status summary
   const [colors, setColors] = useState<Record<StatusLabel, string>>(() => ({ ...DEFAULT_COLORS }))
   const [invalidCoordinates, setInvalidCoordinates] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -92,10 +93,30 @@ export default function Hermes5GMapPage() {
     vendor_name: filterContext.vendorFilter !== 'all' ? filterContext.vendorFilter.split(',').filter(Boolean) : [],
     program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
     imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
-    nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : []
-  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter])
+    nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
+    status: filterContext.statusFilters || []
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.statusFilters])
 
   const totalSites = useMemo(() => points.length, [points])
+  const totalSitesForSummary = useMemo(() => {
+    return Object.values(totalCounts).reduce((sum, count) => sum + count, 0)
+  }, [totalCounts])
+
+  // Handler untuk status click
+  const handleStatusClick = useCallback((status: StatusLabel) => {
+    const currentStatuses = filterContext.statusFilters || []
+    const isSelected = currentStatuses.includes(status)
+    
+    if (isSelected) {
+      // Remove status dari filter
+      const newStatuses = currentStatuses.filter(s => s !== status)
+      filterContext.setStatusFilters(newStatuses)
+    } else {
+      // Add status ke filter
+      const newStatuses = [...currentStatuses, status]
+      filterContext.setStatusFilters(newStatuses)
+    }
+  }, [filterContext])
 
   const loadData = useCallback(async () => {
     try {
@@ -119,6 +140,9 @@ export default function Hermes5GMapPage() {
       currentFilter.nano_cluster.forEach((value) => {
         params.append('nano_cluster', value)
       })
+      currentFilter.status.forEach((value) => {
+        params.append('status', value)
+      })
 
       const url = `/api/hermes-5g/map-data?${params.toString()}`
       console.log('Loading map data with filter:', currentFilter)
@@ -140,11 +164,51 @@ export default function Hermes5GMapPage() {
       setColors(payload.data.colors as Record<StatusLabel, string>)
       setInvalidCoordinates(payload.data.invalidCoordinates || 0)
       setLastUpdated(payload.timestamp)
+
+      // Load total counts for status summary (without status filter)
+      if (currentFilter.status.length > 0) {
+        try {
+          const totalParams = new URLSearchParams()
+          if (currentFilter.q) {
+            totalParams.set('q', currentFilter.q)
+          }
+          currentFilter.vendor_name.forEach((value) => {
+            totalParams.append('vendor_name', value)
+          })
+          currentFilter.program_report.forEach((value) => {
+            totalParams.append('program_report', value)
+          })
+          currentFilter.imp_ttp.forEach((value) => {
+            totalParams.append('imp_ttp', value)
+          })
+          currentFilter.nano_cluster.forEach((value) => {
+            totalParams.append('nano_cluster', value)
+          })
+          // Don't include status filter for total counts
+
+          const totalUrl = `/api/hermes-5g/map-data?${totalParams.toString()}`
+          const totalResponse = await fetch(totalUrl, { cache: 'no-store' })
+          
+          if (totalResponse.ok) {
+            const totalPayload: MapApiResponse = await totalResponse.json()
+            if (totalPayload.status === 'success') {
+              setTotalCounts(totalPayload.data.counts as Record<StatusLabel, number>)
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to load total counts for status summary:', err)
+          // Keep existing totalCounts if failed
+        }
+      } else {
+        // If no status filter, use the same counts
+        setTotalCounts(payload.data.counts as Record<StatusLabel, number>)
+      }
     } catch (err) {
       console.error('Failed to load Hermes 5G map data:', err)
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
       setPoints([])
       setCounts({ ...DEFAULT_COUNTS })
+      setTotalCounts({ ...DEFAULT_COUNTS })
       setColors({ ...DEFAULT_COLORS })
       setInvalidCoordinates(0)
     } finally {
@@ -155,11 +219,6 @@ export default function Hermes5GMapPage() {
   useEffect(() => {
     void loadData()
   }, [loadData])
-
-  // Effect untuk reload data saat filter berubah
-  useEffect(() => {
-    void loadData()
-  }, [currentFilter])
 
   const headerTitle = 'Hermes 5G Progress Map'
 
@@ -263,7 +322,7 @@ export default function Hermes5GMapPage() {
           <aside className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#0B1533]/60 p-5">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-[0.28em] text-white/70">Status Summary</h2>
-              <p className="mt-1 text-2xl font-bold text-white">{totalSites.toLocaleString('en-US')} Sites</p>
+              <p className="mt-1 text-2xl font-bold text-white">{totalSitesForSummary.toLocaleString('en-US')} Sites</p>
               {invalidCoordinates > 0 && (
                 <div className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
                   <div className="flex items-center gap-2">
@@ -281,18 +340,28 @@ export default function Hermes5GMapPage() {
             <div className="space-y-3 text-sm">
               {STATUS_ORDER.map((status) => {
                 const color = colors[status] ?? '#94A3B8'
-                const value = counts[status] ?? 0
-                const percentage = totalSites > 0 ? Math.round((value / totalSites) * 100) : 0
+                const value = totalCounts[status] ?? 0  // Use totalCounts instead of counts
+                const percentage = totalSitesForSummary > 0 ? Math.round((value / totalSitesForSummary) * 100) : 0
+                const isSelected = (filterContext.statusFilters || []).includes(status)
 
                 return (
-                  <div key={status} className="flex items-center justify-between gap-3">
+                  <div 
+                    key={status} 
+                    className={`flex items-center justify-between gap-3 rounded-lg p-2 transition-all duration-200 cursor-pointer hover:bg-white/5 ${
+                      isSelected ? 'bg-white/10 ring-1 ring-white/20' : ''
+                    }`}
+                    onClick={() => handleStatusClick(status)}
+                    title={`Click to ${isSelected ? 'remove' : 'add'} ${status} filter`}
+                  >
                     <div className="flex items-center gap-3">
                       <span
                         className="inline-flex h-3.5 w-3.5 rounded-full"
                         style={{ backgroundColor: color }}
                         aria-hidden="true"
                       />
-                      <span className="text-xs font-medium tracking-[0.24em] text-white/70">{status}</span>
+                      <span className={`text-xs font-medium tracking-[0.24em] ${
+                        isSelected ? 'text-white' : 'text-white/70'
+                      }`}>{status}</span>
                     </div>
                     <div className="flex items-baseline gap-2 font-semibold">
                       <span className="text-base text-white">{value.toLocaleString('en-US')}</span>

@@ -7,6 +7,7 @@ export interface FilterState {
   searchTerm: string;
   statusFilter: string;
   regionFilter: string;
+  statusFilters: string[]; // Array untuk multiple status selection
 }
 
 // Filter Actions Interface
@@ -18,6 +19,7 @@ export interface FilterActions {
   setSearchTerm: (search: string) => void;
   setStatusFilter: (status: string) => void;
   setRegionFilter: (region: string) => void;
+  setStatusFilters: (statuses: string[]) => void; // New action for multiple status selection
   resetFilters: () => void;
   setFilters: (filters: Partial<FilterState>) => void;
 }
@@ -44,5 +46,6 @@ export const DEFAULT_FILTERS: FilterState = {
   nanoClusterFilter: 'all',
   searchTerm: '',
   statusFilter: 'all',
-  regionFilter: 'all'
+  regionFilter: 'all',
+  statusFilters: [] // Empty array untuk no status filters
 };

@@ -37,6 +37,7 @@ export async function getSiteData5G(filters: {
   imp_ttp?: string[]
   nano_cluster?: string[]
   search?: string
+  status?: string[] // New status filter
   limit?: number
   offset?: number
 } = {}) {
@@ -88,6 +89,9 @@ export async function getSiteData5G(filters: {
     query = query.or(`system_key.ilike.%${filters.search}%,site_id.ilike.%${filters.search}%,site_name.ilike.%${filters.search}%,vendor_name.ilike.%${filters.search}%`)
   }
 
+  // Apply status filter - this will be handled after data retrieval
+  // because status is calculated from boolean fields
+
   // Apply pagination
   if (filters.offset !== undefined && filters.limit) {
     query = query.range(filters.offset, filters.offset + filters.limit - 1)
@@ -111,9 +115,29 @@ export async function getSiteData5G(filters: {
       count: count || 0
     }
   }
+
+  // Apply status filter if provided
+  let filteredData = data as unknown as SiteData5G[]
+  
+  if (filters.status && filters.status.length > 0) {
+    filteredData = filteredData.filter(row => {
+      // Determine status based on boolean fields (same logic as in map-data API)
+      let status = 'SOW' // Default status
+      
+      if (row.rfs_af) {
+        status = 'ACTIVE'
+      } else if (row.imp_integ_af) {
+        status = 'READY'
+      } else if (row.caf_approved) {
+        status = 'RFI'
+      }
+      
+      return filters.status!.includes(status)
+    })
+  }
   
   return {
-    data: data as unknown as SiteData5G[],
+    data: filteredData,
     count: count || 0
   }
 }

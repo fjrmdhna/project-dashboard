@@ -12,6 +12,7 @@ export interface FilterValue {
   program_report: string[]
   imp_ttp: string[]
   nano_cluster: string[]
+  status: string[] // New status filter array
 }
 
 // Props untuk FilterBar
@@ -127,7 +128,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [] })
   }
 
   // Handler untuk remove individual filter
@@ -149,7 +150,8 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     (value.vendor_name?.length || 0) > 0 || 
     (value.program_report?.length || 0) > 0 || 
     (value.imp_ttp?.length || 0) > 0 ||
-    (value.nano_cluster?.length || 0) > 0
+    (value.nano_cluster?.length || 0) > 0 ||
+    (value.status?.length || 0) > 0
   
   return (
     <div className="h-full flex flex-col min-w-0">
@@ -310,6 +312,20 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
               <X 
                 className="h-2 w-2 cursor-pointer" 
                 onClick={() => removeFilter('nano_cluster', cluster)} 
+              />
+            </div>
+          ))}
+          
+          {value.status?.map(status => (
+            <div 
+              key={`status-${status}`} 
+              className="bg-orange-500/20 text-orange-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`Status: ${status}`}
+            >
+              <span>S: {truncateText(status, 8)}</span>
+              <X 
+                className="h-2 w-2 cursor-pointer" 
+                onClick={() => removeFilter('status', status)} 
               />
             </div>
           ))}

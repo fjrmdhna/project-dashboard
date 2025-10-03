@@ -29,7 +29,8 @@ export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn
       vendor_name: [],
       program_report: [],
       imp_ttp: [],
-      nano_cluster: []
+      nano_cluster: [],
+      status: []
     }
   )
   
