@@ -130,13 +130,16 @@ function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, ra
 
     if (start <= end) {
       const weekNumber = getWeekNumber(start);
-      weeks.push({
-        key: `${start.getFullYear()}-${start.getMonth() + 1}-w${weekNumber}`,
-        label: `W${weekNumber}`,
-        start,
-        end,
-        kind: 'week',
-      });
+      // Hide W40 because it's already in September
+      if (weekNumber !== 40) {
+        weeks.push({
+          key: `${start.getFullYear()}-${start.getMonth() + 1}-w${weekNumber}`,
+          label: `W${weekNumber}`,
+          start,
+          end,
+          kind: 'week',
+        });
+      }
     }
 
     const nextStart = new Date(weekStart);
