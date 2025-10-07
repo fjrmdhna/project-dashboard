@@ -117,7 +117,12 @@ function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = 
 
 function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, rangeEnd: Date): Bucket[] {
   const weeks: Bucket[] = [];
+  
+  // Find the first Monday of the month or start from monthStart if it's already Monday
   let cursor = new Date(monthStart);
+  const dayOfWeek = cursor.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday = 0, Monday = 1
+  cursor.setDate(cursor.getDate() - daysToMonday);
 
   while (cursor <= monthEnd) {
     const weekStart = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate(), 0, 0, 0, 0);
