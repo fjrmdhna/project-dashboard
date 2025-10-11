@@ -477,8 +477,8 @@ html, body {
 /* Middle column (2) - 4 rows */
 .wallboard-middle-column {
   display: grid;
-  /* Make Matrix row responsive with minmax instead of auto */
-  grid-template-rows: auto minmax(88px, 0.12fr) minmax(150px, 1fr) minmax(180px, 1fr); /* Filter, Matrix(responsive), Progress(fill), Bottom(fill) */
+  /* Make Matrix row auto-height to fit content */
+  grid-template-rows: auto auto minmax(150px, 1fr) minmax(180px, 1fr); /* Filter, Matrix(auto), Progress(fill), Bottom(fill) */
   column-gap: var(--wb-grid-gap);
   row-gap: 0; /* eliminate vertical gap between Filter, Matrix, Progress */
   /* scale down inner content slightly for tighter frames */
@@ -521,21 +521,45 @@ html, body {
 }
 
 .wallboard-matrix-card {
-  height: 100%;
+  height: auto;
   min-height: 0;
   max-height: none;
   align-self: stretch;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
 }
 
 /* Make MatrixStatsCard responsive */
 .matrix-compact {
-  height: 100%;
+  height: auto;
   min-height: 0;
+  max-height: none;
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
+}
+
+/* Ultra compact font sizing for MatrixStatsCard */
+.matrix-compact .text-lg { font-size: 0.75rem !important; line-height: 1.1 !important; }
+.matrix-compact [class*="text-[11px]"] { font-size: 8px !important; line-height: 1.1 !important; }
+.matrix-compact [class*="text-[7px]"] { font-size: 5px !important; line-height: 1.1 !important; }
+.matrix-compact [class*="text-[8px]"] { font-size: 6px !important; line-height: 1.1 !important; }
+
+/* Reduce spacing between milestone items */
+.matrix-compact .flex.flex-wrap.items-center.justify-center.gap-3 {
+  gap: 0.25rem !important;
+}
+
+.matrix-compact .gap-3 {
+  gap: 0.25rem !important;
+}
+
+/* Reduce padding in metric items */
+.matrix-compact .min-w-\[64px\],
+.matrix-compact .min-w-\[56px\] {
+  padding: 0.125rem !important;
 }
 
 /* Shrink typography inside compact matrix */
@@ -727,10 +751,11 @@ html, body {
 /* Compact overrides for progress and bottom rows */
 @media screen and (max-height: 700px) {
   .wallboard-filter-card { min-height: 44px !important; }
-  /* Remove fixed height constraints for matrix card */
-  .wallboard-middle-column {
-    grid-template-rows: auto minmax(72px, 0.1fr) minmax(130px, 1fr) minmax(180px, 1fr); /* Smaller Matrix row in compact mode */
-  }
+    /* Remove fixed height constraints for matrix card */
+    .wallboard-middle-column {
+      /* Make Matrix auto-height to fit content in compact mode */
+      grid-template-rows: auto auto minmax(130px, 1fr) minmax(180px, 1fr); /* Matrix auto-height in compact mode */
+    }
   .wallboard-progress-card { min-height: 130px; }
   .wallboard-progress-card .recharts-cartesian-axis-tick-value { font-size: 10px !important; }
   .wallboard-bottom-card { min-height: 180px; }
@@ -740,7 +765,8 @@ html, body {
 @media screen and (max-height: 600px) {
   /* Even smaller Matrix row in ultra-compact mode */
   .wallboard-middle-column {
-    grid-template-rows: auto minmax(64px, 0.08fr) minmax(120px, 1fr) minmax(160px, 1fr);
+    /* Make Matrix auto-height in ultra-compact mode */
+    grid-template-rows: auto auto minmax(120px, 1fr) minmax(160px, 1fr);
   }
   .wallboard-progress-card { min-height: 120px; }
   .wallboard-bottom-card { min-height: 160px; }

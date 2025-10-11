@@ -187,17 +187,31 @@ function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
     };
   });
 
+  // Calculate total counts for each metric to determine the last index
+  const totalForecast = rows.filter(row => row.rfs_forecast_lock).length;
+  const totalReady = rows.filter(row => row.imp_integ_af).length;
+  const totalActive = rows.filter(row => row.rfs_af).length;
+  const totalPlanReadiness = rows.filter(row => row.mocn_activation_forecast).length;
+
+  // Find the last bucket that has any data for each metric
   let lastForecastIndex = -1;
   let lastReadyIndex = -1;
   let lastActiveIndex = -1;
   let lastPlanReadinessIndex = -1;
 
-  perBucket.forEach((values, index) => {
-    if (values.forecast > 0) lastForecastIndex = index;
-    if (values.ready > 0) lastReadyIndex = index;
-    if (values.active > 0) lastActiveIndex = index;
-    if (values.planReadiness > 0) lastPlanReadinessIndex = index;
-  });
+  // Find the last bucket with data for each metric
+  for (let i = perBucket.length - 1; i >= 0; i--) {
+    if (perBucket[i].forecast > 0 && lastForecastIndex === -1) lastForecastIndex = i;
+    if (perBucket[i].ready > 0 && lastReadyIndex === -1) lastReadyIndex = i;
+    if (perBucket[i].active > 0 && lastActiveIndex === -1) lastActiveIndex = i;
+    if (perBucket[i].planReadiness > 0 && lastPlanReadinessIndex === -1) lastPlanReadinessIndex = i;
+  }
+
+  // If no data found in buckets, set to last bucket to show total
+  if (lastForecastIndex === -1 && totalForecast > 0) lastForecastIndex = perBucket.length - 1;
+  if (lastReadyIndex === -1 && totalReady > 0) lastReadyIndex = perBucket.length - 1;
+  if (lastActiveIndex === -1 && totalActive > 0) lastActiveIndex = perBucket.length - 1;
+  if (lastPlanReadinessIndex === -1 && totalPlanReadiness > 0) lastPlanReadinessIndex = perBucket.length - 1;
 
   let cumulativeForecast = 0;
   let cumulativeReady = 0;
@@ -210,13 +224,19 @@ function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
     cumulativeActive += values.active;
     cumulativePlanReadiness += values.planReadiness;
 
+    // For the last bucket with data, show the total count
+    const finalForecast = index === lastForecastIndex ? totalForecast : Math.min(cumulativeForecast, totalForecast);
+    const finalReady = index === lastReadyIndex ? totalReady : Math.min(cumulativeReady, totalReady);
+    const finalActive = index === lastActiveIndex ? totalActive : Math.min(cumulativeActive, totalActive);
+    const finalPlanReadiness = index === lastPlanReadinessIndex ? totalPlanReadiness : Math.min(cumulativePlanReadiness, totalPlanReadiness);
+
     return {
       key: buckets[index].key,
       label: buckets[index].label,
-      forecast: index <= lastForecastIndex ? cumulativeForecast : null,
-      ready: index <= lastReadyIndex ? cumulativeReady : null,
-      active: index <= lastActiveIndex ? cumulativeActive : null,
-      planReadiness: index <= lastPlanReadinessIndex ? cumulativePlanReadiness : null,
+      forecast: index <= lastForecastIndex ? finalForecast : null,
+      ready: index <= lastReadyIndex ? finalReady : null,
+      active: index <= lastActiveIndex ? finalActive : null,
+      planReadiness: index <= lastPlanReadinessIndex ? finalPlanReadiness : null,
     };
   });
 }
