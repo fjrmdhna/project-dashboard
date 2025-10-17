@@ -145,9 +145,9 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
       </div>
       
       {/* Content */}
-      <div className="flex-1 flex flex-col md:flex-row min-h-0">
+      <div className="flex-1 flex flex-col md:flex-row min-h-0 gap-0">
         {/* Donut Chart (Left) - Larger */}
-        <div className="w-full md:w-3/5 min-h-0 flex-1">
+        <div className="w-full md:w-1/2 min-h-0 flex-1">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -173,7 +173,7 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
         </div>
         
         {/* Issue List (Right) - More Compact */}
-        <div className="w-full md:w-2/5 pl-0 md:pl-1.5 mt-1.5 md:mt-0 min-h-0 flex flex-col">
+        <div className="w-full md:w-1/2 pl-0 md:pl-0 mt-1.5 md:mt-0 min-h-0 flex flex-col">
           <div className="text-[10px] font-semibold text-white mb-0.5">5 Top Issue</div>
           <div className="space-y-0.5 flex-1 overflow-y-auto">
             {chartData.map((issue, index) => (
@@ -182,8 +182,8 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
                   className="w-1.5 h-1.5 rounded-full mt-0.5 flex-shrink-0" 
                   style={{ backgroundColor: issue.color }}
                 />
-                <div className="text-[8px] text-[#B0B7C3] flex-1 truncate">
-                  {issue.category}
+                <div className="text-[8px] text-[#B0B7C3] flex-1 break-words">
+                  {issue.category} [{issue.count}]
                 </div>
               </div>
             ))}
