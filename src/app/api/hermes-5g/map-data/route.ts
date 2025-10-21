@@ -28,6 +28,7 @@ interface MapPoint {
   programReport?: string | null
   impTtp?: string | null
   issueCategory?: string | null
+  nanoCluster?: string | null
   isExcluded?: boolean
 }
 
@@ -114,13 +115,13 @@ export async function GET(request: NextRequest) {
         status,
         lat,
         long,
-      vendorName: row.vendor_name ?? null,
-      siteName: row.site_name ?? null,
-      siteId: row.site_id ?? null,
-      programReport: row.program_report ?? null,
-      impTtp: row.imp_ttp ?? null,
-      issueCategory: (row as any).issue_category ?? null,
-      nanoCluster: row.nano_cluster ?? null
+        vendorName: row.vendor_name ?? null,
+        siteName: row.site_name ?? null,
+        siteId: row.site_id ?? null,
+        programReport: row.program_report ?? null,
+        impTtp: row.imp_ttp ?? null,
+        issueCategory: (row as any).issue_category ?? null,
+        nanoCluster: row.nano_cluster ?? null
       })
 
       seenIds.add(row.system_key)
