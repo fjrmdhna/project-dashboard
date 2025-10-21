@@ -17,6 +17,7 @@ export interface HermesMapPoint {
   programReport?: string | null
   impTtp?: string | null
   issueCategory?: string | null
+  nanoCluster?: string | null
   isExcluded?: boolean
 }
 
@@ -57,6 +58,10 @@ function formatPopup(point: HermesMapPoint) {
 
   if (point.impTtp) {
     rows.push(`IMP TTP: ${point.impTtp}`)
+  }
+
+  if (point.nanoCluster) {
+    rows.push(`Nano Cluster: ${point.nanoCluster}`)
   }
 
   rows.push(`Issue: ${point.issueCategory ? point.issueCategory : 'No issue recorded'}`)
