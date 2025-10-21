@@ -27,12 +27,12 @@ const DASHBOARDS: DashboardCardData[] = [
     accent: "Jakarta, Indonesia"
   },
   {
-    id: "fusion",
-    name: "Fusion",
-    tagline: "Program Operations",
-    description: "Unified performance cockpit for daily field execution.",
-    href: "#",
-    image: "/Fusion_thumbnail.png",
+    id: "aop",
+    name: "AOP",
+    tagline: "Actionable Operations",
+    description: "Operational planning hub for aligning regional execution.",
+    href: "/aop",
+    image: "/AOP_thumbnail.png",
     accent: "Bandung, Indonesia"
   },
   {
@@ -49,7 +49,7 @@ const DASHBOARDS: DashboardCardData[] = [
     name: "TLM",
     tagline: "Tower Lifecycle",
     description: "Asset lifecycle intelligence for upgrade and maintenance.",
-    href: "#",
+    href: "/tlm",
     image: "/TLM_thumbnail.png",
     accent: "Surabaya, Indonesia"
   }

@@ -7,9 +7,9 @@ import Link from "next/link"
 const features = [
   {
     icon: CloudLightning,
-    title: "Fusion",
-    description: "Advanced data integration and synchronization capabilities for seamless system connectivity and real-time updates across all platforms.",
-    href: "#"
+    title: "AOP",
+    description: "Actionable operations planning console to coordinate regional execution and track alignment against targets.",
+    href: "/aop"
   },
   {
     icon: Settings,

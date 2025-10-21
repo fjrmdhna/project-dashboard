@@ -13,6 +13,7 @@ import { TopIssueCard } from "@/components/cards/TopIssueCard"
 import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
 import { VendorLeaderboardCard } from "@/components/cards/VendorLeaderboardCard"
 import { NanoClusterListCard } from "@/components/cards/NewFeatureCard"
+import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
 import { useSiteData } from "@/hooks/useSiteData"
 import { useFilter } from "@/contexts/FilterContext"
 import { useMemo } from "react"
@@ -299,58 +300,11 @@ export default function Hermes5GPage() {
 
   // Header component
   const header = (
-    <div className="flex items-center justify-between h-full w-full px-4">
-      {/* Back button dan Logo Indosat di kiri */}
-      <div className="flex items-center gap-3 flex-shrink-0">
-        {/* Back Button */}
-        <button 
-          onClick={() => window.location.href = '/'}
-          className="flex items-center justify-center w-8 h-8 bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/30 rounded-full transition-all duration-200 group -ml-9 mt-3"
-        >
-          <svg 
-            className="w-4 h-4 text-white group-hover:text-white/90 transition-colors" 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={2} 
-              d="M15 19l-7-7 7-7" 
-            />
-          </svg>
-        </button>
-        
-        {/* Logo Indosat */}
-        <img 
-          src="/logo indosat putih.png" 
-          alt="Indosat Logo" 
-          className="h-8" 
-        />
-      </div>
-      
-      {/* Judul di tengah */}
-      <div className="flex-grow text-center">
-        <h1 className="text-3xl font-bold text-white tracking-wide">DASHBOARD HERMES H2 2025</h1>
-      </div>
-      
-      {/* Tanggal hari ini */}
-      <div className="flex-shrink-0 -mr-9 mt-2 flex flex-col items-end gap-2 text-right">
-        <div className="text-sm font-medium text-white">
-          {formattedDate}
-        </div>
-        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.32em]">
-          <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-3 py-1 font-semibold text-[#34D399]">Overview</span>
-          <Link
-            href="/hermes-5g/map"
-            className="rounded-full border border-white/20 px-3 py-1 font-medium text-white/80 transition hover:bg-white/10"
-          >
-            Map
-          </Link>
-        </div>
-      </div>
-      </div>
+    <ProgramHeader
+      title="Dashboard Hermes H2 2025"
+      dateLabel={formattedDate}
+      mapHref="/hermes-5g/map"
+    />
   )
 
   // FilterBar component

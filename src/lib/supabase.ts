@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { EXCLUDED_PROGRAM_REPORTS, filterExcludedProgramReports, shouldExcludeProgramReport } from './hermes-5g-constants'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://opecotutdvtahsccpqzr.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wZWNvdHV0ZHZ0YWhzY2NwcXpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU1NDU4OTcsImV4cCI6MjA1MTEyMTg5N30.sptjTg-0L1lCep8S_wriw3ixm_sXiTAFX-JiPOQFAEU'
@@ -64,17 +65,23 @@ export async function getSiteData5G(filters: {
     'long'
   ].join(',')
 
+  const sanitizedProgramReports = filterExcludedProgramReports(filters.program_report)
+
   let query = supabase
     .from('site_data_5g')
     .select(columns, { count: 'exact' })
+
+  EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
+    query = query.neq('program_report', excludedProgram)
+  })
 
   // Apply filters
   if (filters.vendor_name && filters.vendor_name.length > 0) {
     query = query.in('vendor_name', filters.vendor_name)
   }
 
-  if (filters.program_report && filters.program_report.length > 0) {
-    query = query.in('program_report', filters.program_report)
+  if (sanitizedProgramReports.length > 0) {
+    query = query.in('program_report', sanitizedProgramReports)
   }
 
   if (filters.imp_ttp && filters.imp_ttp.length > 0) {
@@ -117,8 +124,8 @@ export async function getSiteData5G(filters: {
   }
 
   // Apply status filter if provided
-  let filteredData = data as unknown as SiteData5G[]
-  
+  let filteredData = (data as unknown as SiteData5G[]).filter(row => !shouldExcludeProgramReport(row.program_report))
+
   if (filters.status && filters.status.length > 0) {
     filteredData = filteredData.filter(row => {
       // Determine status based on boolean fields (same logic as in map-data API)
@@ -149,10 +156,16 @@ export async function getFilterOptions() {
     .select('vendor_name')
     .not('vendor_name', 'is', null)
 
-  const { data: programs, error: programError } = await supabase
+  let programQuery = supabase
     .from('site_data_5g')
     .select('program_report')
     .not('program_report', 'is', null)
+
+  EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
+    programQuery = programQuery.neq('program_report', excludedProgram)
+  })
+
+  const { data: programs, error: programError } = await programQuery
 
   const { data: cities, error: cityError } = await supabase
     .from('site_data_5g')
@@ -170,7 +183,7 @@ export async function getFilterOptions() {
 
   return {
     vendors: [...new Set(vendors.map(v => v.vendor_name))].sort(),
-    programs: [...new Set(programs.map(p => p.program_report))].sort(),
+    programs: [...new Set(filterExcludedProgramReports(programs?.map(p => p.program_report)))].sort(),
     cities: [...new Set(cities.map(c => c.imp_ttp))].sort(),
     nanoClusters: [...new Set(nanoClusters.map(nc => nc.nano_cluster))].sort()
   }
