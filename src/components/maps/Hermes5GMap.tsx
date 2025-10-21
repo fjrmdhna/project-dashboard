@@ -17,6 +17,7 @@ export interface HermesMapPoint {
   programReport?: string | null
   impTtp?: string | null
   issueCategory?: string | null
+  isExcluded?: boolean
 }
 
 export interface Hermes5GMapProps {
@@ -29,6 +30,7 @@ export interface Hermes5GMapProps {
 const DEFAULT_CENTER: [number, number] = [-2.5, 118]
 const DEFAULT_ZOOM = 5
 const MAX_ZOOM = 15
+const EXCLUDED_COLOR = '#6B7280'
 
 function formatPopup(point: HermesMapPoint) {
   const rows: string[] = []
@@ -78,7 +80,15 @@ export function Hermes5GMap({ points, colors, loading = false, error = null }: H
       acc[status] = index
       return acc
     }, {} as Record<StatusLabel, number>)
-    return [...points].sort((a, b) => (rank[a.status] ?? 0) - (rank[b.status] ?? 0))
+    return [...points].sort((a, b) => {
+      if (a.isExcluded && !b.isExcluded) {
+        return -1
+      }
+      if (!a.isExcluded && b.isExcluded) {
+        return 1
+      }
+      return (rank[a.status] ?? 0) - (rank[b.status] ?? 0)
+    })
   }, [points])
 
   useEffect(() => {
@@ -138,13 +148,13 @@ export function Hermes5GMap({ points, colors, loading = false, error = null }: H
     const bounds = L.latLngBounds([])
 
     orderedPoints.forEach((point) => {
-      const color = palette[point.status]
+      const color = point.isExcluded ? EXCLUDED_COLOR : (palette[point.status] ?? EXCLUDED_COLOR)
       const marker: CircleMarker = L.circleMarker([point.lat, point.long], {
         radius: 4,
         color,
         fillColor: color,
-        fillOpacity: 0.85,
-        opacity: 0.9,
+        fillOpacity: point.isExcluded ? 0.8 : 0.85,
+        opacity: point.isExcluded ? 0.8 : 0.9,
         weight: 1,
         stroke: false
       })
@@ -173,6 +183,3 @@ export function Hermes5GMap({ points, colors, loading = false, error = null }: H
 }
 
 export default Hermes5GMap
-
-
-

@@ -380,6 +380,9 @@ export default function Hermes5GMapPage() {
                 <li><span className="font-semibold text-white">RFI</span> - CAF acceptance received.</li>
                 <li><span className="font-semibold text-white">SOW</span> - Total registered scope of work.</li>
               </ul>
+              <p className="mt-3 text-white/60">
+                Grey markers highlight <span className="font-semibold text-white">Hermes H1 Project 5G : 1202 sites</span> and remain visible regardless of filter selections.
+              </p>
               {invalidCoordinates > 0 && (
                 <div className="mt-3 pt-3 border-t border-white/10">
                   <p className="text-amber-300 font-medium">
@@ -400,5 +403,4 @@ export default function Hermes5GMapPage() {
     </div>
   )
 }
-
 

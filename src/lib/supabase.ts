@@ -32,7 +32,7 @@ export interface SiteData5G {
 }
 
 // Helper function to get site data with filters
-export async function getSiteData5G(filters: {
+export interface SiteData5GFilters {
   vendor_name?: string[]
   program_report?: string[]
   imp_ttp?: string[]
@@ -41,7 +41,17 @@ export async function getSiteData5G(filters: {
   status?: string[] // New status filter
   limit?: number
   offset?: number
-} = {}) {
+}
+
+export interface SiteData5GOptions {
+  includeExcludedProgramReports?: boolean
+  onlyExcludedProgramReports?: boolean
+}
+
+export async function getSiteData5G(
+  filters: SiteData5GFilters = {},
+  options: SiteData5GOptions = {}
+) {
   // Select only the columns we actually use on the dashboard
   const columns = [
     'system_key',
@@ -65,22 +75,47 @@ export async function getSiteData5G(filters: {
     'long'
   ].join(',')
 
-  const sanitizedProgramReports = filterExcludedProgramReports(filters.program_report)
+  const { includeExcludedProgramReports = false, onlyExcludedProgramReports = false } = options
+
+  const requestedProgramReports =
+    (filters.program_report ?? []).map(value => value?.trim()).filter((value): value is string => Boolean(value))
+
+  const sanitizedProgramReports = onlyExcludedProgramReports
+    ? requestedProgramReports
+    : includeExcludedProgramReports
+      ? requestedProgramReports
+      : filterExcludedProgramReports(requestedProgramReports)
+
+  if (
+    !includeExcludedProgramReports &&
+    !onlyExcludedProgramReports &&
+    requestedProgramReports.length > 0 &&
+    sanitizedProgramReports.length === 0
+  ) {
+    return {
+      data: [] as SiteData5G[],
+      count: 0
+    }
+  }
 
   let query = supabase
     .from('site_data_5g')
     .select(columns, { count: 'exact' })
 
-  EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-    query = query.neq('program_report', excludedProgram)
-  })
+  if (onlyExcludedProgramReports) {
+    query = query.in('program_report', [...EXCLUDED_PROGRAM_REPORTS])
+  } else if (!includeExcludedProgramReports) {
+    EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
+      query = query.neq('program_report', excludedProgram)
+    })
+  }
 
   // Apply filters
   if (filters.vendor_name && filters.vendor_name.length > 0) {
     query = query.in('vendor_name', filters.vendor_name)
   }
 
-  if (sanitizedProgramReports.length > 0) {
+  if (!onlyExcludedProgramReports && sanitizedProgramReports.length > 0) {
     query = query.in('program_report', sanitizedProgramReports)
   }
 
@@ -124,7 +159,13 @@ export async function getSiteData5G(filters: {
   }
 
   // Apply status filter if provided
-  let filteredData = (data as unknown as SiteData5G[]).filter(row => !shouldExcludeProgramReport(row.program_report))
+  let filteredData = data as unknown as SiteData5G[]
+
+  if (onlyExcludedProgramReports) {
+    filteredData = filteredData.filter(row => shouldExcludeProgramReport(row.program_report))
+  } else if (!includeExcludedProgramReports) {
+    filteredData = filteredData.filter(row => !shouldExcludeProgramReport(row.program_report))
+  }
 
   if (filters.status && filters.status.length > 0) {
     filteredData = filteredData.filter(row => {

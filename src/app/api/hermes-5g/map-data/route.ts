@@ -28,6 +28,7 @@ interface MapPoint {
   programReport?: string | null
   impTtp?: string | null
   issueCategory?: string | null
+  isExcluded?: boolean
 }
 
 function parseCoordinate(value: unknown): number | null {
@@ -80,6 +81,11 @@ export async function GET(request: NextRequest) {
       limit: 20000
     })
 
+    const { data: excludedData } = await getSiteData5G(
+      { limit: 20000 },
+      { includeExcludedProgramReports: true, onlyExcludedProgramReports: true }
+    )
+
     const counts: Record<StatusLabel, number> = {
       [STATUS_LABEL.active]: 0,
       [STATUS_LABEL.ready]: 0,
@@ -89,6 +95,7 @@ export async function GET(request: NextRequest) {
 
     const points: MapPoint[] = []
     let invalidCoordinatesCount = 0
+    const seenIds = new Set<string>()
 
     for (const row of data) {
       const lat = parseCoordinate(row.lat)
@@ -113,6 +120,36 @@ export async function GET(request: NextRequest) {
         programReport: row.program_report ?? null,
         impTtp: row.imp_ttp ?? null,
         issueCategory: (row as any).issue_category ?? null
+      })
+
+      seenIds.add(row.system_key)
+    }
+
+    for (const row of excludedData) {
+      if (seenIds.has(row.system_key)) {
+        continue
+      }
+
+      const lat = parseCoordinate(row.lat)
+      const long = parseCoordinate(row.long)
+
+      if (lat === null || long === null) {
+        invalidCoordinatesCount++
+        continue
+      }
+
+      points.push({
+        id: row.system_key,
+        status: resolveStatus(row),
+        lat,
+        long,
+        vendorName: row.vendor_name ?? null,
+        siteName: row.site_name ?? null,
+        siteId: row.site_id ?? null,
+        programReport: row.program_report ?? null,
+        impTtp: row.imp_ttp ?? null,
+        issueCategory: (row as any).issue_category ?? null,
+        isExcluded: true
       })
     }
 
@@ -144,4 +181,3 @@ export async function GET(request: NextRequest) {
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
