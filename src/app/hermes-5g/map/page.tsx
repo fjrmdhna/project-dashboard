@@ -86,6 +86,7 @@ export default function Hermes5GMapPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+  const [showExcluded, setShowExcluded] = useState(true)
   
   // Convert filter context to FilterValue format - support multiselect
   const currentFilter: FilterValue = useMemo(() => ({
@@ -97,7 +98,11 @@ export default function Hermes5GMapPage() {
     status: filterContext.statusFilters || []
   }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.statusFilters])
 
-  const totalSites = useMemo(() => points.length, [points])
+  const visiblePoints = useMemo(
+    () => (showExcluded ? points : points.filter(point => !point.isExcluded)),
+    [points, showExcluded]
+  )
+
   const totalSitesForSummary = useMemo(() => {
     return Object.values(totalCounts).reduce((sum, count) => sum + count, 0)
   }, [totalCounts])
@@ -316,7 +321,7 @@ export default function Hermes5GMapPage() {
 
         <div className="grid flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="relative min-h-[420px] overflow-hidden rounded-2xl border border-white/10 bg-[#0B1533]/60">
-            <Hermes5GMap points={points} colors={colors} loading={loading} error={error} />
+            <Hermes5GMap points={visiblePoints} colors={colors} loading={loading} error={error} />
           </div>
 
           <aside className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#0B1533]/60 p-5">
@@ -335,6 +340,19 @@ export default function Hermes5GMapPage() {
                   </div>
                 </div>
               )}
+              <label
+                htmlFor="toggle-excluded-markers"
+                className="mt-3 flex cursor-pointer items-center gap-2 text-xs font-medium text-white/70"
+              >
+                <input
+                  id="toggle-excluded-markers"
+                  type="checkbox"
+                  checked={showExcluded}
+                  onChange={(event) => setShowExcluded(event.target.checked)}
+                  className="h-4 w-4 rounded border-white/30 bg-transparent text-white focus:ring-0"
+                />
+                <span>Show Hermes H1 markers</span>
+              </label>
             </div>
 
             <div className="space-y-3 text-sm">
@@ -381,7 +399,7 @@ export default function Hermes5GMapPage() {
                 <li><span className="font-semibold text-white">SOW</span> - Total registered scope of work.</li>
               </ul>
               <p className="mt-3 text-white/60">
-                Grey markers highlight <span className="font-semibold text-white">Hermes H1 Project 5G : 1202 sites</span> and remain visible regardless of filter selections.
+                Grey markers highlight <span className="font-semibold text-white">Hermes H1 Project 5G : 1202 sites</span>. Use the toggle above to include or hide them on the map.
               </p>
               {invalidCoordinates > 0 && (
                 <div className="mt-3 pt-3 border-t border-white/10">
@@ -403,4 +421,3 @@ export default function Hermes5GMapPage() {
     </div>
   )
 }
-
