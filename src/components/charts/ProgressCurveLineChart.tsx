@@ -3,7 +3,6 @@
 import { useMemo } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line } from 'recharts';
-import type { TooltipProps } from 'recharts';
 
 export type Row = {
   rfs_forecast_lock?: string | null; // forecast date
@@ -59,6 +58,19 @@ const getTooltipOrderIndex = (key?: string | number | null) => {
   if (key === undefined || key === null) return TOOLTIP_ORDER.length;
   const idx = TOOLTIP_ORDER.indexOf(String(key));
   return idx === -1 ? TOOLTIP_ORDER.length : idx;
+};
+
+type ProgressCurveTooltipItem = {
+  dataKey?: string | number;
+  name?: string | number;
+  color?: string;
+  value?: number | string;
+};
+
+type ProgressCurveTooltipProps = {
+  active?: boolean;
+  label?: string | number;
+  payload?: ProgressCurveTooltipItem[];
 };
 
 function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = []): Bucket[] {
@@ -335,7 +347,7 @@ const valueFormatter = (value: any): string => {
   return !isNaN(numValue) && numValue > 0 ? numValue.toLocaleString() : '';
 };
 
-const ProgressCurveTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
+const ProgressCurveTooltip = ({ active, payload, label }: ProgressCurveTooltipProps) => {
   if (!active || !payload?.length) return null;
 
   const sortedPayload = [...payload].sort(
