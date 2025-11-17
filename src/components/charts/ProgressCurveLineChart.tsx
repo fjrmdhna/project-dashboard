@@ -166,7 +166,7 @@ type Point = {
 };
 
 // Function to aggregate data into buckets with cumulative values
-function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
+function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[] {
   if (!buckets.length) return [];
 
   const inRange = (val?: string | null, s?: Date, e?: Date) => {
@@ -174,7 +174,7 @@ function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
     return !!(d && s && e && d >= s && d <= e);
   };
 
-  const perBucket = buckets.map((bucket) => {
+  const rawPerBucket = buckets.map((bucket) => {
     const { start, end } = bucket;
     return {
       forecast: rows.reduce((total, row) => total + (inRange(row.rfs_forecast_lock, start, end) ? 1 : 0), 0),
@@ -184,6 +184,69 @@ function aggregate(rows: Row[], buckets: Bucket[]): Point[] {
         (total, row) => total + (inRange(row.mocn_activation_forecast, start, end) ? 1 : 0),
         0,
       ),
+    };
+  });
+
+  const referenceDate = anchorDate ? new Date(anchorDate) : new Date();
+  const referenceTime = isNaN(+referenceDate) ? Date.now() : referenceDate.getTime();
+
+  let carryForecast = 0;
+  let carryPlanReadiness = 0;
+
+  let baseForecastCumulative = 0;
+  let basePlanReadinessCumulative = 0;
+  let adjustedForecastCumulative = 0;
+  let adjustedPlanReadinessCumulative = 0;
+  let actualForecastCumulative = 0;
+  let actualReadinessCumulative = 0;
+
+  // Traverse buckets chronologically so that any surplus plan is cascaded forward.
+  const perBucket = rawPerBucket.map((values, index) => {
+    const bucket = buckets[index];
+    const bucketHasElapsed = bucket.end.getTime() < referenceTime;
+
+    const planForecastWithCarry = values.forecast + carryForecast;
+    const planReadinessWithCarry = values.planReadiness + carryPlanReadiness;
+
+    const previousAdjustedForecastCumulative = adjustedForecastCumulative;
+    const previousAdjustedPlanReadinessCumulative = adjustedPlanReadinessCumulative;
+
+    baseForecastCumulative += planForecastWithCarry;
+    basePlanReadinessCumulative += planReadinessWithCarry;
+
+    actualForecastCumulative += values.active;
+    actualReadinessCumulative += values.ready;
+
+    let adjustedForecast = planForecastWithCarry;
+    let adjustedPlanReadiness = planReadinessWithCarry;
+
+    if (bucketHasElapsed) {
+      const allowedForecastCumulative = Math.min(baseForecastCumulative, actualForecastCumulative);
+      const allowedPlanReadinessCumulative = Math.min(basePlanReadinessCumulative, actualReadinessCumulative);
+
+      adjustedForecastCumulative = Math.max(allowedForecastCumulative, 0);
+      adjustedPlanReadinessCumulative = Math.max(allowedPlanReadinessCumulative, 0);
+
+      adjustedForecast = Math.max(
+        0,
+        adjustedForecastCumulative - previousAdjustedForecastCumulative,
+      );
+      adjustedPlanReadiness = Math.max(
+        0,
+        adjustedPlanReadinessCumulative - previousAdjustedPlanReadinessCumulative,
+      );
+    } else {
+      adjustedForecastCumulative += planForecastWithCarry;
+      adjustedPlanReadinessCumulative += planReadinessWithCarry;
+    }
+
+    carryForecast = baseForecastCumulative - adjustedForecastCumulative;
+    carryPlanReadiness = basePlanReadinessCumulative - adjustedPlanReadinessCumulative;
+
+    return {
+      ...values,
+      forecast: adjustedForecast,
+      planReadiness: adjustedPlanReadiness,
     };
   });
 
@@ -452,7 +515,7 @@ const PlanReadinessDotWithLabel = (props: any) => {
 export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, className }: ProgressCurveProps) {
   // Memoize buckets and data to prevent unnecessary recalculations
   const buckets = useMemo(() => buildHybridBuckets(anchorDate, monthsSpan as 3|5, rows ?? []), [anchorDate, monthsSpan, rows]);
-  const data = useMemo(() => aggregate(rows ?? [], buckets), [rows, buckets]);
+  const data = useMemo(() => aggregate(rows ?? [], buckets, anchorDate), [rows, buckets, anchorDate]);
 
 
   return (
