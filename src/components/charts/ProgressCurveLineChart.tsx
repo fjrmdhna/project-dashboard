@@ -358,16 +358,18 @@ const ProgressCurveTooltip = ({ active, payload, label }: ProgressCurveTooltipPr
     .map((item) => {
       const formatted = valueFormatter(item.value);
       if (!formatted) return null;
+      const name = item.name ?? item.dataKey ?? '';
       return {
-        key: `${item.dataKey ?? item.name}`,
-        name: item.name ?? item.dataKey,
+        key: `${item.dataKey ?? item.name ?? ''}`,
+        name,
         value: formatted,
         color: item.color ?? '#FFFFFF',
       };
     })
-    .filter((item): item is { key: string; name?: string | number; value: string; color: string } =>
-      Boolean(item),
-    );
+    .filter((item): item is { key: string; name: string | number; value: string; color: string } => {
+      if (!item) return false;
+      return item.name !== undefined && item.name !== null && item.name !== '';
+    });
 
   if (!values.length) return null;
 
