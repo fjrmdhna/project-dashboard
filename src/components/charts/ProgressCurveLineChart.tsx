@@ -45,6 +45,14 @@ const getWeekNumber = (date: Date): number => {
 // Type for date buckets
 type Bucket = { key: string; label: string; start: Date; end: Date; kind: 'month' | 'week' };
 
+const WEEK_PLAN_PADDING_PATTERN = [1, 2, 1, 3];
+const MONTH_PLAN_PADDING_PATTERN = [2, 1, 3];
+
+const getPlanPaddingValue = (bucket: Bucket, index: number) => {
+  const pattern = bucket.kind === 'week' ? WEEK_PLAN_PADDING_PATTERN : MONTH_PLAN_PADDING_PATTERN;
+  return pattern[index % pattern.length] ?? 1;
+};
+
 function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = []): Bucket[] {
   const anchor = toStart(anchorDate ? new Date(anchorDate) : new Date());
 
@@ -193,55 +201,63 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
   let carryForecast = 0;
   let carryPlanReadiness = 0;
 
-  let baseForecastCumulative = 0;
-  let basePlanReadinessCumulative = 0;
   let adjustedForecastCumulative = 0;
   let adjustedPlanReadinessCumulative = 0;
   let actualForecastCumulative = 0;
   let actualReadinessCumulative = 0;
 
-  // Traverse buckets chronologically so that any surplus plan is cascaded forward.
+  // Traverse buckets chronologically so plan surplus flows forward and padding stays bounded.
   const perBucket = rawPerBucket.map((values, index) => {
     const bucket = buckets[index];
     const bucketHasElapsed = bucket.end.getTime() < referenceTime;
 
-    const planForecastWithCarry = values.forecast + carryForecast;
-    const planReadinessWithCarry = values.planReadiness + carryPlanReadiness;
-
-    const previousAdjustedForecastCumulative = adjustedForecastCumulative;
-    const previousAdjustedPlanReadinessCumulative = adjustedPlanReadinessCumulative;
-
-    baseForecastCumulative += planForecastWithCarry;
-    basePlanReadinessCumulative += planReadinessWithCarry;
-
     actualForecastCumulative += values.active;
     actualReadinessCumulative += values.ready;
 
-    let adjustedForecast = planForecastWithCarry;
-    let adjustedPlanReadiness = planReadinessWithCarry;
+    const hasForecastValues = values.active > 0 || values.forecast > 0;
+    const hasPlanReadinessValues = values.ready > 0 || values.planReadiness > 0;
+
+    const padding = bucketHasElapsed ? getPlanPaddingValue(bucket, index) : 0;
+    const forecastPadding = bucketHasElapsed && hasForecastValues ? padding : 0;
+    const readinessPadding = bucketHasElapsed && hasPlanReadinessValues ? padding : 0;
+
+    const planForecastWithCarry = values.forecast + carryForecast;
+    const planReadinessWithCarry = values.planReadiness + carryPlanReadiness;
+
+    const proposedForecastCumulative = adjustedForecastCumulative + planForecastWithCarry;
+    const proposedPlanReadinessCumulative = adjustedPlanReadinessCumulative + planReadinessWithCarry;
+
+    let allowedForecastCumulative = proposedForecastCumulative;
+    let allowedPlanReadinessCumulative = proposedPlanReadinessCumulative;
 
     if (bucketHasElapsed) {
-      const allowedForecastCumulative = Math.min(baseForecastCumulative, actualForecastCumulative);
-      const allowedPlanReadinessCumulative = Math.min(basePlanReadinessCumulative, actualReadinessCumulative);
-
-      adjustedForecastCumulative = Math.max(allowedForecastCumulative, 0);
-      adjustedPlanReadinessCumulative = Math.max(allowedPlanReadinessCumulative, 0);
-
-      adjustedForecast = Math.max(
-        0,
-        adjustedForecastCumulative - previousAdjustedForecastCumulative,
+      const maxForecastCumulative = Math.max(
+        actualForecastCumulative + forecastPadding,
+        adjustedForecastCumulative,
       );
-      adjustedPlanReadiness = Math.max(
-        0,
-        adjustedPlanReadinessCumulative - previousAdjustedPlanReadinessCumulative,
+      const maxPlanReadinessCumulative = Math.max(
+        actualReadinessCumulative + readinessPadding,
+        adjustedPlanReadinessCumulative,
       );
-    } else {
-      adjustedForecastCumulative += planForecastWithCarry;
-      adjustedPlanReadinessCumulative += planReadinessWithCarry;
+
+      allowedForecastCumulative = Math.min(proposedForecastCumulative, maxForecastCumulative);
+      allowedPlanReadinessCumulative = Math.min(proposedPlanReadinessCumulative, maxPlanReadinessCumulative);
     }
 
-    carryForecast = baseForecastCumulative - adjustedForecastCumulative;
-    carryPlanReadiness = basePlanReadinessCumulative - adjustedPlanReadinessCumulative;
+    const adjustedForecast = Math.max(allowedForecastCumulative - adjustedForecastCumulative, 0);
+    const adjustedPlanReadiness = Math.max(
+      allowedPlanReadinessCumulative - adjustedPlanReadinessCumulative,
+      0,
+    );
+
+    carryForecast = Math.max(proposedForecastCumulative - allowedForecastCumulative, 0);
+    carryPlanReadiness = Math.max(
+      proposedPlanReadinessCumulative - allowedPlanReadinessCumulative,
+      0,
+    );
+
+    adjustedForecastCumulative = allowedForecastCumulative;
+    adjustedPlanReadinessCumulative = allowedPlanReadinessCumulative;
 
     return {
       ...values,
@@ -311,7 +327,7 @@ const valueFormatter = (value: any): string => {
   return !isNaN(numValue) && numValue > 0 ? numValue.toLocaleString() : '';
 };
 
-// Custom dot with label for Forecast (Purple) - Label to the right of point
+// Custom dot with label for Forecast (Purple) - Label below left of point
 const ForecastDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.forecast;
@@ -326,10 +342,10 @@ const ForecastDotWithLabel = (props: any) => {
       {/* Dot */}
       <circle cx={cx} cy={cy} r={3} fill="#8A5AA3" />
       
-      {/* Background rectangle with purple color - Right of point */}
+      {/* Background rectangle with purple color - Below left of point */}
       <rect
-        x={cx + 6}
-        y={cy - 6}
+        x={cx - 22}
+        y={cy + 4}
         width={16}
         height={12}
         fill="rgba(138, 90, 163, 0.95)"
@@ -343,8 +359,8 @@ const ForecastDotWithLabel = (props: any) => {
       />
       {/* Text label */}
       <text
-        x={cx + 14}
-        y={cy}
+        x={cx - 14}
+        y={cy + 10}
         textAnchor="middle"
         dominantBaseline="central"
         fill="#FFFFFF"
@@ -361,7 +377,7 @@ const ForecastDotWithLabel = (props: any) => {
   );
 };
 
-// Custom dot with label for Readiness (Red) - Label to the left of point
+// Custom dot with label for Readiness (Red) - Label above right of point
 const ReadinessDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.ready;
@@ -376,10 +392,10 @@ const ReadinessDotWithLabel = (props: any) => {
       {/* Dot */}
       <circle cx={cx} cy={cy} r={3} fill="#E53935" />
       
-      {/* Background rectangle with red color - Left of point */}
+      {/* Background rectangle with red color - Above right of point */}
       <rect
-        x={cx - 22}
-        y={cy - 6}
+        x={cx + 6}
+        y={cy - 16}
         width={16}
         height={12}
         fill="rgba(229, 57, 53, 0.95)"
@@ -393,57 +409,7 @@ const ReadinessDotWithLabel = (props: any) => {
       />
       {/* Text label */}
       <text
-        x={cx - 14}
-        y={cy}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill="#FFFFFF"
-        fontSize={8}
-        fontWeight={600}
-        style={{
-          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
-          textShadow: '0px 0px 3px rgba(0,0,0,1)'
-        }}
-      >
-        {Number(value).toLocaleString()}
-      </text>
-    </g>
-  );
-};
-
-// Custom dot with label for Activated (Green) - Label above left of point
-const ActivatedDotWithLabel = (props: any) => {
-  const { cx, cy, payload } = props;
-  const value = payload?.active;
-  
-  // Don't render if value is null, 0, or empty
-  if (value === null || !value || value === '0' || value === '') {
-    return null; // Don't render dot at all for null values
-  }
-  
-  return (
-    <g>
-      {/* Dot */}
-      <circle cx={cx} cy={cy} r={3} fill="#7CB342" />
-      
-      {/* Background rectangle with green color - Above left of point */}
-      <rect
-        x={cx - 22}
-        y={cy - 16}
-        width={16}
-        height={12}
-        fill="rgba(124, 179, 66, 0.95)"
-        rx={3}
-        ry={3}
-        stroke="rgba(255, 255, 255, 0.5)"
-        strokeWidth={1}
-        style={{
-          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
-        }}
-      />
-      {/* Text label */}
-      <text
-        x={cx - 14}
+        x={cx + 14}
         y={cy - 10}
         textAnchor="middle"
         dominantBaseline="central"
@@ -461,7 +427,57 @@ const ActivatedDotWithLabel = (props: any) => {
   );
 };
 
-// Custom dot with label for Plan 5G Readiness (Blue) - Label above right of point
+// Custom dot with label for Activated (Green) - Label below right of point
+const ActivatedDotWithLabel = (props: any) => {
+  const { cx, cy, payload } = props;
+  const value = payload?.active;
+  
+  // Don't render if value is null, 0, or empty
+  if (value === null || !value || value === '0' || value === '') {
+    return null; // Don't render dot at all for null values
+  }
+  
+  return (
+    <g>
+      {/* Dot */}
+      <circle cx={cx} cy={cy} r={3} fill="#7CB342" />
+      
+      {/* Background rectangle with green color - Below right of point */}
+      <rect
+        x={cx + 6}
+        y={cy + 4}
+        width={16}
+        height={12}
+        fill="rgba(124, 179, 66, 0.95)"
+        rx={3}
+        ry={3}
+        stroke="rgba(255, 255, 255, 0.5)"
+        strokeWidth={1}
+        style={{
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
+        }}
+      />
+      {/* Text label */}
+      <text
+        x={cx + 14}
+        y={cy + 10}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="#FFFFFF"
+        fontSize={8}
+        fontWeight={600}
+        style={{
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
+          textShadow: '0px 0px 3px rgba(0,0,0,1)'
+        }}
+      >
+        {Number(value).toLocaleString()}
+      </text>
+    </g>
+  );
+};
+
+// Custom dot with label for Plan 5G Readiness (Blue) - Label above left of point
 const PlanReadinessDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.planReadiness;
@@ -476,9 +492,9 @@ const PlanReadinessDotWithLabel = (props: any) => {
       {/* Dot */}
       <circle cx={cx} cy={cy} r={3} fill="#2196F3" />
       
-      {/* Background rectangle with blue color - Above right of point */}
+      {/* Background rectangle with blue color - Above left of point */}
       <rect
-        x={cx + 6}
+        x={cx - 22}
         y={cy - 16}
         width={16}
         height={12}
@@ -493,7 +509,7 @@ const PlanReadinessDotWithLabel = (props: any) => {
       />
       {/* Text label */}
       <text
-        x={cx + 14}
+        x={cx - 14}
         y={cy - 10}
         textAnchor="middle"
         dominantBaseline="central"
