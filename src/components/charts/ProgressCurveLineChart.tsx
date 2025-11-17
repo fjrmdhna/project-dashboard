@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line } from 'recharts';
+import type { TooltipProps } from 'recharts';
 
 export type Row = {
   rfs_forecast_lock?: string | null; // forecast date
@@ -51,6 +52,13 @@ const MONTH_PLAN_PADDING_PATTERN = [2, 1, 3];
 const getPlanPaddingValue = (bucket: Bucket, index: number) => {
   const pattern = bucket.kind === 'week' ? WEEK_PLAN_PADDING_PATTERN : MONTH_PLAN_PADDING_PATTERN;
   return pattern[index % pattern.length] ?? 1;
+};
+
+const TOOLTIP_ORDER: Array<string> = ['planReadiness', 'ready', 'forecast', 'active'];
+const getTooltipOrderIndex = (key?: string | number | null) => {
+  if (key === undefined || key === null) return TOOLTIP_ORDER.length;
+  const idx = TOOLTIP_ORDER.indexOf(String(key));
+  return idx === -1 ? TOOLTIP_ORDER.length : idx;
 };
 
 function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = []): Bucket[] {
@@ -327,6 +335,71 @@ const valueFormatter = (value: any): string => {
   return !isNaN(numValue) && numValue > 0 ? numValue.toLocaleString() : '';
 };
 
+const ProgressCurveTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
+  if (!active || !payload?.length) return null;
+
+  const sortedPayload = [...payload].sort(
+    (a, b) => getTooltipOrderIndex(a.dataKey) - getTooltipOrderIndex(b.dataKey),
+  );
+
+  const values = sortedPayload
+    .map((item) => {
+      const formatted = valueFormatter(item.value);
+      if (!formatted) return null;
+      return {
+        key: `${item.dataKey ?? item.name}`,
+        name: item.name ?? item.dataKey,
+        value: formatted,
+        color: item.color ?? '#FFFFFF',
+      };
+    })
+    .filter((item): item is { key: string; name?: string | number; value: string; color: string } =>
+      Boolean(item),
+    );
+
+  if (!values.length) return null;
+
+  return (
+    <div
+      style={{
+        backgroundColor: '#1A2035',
+        border: '1px solid rgba(255,255,255,0.1)',
+        fontSize: '10px',
+        padding: '6px 8px',
+        borderRadius: '6px',
+        minWidth: '120px',
+      }}
+    >
+      <div
+        style={{
+          color: '#B0B7C3',
+          fontSize: '11px',
+          fontWeight: 600,
+          marginBottom: '2px',
+        }}
+      >
+        {label}
+      </div>
+      {values.map((item) => (
+        <div
+          key={item.key}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            color: '#FFFFFF',
+            lineHeight: 1.3,
+          }}
+        >
+          <span style={{ color: item.color, fontWeight: 600 }}>{item.name}</span>
+          <span>{item.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // Custom dot with label for Forecast (Purple) - Label below left of point
 const ForecastDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
@@ -563,28 +636,14 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
               width={20}
             />
             <Tooltip 
-              formatter={(value) => Number(value).toLocaleString()} 
-              contentStyle={{ 
-                backgroundColor: '#1A2035', 
-                borderColor: 'rgba(255,255,255,0.1)',
-                fontSize: '10px',
-                padding: '6px 8px',
-                borderRadius: '6px'
-              }}
-              labelStyle={{ 
-                color: '#B0B7C3',
-                fontSize: '11px',
-                fontWeight: '600',
-                marginBottom: '2px'
-              }}
+              content={<ProgressCurveTooltip />}
             />
              <Line 
-               dataKey="forecast" 
-               name="Plan 5G Activated" 
-               stroke="#8A5AA3" 
-               strokeWidth={1} 
-               dot={<ForecastDotWithLabel />}
-               activeDot={{ r:2 }}
+               dataKey="planReadiness" 
+               name="Plan 5G Readiness" 
+               stroke="#2196F3" 
+               strokeWidth={0.8} 
+               dot={<PlanReadinessDotWithLabel />}
                isAnimationActive={false}
              />
              <Line 
@@ -596,19 +655,20 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
                isAnimationActive={false}
              />
              <Line 
+               dataKey="forecast" 
+               name="Plan 5G Activated" 
+               stroke="#8A5AA3" 
+               strokeWidth={1} 
+               dot={<ForecastDotWithLabel />}
+               activeDot={{ r:2 }}
+               isAnimationActive={false}
+             />
+             <Line 
                dataKey="active" 
                name="Activated" 
                stroke="#7CB342" 
                strokeWidth={0.8} 
                dot={<ActivatedDotWithLabel />}
-               isAnimationActive={false}
-             />
-             <Line 
-               dataKey="planReadiness" 
-               name="Plan 5G Readiness" 
-               stroke="#2196F3" 
-               strokeWidth={0.8} 
-               dot={<PlanReadinessDotWithLabel />}
                isAnimationActive={false}
              />
             <Legend verticalAlign="bottom" align="center" wrapperStyle={{ marginTop: 0, paddingTop: 0 }} iconType="circle" iconSize={3} />
