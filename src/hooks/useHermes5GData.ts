@@ -118,16 +118,18 @@ export function useHermes5GData(options: UseHermes5GDataOptions = {}): UseHermes
       cacheTime: 5 * 60 * 1000, // 5 menit
       refetchOnMount: true,
       validateFn: (data) => {
+        // Type guard untuk memastikan data adalah Hermes5GData
+        const typedData = data as Hermes5GData
         // Hanya cache jika semua data sukses dan tidak kosong
         return (
-          data.siteData.rows.length > 0 &&
-          data.siteData.count > 0 &&
-          Array.isArray(data.topIssues.data) &&
-          data.topIssues.data.length > 0 &&
-          Array.isArray(data.dailyRunrate) &&
-          data.dailyRunrate.length > 0 &&
-          Array.isArray(data.vendorLeaderboard.data) &&
-          data.vendorLeaderboard.data.length > 0
+          typedData.siteData?.rows?.length > 0 &&
+          typedData.siteData?.count > 0 &&
+          Array.isArray(typedData.topIssues?.data) &&
+          typedData.topIssues.data.length > 0 &&
+          Array.isArray(typedData.dailyRunrate) &&
+          typedData.dailyRunrate.length > 0 &&
+          Array.isArray(typedData.vendorLeaderboard?.data) &&
+          typedData.vendorLeaderboard.data.length > 0
         )
       }
     }

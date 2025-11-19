@@ -144,14 +144,14 @@ async function getProjectProgressFallback(
     }
 
     // Hitung scope (system_key yang tidak null/undefined dan tidak kosong)
-    const scope = data.filter((row) => {
+    const scope = data.filter((row: any) => {
       const systemKey = row.system_key
       return systemKey != null && systemKey !== "" && typeof systemKey === "string"
     }).length
 
     // Hitung activated (rfs_af yang tidak null/undefined)
     // rfs_af adalah timestamp, jadi cukup cek IS NOT NULL
-    const activated = data.filter((row) => row.rfs_af != null).length
+    const activated = data.filter((row: any) => row.rfs_af != null).length
 
     // Hitung progress percentage dengan pembulatan
     const progress = scope > 0 ? Math.round((activated / scope) * 100) : 0

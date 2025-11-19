@@ -65,7 +65,8 @@ export function useTopIssueData(options: UseTopIssueDataOptions = {}): UseTopIss
       validateFn: (data) => {
         // Cache semua valid data (termasuk empty) untuk mencegah infinite refetch
         // Empty data akan di-cache dengan expiry lebih pendek (1 menit)
-        return data !== null && data !== undefined && typeof data === 'object' && Array.isArray(data.data)
+        const typedData = data as { data?: TopIssue[], topIssuesTotal?: number, totalIssues?: number }
+        return data !== null && data !== undefined && typeof data === 'object' && Array.isArray(typedData.data)
       }
     }
   )
