@@ -804,5 +804,28 @@ html, body {
   }
 }
 
+.hermes-loading-pill {
+  position: relative;
+  overflow: hidden;
+}
 
+.hermes-loading-pill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.2) 30%,
+    rgba(255, 255, 255, 0.65) 50%,
+    transparent 70%
+  );
+  animation: hermes-pill-shimmer 1.6s ease-in-out infinite;
+}
 
+@keyframes hermes-pill-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
