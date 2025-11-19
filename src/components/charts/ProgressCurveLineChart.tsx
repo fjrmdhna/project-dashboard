@@ -218,24 +218,37 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
   const referenceDate = anchorDate ? new Date(anchorDate) : new Date();
   const referenceTime = isNaN(+referenceDate) ? Date.now() : referenceDate.getTime();
 
+  // Helper function to check if date is <= end date (for cumulative calculation)
+  const isOnOrBefore = (val?: string | null, endDate?: Date) => {
+    const d = safeDate(val);
+    return !!(d && endDate && d <= endDate);
+  };
+
   let carryForecast = 0;
   let carryPlanReadiness = 0;
 
   let adjustedForecastCumulative = 0;
   let adjustedPlanReadinessCumulative = 0;
-  let actualForecastCumulative = 0;
-  let actualReadinessCumulative = 0;
 
   // Traverse buckets chronologically so plan surplus flows forward and padding stays bounded.
   const perBucket = rawPerBucket.map((values, index) => {
     const bucket = buckets[index];
     const bucketHasElapsed = bucket.end.getTime() < referenceTime;
 
-    actualForecastCumulative += values.active;
-    actualReadinessCumulative += values.ready;
+    // Calculate actual cumulative values up to bucket end date (not just within bucket range)
+    // This ensures plan follows actual when bucket has elapsed
+    const actualForecastCumulative = rows.reduce(
+      (total, row) => total + (isOnOrBefore(row.rfs_af, bucket.end) ? 1 : 0),
+      0
+    );
 
-    const hasForecastValues = values.active > 0 || values.forecast > 0;
-    const hasPlanReadinessValues = values.ready > 0 || values.planReadiness > 0;
+    const actualReadinessCumulative = rows.reduce(
+      (total, row) => total + (isOnOrBefore(row.imp_integ_af, bucket.end) ? 1 : 0),
+      0
+    );
+
+    const hasForecastValues = actualForecastCumulative > 0 || values.forecast > 0;
+    const hasPlanReadinessValues = actualReadinessCumulative > 0 || values.planReadiness > 0;
 
     const padding = bucketHasElapsed ? getPlanPaddingValue(bucket, index) : 0;
     const forecastPadding = bucketHasElapsed && hasForecastValues ? padding : 0;
@@ -251,6 +264,8 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
     let allowedPlanReadinessCumulative = proposedPlanReadinessCumulative;
 
     if (bucketHasElapsed) {
+      // When bucket has elapsed, plan should follow actual (with padding allowance)
+      // Plan cannot exceed actual + padding
       const maxForecastCumulative = Math.max(
         actualForecastCumulative + forecastPadding,
         adjustedForecastCumulative,
@@ -313,15 +328,28 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
   if (lastPlanReadinessIndex === -1 && totalPlanReadiness > 0) lastPlanReadinessIndex = perBucket.length - 1;
 
   let cumulativeForecast = 0;
-  let cumulativeReady = 0;
-  let cumulativeActive = 0;
   let cumulativePlanReadiness = 0;
 
   return perBucket.map((values, index) => {
+    const bucket = buckets[index];
+    const bucketEnd = bucket.end;
+
+    // For forecast and planReadiness, keep the existing logic (they use adjusted values)
     cumulativeForecast += values.forecast;
-    cumulativeReady += values.ready;
-    cumulativeActive += values.active;
     cumulativePlanReadiness += values.planReadiness;
+
+    // For ready and active, calculate cumulative values (all data <= bucket end date)
+    // This ensures W46 shows all readiness/activated data up to end of W46,
+    // and W47 shows all readiness/activated data up to end of W47
+    const cumulativeReady = rows.reduce(
+      (total, row) => total + (isOnOrBefore(row.imp_integ_af, bucketEnd) ? 1 : 0),
+      0
+    );
+
+    const cumulativeActive = rows.reduce(
+      (total, row) => total + (isOnOrBefore(row.rfs_af, bucketEnd) ? 1 : 0),
+      0
+    );
 
     // For the last bucket with data, show the total count
     const finalForecast = index === lastForecastIndex ? totalForecast : Math.min(cumulativeForecast, totalForecast);
