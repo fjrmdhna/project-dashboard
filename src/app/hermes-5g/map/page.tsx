@@ -276,7 +276,7 @@ export default function Hermes5GMapPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <img src="/logo indosat putih.png" alt="Indosat Ooredoo" className="h-9" />
+            <img src="/logo-indosat-putih.png" alt="Indosat Ooredoo" className="h-9" />
             <div className="hidden flex-col lg:flex">
               <span className="text-[11px] uppercase tracking-[0.32em] text-white/60">Hermes 5G Dashboard</span>
               <h1 className="text-xl font-semibold tracking-wide text-white">{headerTitle}</h1>

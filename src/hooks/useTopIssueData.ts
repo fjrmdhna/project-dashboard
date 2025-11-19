@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useMemo, useEffect, useCallback, useRef } from 'react'
 import { FilterValue } from '@/components/filters/FilterBar'
 import { buildFilterParams } from '@/lib/filters'
+import { useApiCache } from './useApiCache'
+import { fetchWithRetry } from '@/lib/api-utils'
 
 export interface TopIssue {
   category: string
@@ -24,75 +26,57 @@ interface UseTopIssueDataReturn {
 }
 
 export function useTopIssueData(options: UseTopIssueDataOptions = {}): UseTopIssueDataReturn {
-  const [data, setData] = useState<TopIssue[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
-  const [topIssuesTotal, setTopIssuesTotal] = useState(0)
-  const [totalIssues, setTotalIssues] = useState(0)
-
   const filter = options.filter || { q: '', vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [] }
 
-  // Fungsi untuk fetch data dari API
-  const abortRef = useRef<AbortController | null>(null)
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  // Generate cache key dari filter
+  const cacheKey = useMemo(() => {
+    return `top-issue-${JSON.stringify(filter)}`
+  }, [filter])
 
-    try {
-      // Build consistent filter params (supports multi-value)
-      const params = buildFilterParams(filter)
+  // Fetch function untuk useApiCache dengan retry logic
+  const fetchFn = useCallback(async () => {
+    // Build consistent filter params (supports multi-value)
+    const params = buildFilterParams(filter)
 
-      // Abort previous request if any
-      if (abortRef.current) abortRef.current.abort()
-      const controller = new AbortController()
-      abortRef.current = controller
-
-      const response = await fetch(`/api/hermes-5g/top-5-issue?${params.toString()}` , { signal: controller.signal })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+    const response = await fetchWithRetry(`/api/hermes-5g/top-5-issue?${params.toString()}`, {}, 3)
+    
+    const result = await response.json()
+    
+    if (result.status === 'success') {
+      return {
+        data: result.data || [],
+        topIssuesTotal: result.top5Count || 0,
+        totalIssues: result.filteredTotalCount || 0
       }
-      
-      const result = await response.json()
-      
-      if (result.status === 'success') {
-        setData(result.data || [])
-        setTopIssuesTotal(result.top5Count || 0)
-        setTotalIssues(result.filteredTotalCount || 0)
-      } else {
-        throw new Error(result.message || 'Unknown error')
-      }
-    } catch (err) {
-      // Ignore aborted requests to avoid noisy errors when rapidly changing filters
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        return
-      }
-      console.error('Error fetching top issue data:', err)
-      setError(err instanceof Error ? err : new Error('Unknown error'))
-      setData([])
-      setTopIssuesTotal(0)
-      setTotalIssues(0)
-    } finally {
-      setLoading(false)
+    } else {
+      throw new Error(result.message || 'Unknown error')
     }
   }, [filter])
 
-  // Fetch data ketika filter berubah (debounced)
-  useEffect(() => {
-    const t = setTimeout(() => { fetchData() }, 300)
-    return () => {
-      clearTimeout(t)
-      abortRef.current?.abort()
+  // Use useApiCache dengan validasi
+  // useApiCache akan otomatis refetch saat cacheKey berubah, tidak perlu useEffect manual
+  const { data: cachedData, loading, error, refetch: cacheRefetch } = useApiCache<{ data: TopIssue[], topIssuesTotal: number, totalIssues: number }>(
+    cacheKey,
+    fetchFn,
+    {
+      staleTime: 2 * 60 * 1000, // 2 menit
+      cacheTime: 5 * 60 * 1000, // 5 menit
+      refetchOnMount: true,
+      validateFn: (data) => {
+        // Cache semua valid data (termasuk empty) untuk mencegah infinite refetch
+        // Empty data akan di-cache dengan expiry lebih pendek (1 menit)
+        return data !== null && data !== undefined && typeof data === 'object' && Array.isArray(data.data)
+      }
     }
-  }, [fetchData])
+  )
 
   // Return data dan functions
   return {
-    data,
+    data: cachedData?.data || [],
     loading,
-    error,
-    topIssuesTotal,
-    totalIssues,
-    refreshData: fetchData
+    error: error ? new Error(error) : null,
+    topIssuesTotal: cachedData?.topIssuesTotal || 0,
+    totalIssues: cachedData?.totalIssues || 0,
+    refreshData: cacheRefetch
   }
 } 

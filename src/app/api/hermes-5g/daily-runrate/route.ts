@@ -31,8 +31,14 @@ export async function GET(request: NextRequest) {
       };
     });
     
-    // Build Supabase query with filters
-    let query = supabase.from('site_data_5g').select('imp_integ_af, rfs_af');
+    // Calculate date range for optimization (last 7 days)
+    const startDate = dates[0].sqlDate;
+    const endDate = dates[dates.length - 1].sqlDate;
+    
+    // Build Supabase query with filters - optimized: only select needed columns
+    let query = supabase
+      .from('site_data_5g')
+      .select('imp_integ_af, rfs_af', { count: 'exact' }); // Only select needed columns
     // Apply filters (multi-value support)
     if (q) {
       query = query.or(`system_key.ilike.%${q}%,site_id.ilike.%${q}%,site_name.ilike.%${q}%,vendor_name.ilike.%${q}%`);
@@ -70,23 +76,38 @@ export async function GET(request: NextRequest) {
       });
     }
     
-    // Process data to count by date
+    // Process data to count by date (optimized: early exit for dates outside range)
     const readinessMap: DataCountMap = {};
     const activatedMap: DataCountMap = {};
+    const dateSet = new Set(dates.map(d => d.sqlDate)); // Pre-compute valid dates for faster lookup
     
     data?.forEach(row => {
-      // Process readiness data
+      // Process readiness data - only process if date is within range
       if (row.imp_integ_af) {
-        const date = new Date(row.imp_integ_af);
-        const dateKey = format(date, 'yyyy-MM-dd');
-        readinessMap[dateKey] = (readinessMap[dateKey] || 0) + 1;
+        try {
+          const date = new Date(row.imp_integ_af);
+          const dateKey = format(date, 'yyyy-MM-dd');
+          // Only count if date is within our 7-day range
+          if (dateSet.has(dateKey)) {
+            readinessMap[dateKey] = (readinessMap[dateKey] || 0) + 1;
+          }
+        } catch (e) {
+          // Skip invalid dates
+        }
       }
       
-      // Process activated data
+      // Process activated data - only process if date is within range
       if (row.rfs_af) {
-        const date = new Date(row.rfs_af);
-        const dateKey = format(date, 'yyyy-MM-dd');
-        activatedMap[dateKey] = (activatedMap[dateKey] || 0) + 1;
+        try {
+          const date = new Date(row.rfs_af);
+          const dateKey = format(date, 'yyyy-MM-dd');
+          // Only count if date is within our 7-day range
+          if (dateSet.has(dateKey)) {
+            activatedMap[dateKey] = (activatedMap[dateKey] || 0) + 1;
+          }
+        } catch (e) {
+          // Skip invalid dates
+        }
       }
     });
     

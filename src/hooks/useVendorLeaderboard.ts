@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useMemo, useEffect, useCallback, useRef } from 'react'
 import { FilterValue } from '@/components/filters/FilterBar'
 import { buildFilterParams } from '@/lib/filters'
+import { useApiCache } from './useApiCache'
+import { fetchWithRetry } from '@/lib/api-utils'
 
 export interface VendorScore {
   vendorName: string
@@ -31,82 +33,62 @@ interface UseVendorLeaderboardReturn {
 }
 
 export function useVendorLeaderboard(options: UseVendorLeaderboardOptions = {}): UseVendorLeaderboardReturn {
-  const [data, setData] = useState<VendorScore[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
-  const [totalVendors, setTotalVendors] = useState(0)
+  const filter = options.filter || {
+    q: '',
+    vendor_name: [],
+    program_report: [],
+    imp_ttp: [],
+    nano_cluster: [],
+    status: []
+  }
 
-  const abortRef = useRef<AbortController | null>(null)
+  // Generate cache key dari filter
+  const cacheKey = useMemo(() => {
+    return `vendor-leaderboard-${JSON.stringify(filter)}`
+  }, [filter])
 
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
+  // Fetch function untuk useApiCache dengan retry logic
+  const fetchFn = useCallback(async () => {
+    // Build URL with consistent filter parameters
+    const params = buildFilterParams(filter)
+    const url = `/api/hermes-5g/vendor-leaderboard?${params.toString()}`
 
-      const filter = options.filter || {
-        q: '',
-        vendor_name: [],
-        program_report: [],
-        imp_ttp: [],
-        nano_cluster: [],
-        status: []
+    const response = await fetchWithRetry(url, {}, 3)
+
+    const result = await response.json()
+    
+    if (result.status === 'success') {
+      return {
+        data: result.data || [],
+        totalVendors: result.totalVendors || 0
       }
-
-      // Build URL with consistent filter parameters
-      const params = buildFilterParams(filter)
-      const url = `/api/hermes-5g/vendor-leaderboard?${params.toString()}`
-
-      // Abort any inflight request before starting a new one
-      if (abortRef.current) abortRef.current.abort()
-      const controller = new AbortController()
-      abortRef.current = controller
-
-      const response = await fetch(url, { signal: controller.signal })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const result = await response.json()
-      
-      if (result.status === 'success') {
-        setData(result.data)
-        setTotalVendors(result.totalVendors || 0)
-      } else {
-        throw new Error(result.message || 'Failed to fetch vendor leaderboard data')
-      }
-    } catch (err) {
-      // Ignore user-triggered aborts from rapid filter changes
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        setLoading(false)
-        return
-      }
-      console.error('Error fetching vendor leaderboard data:', err)
-      setError(err instanceof Error ? err : new Error('Unknown error'))
-      setData([])
-      setTotalVendors(0)
-    } finally {
-      setLoading(false)
+    } else {
+      throw new Error(result.message || 'Failed to fetch vendor leaderboard data')
     }
-  }, [options.filter])
+  }, [filter])
 
-  const refetch = useCallback(async () => {
-    await fetchData()
-  }, [fetchData])
-
-  useEffect(() => {
-    const t = setTimeout(() => { fetchData() }, 300)
-    return () => {
-      clearTimeout(t)
-      abortRef.current?.abort()
+  // Use useApiCache dengan validasi
+  // useApiCache akan otomatis refetch saat cacheKey berubah, tidak perlu useEffect manual
+  const { data: cachedData, loading, error, refetch: cacheRefetch } = useApiCache<{ data: VendorScore[], totalVendors: number }>(
+    cacheKey,
+    fetchFn,
+    {
+      staleTime: 2 * 60 * 1000, // 2 menit
+      cacheTime: 5 * 60 * 1000, // 5 menit
+      refetchOnMount: true,
+      validateFn: (data) => {
+        // Cache semua valid data (termasuk empty) untuk mencegah infinite refetch
+        // Empty data akan di-cache dengan expiry lebih pendek (1 menit)
+        return data !== null && data !== undefined && typeof data === 'object' && Array.isArray(data.data)
+      }
     }
-  }, [fetchData])
+  )
 
   return {
-    data,
+    data: cachedData?.data || [],
     loading,
-    error,
-    refetch,
-    totalVendors
+    error: error ? new Error(error) : null,
+    refetch: cacheRefetch,
+    totalVendors: cachedData?.totalVendors || 0
   }
 }

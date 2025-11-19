@@ -27,6 +27,7 @@ export interface FilterActions {
 // Filter Context Interface
 export interface FilterContextType extends FilterState, FilterActions {
   isHydrated?: boolean
+  debouncedFilters?: FilterState // Debounced version of filters for use in hooks
 }
 
 // Filter Options Interface

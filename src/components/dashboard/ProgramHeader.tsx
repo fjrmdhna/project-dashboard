@@ -43,7 +43,7 @@ export function ProgramHeader({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <img src="/logo indosat putih.png" alt="Indosat Logo" className="h-8" />
+        <img src="/logo-indosat-putih.png" alt="Indosat Logo" className="h-8" />
       </div>
 
       <div className="flex-grow text-center">

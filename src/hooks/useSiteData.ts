@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { FilterValue } from '@/components/filters/FilterBar'
 import { Row } from '@/components/cards/MatrixStatsCard'
+import { useApiCache } from './useApiCache'
+import { fetchWithRetry } from '@/lib/api-utils'
 
 interface UseSiteDataOptions {
   initialFilter?: FilterValue
@@ -19,10 +21,6 @@ interface UseSiteDataReturn {
 }
 
 export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn {
-  const [rows, setRows] = useState<Row[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
-  const [count, setCount] = useState(0)
   const [filter, setFilter] = useState<FilterValue>(
     options.initialFilter || {
       q: '',
@@ -34,9 +32,10 @@ export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn
     }
   )
   
-  // Ref untuk menyimpan timeout ID
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const isFetchingRef = useRef(false)
+  // Generate cache key dari filter state
+  const cacheKey = useMemo(() => {
+    return `site-data-${JSON.stringify(filter)}`
+  }, [filter])
 
   // Fungsi untuk membangun URL dengan filter
   const buildUrl = useCallback((filter: FilterValue) => {
@@ -50,71 +49,46 @@ export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn
     return qs ? `/api/hermes-5g/site-data?${qs}` : '/api/hermes-5g/site-data'
   }, [])
   
-  // Fungsi untuk fetch data dengan race condition protection
-  const fetchData = useCallback(async (filter: FilterValue) => {
-    // Set flag untuk mencegah multiple concurrent requests
-    if (isFetchingRef.current) {
-      console.log('Request already in progress, skipping...')
-      return
-    }
+  // Fetch function untuk useApiCache dengan retry logic
+  const fetchFn = useCallback(async () => {
+    const url = buildUrl(filter)
+    console.log('Fetching site data with filter:', filter)
+    const response = await fetchWithRetry(url, {}, 3)
     
-    isFetchingRef.current = true
-    setLoading(true)
-    setError(null)
+    const data = await response.json()
     
-    try {
-      const url = buildUrl(filter)
-      console.log('Fetching data with filter:', filter)
-      const response = await fetch(url)
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+    if (data.status === 'success') {
+      console.log('Site data fetched successfully:', data.count, 'records')
+      return {
+        rows: data.data || [],
+        count: data.count || 0
       }
-      
-      const data = await response.json()
-      
-      if (data.status === 'success') {
-        setRows(data.data)
-        setCount(data.count || 0)
-        console.log('Data fetched successfully:', data.count, 'records')
-      } else {
-        throw new Error(data.message || 'Unknown error')
-      }
-    } catch (err) {
-      console.error('Error fetching site data:', err)
-      setError(err instanceof Error ? err : new Error('Unknown error'))
-      setRows([])
-      setCount(0)
-    } finally {
-      setLoading(false)
-      isFetchingRef.current = false
+    } else {
+      throw new Error(data.message || 'Unknown error')
     }
-  }, [buildUrl])
-  
-  // Effect untuk fetch data saat filter berubah dengan debouncing
-  useEffect(() => {
-    // Clear timeout sebelumnya jika ada
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current)
-    }
-    
-    // Set timeout baru untuk debounce
-    debounceTimeoutRef.current = setTimeout(() => {
-      fetchData(filter)
-    }, 300) // 300ms debounce delay
-    
-    // Cleanup function
-    return () => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current)
+  }, [filter, buildUrl])
+
+  // Use useApiCache dengan validasi
+  // useApiCache akan otomatis refetch saat cacheKey berubah, tidak perlu useEffect manual
+  const { data, loading, error, refetch: cacheRefetch } = useApiCache<{ rows: Row[], count: number }>(
+    cacheKey,
+    fetchFn,
+    {
+      staleTime: 2 * 60 * 1000, // 2 menit
+      cacheTime: 5 * 60 * 1000, // 5 menit
+      refetchOnMount: true,
+      validateFn: (data) => {
+        // Cache semua valid data (termasuk empty) untuk mencegah infinite refetch
+        // Empty data akan di-cache dengan expiry lebih pendek (1 menit)
+        return data !== null && data !== undefined && typeof data === 'object' && Array.isArray(data.rows)
       }
     }
-  }, [filter, fetchData])
+  )
   
   // Fungsi untuk refetch data dengan filter saat ini
   const refetch = useCallback(async () => {
-    await fetchData(filter)
-  }, [filter, fetchData])
+    await cacheRefetch()
+  }, [cacheRefetch])
   
   // Fungsi untuk update filter dengan immediate update
   const updateFilter = useCallback((newFilter: FilterValue) => {
@@ -122,20 +96,11 @@ export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn
     setFilter(newFilter)
   }, [])
   
-  // Cleanup timeout saat component unmount
-  useEffect(() => {
-    return () => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current)
-      }
-    }
-  }, [])
-  
   return {
-    rows,
+    rows: data?.rows || [],
     loading,
-    error,
-    count,
+    error: error ? new Error(error) : null,
+    count: data?.count || 0,
     refetch,
     filter,
     updateFilter

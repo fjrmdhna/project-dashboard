@@ -14,7 +14,7 @@ export function Navbar() {
             <Link href="/" className="flex items-center justify-center">
               <div className="relative flex h-28 w-28 items-center justify-center">
                 <Image
-                  src="/logo indosat putih.png"
+                  src="/logo-indosat-putih.png"
                   alt="Indosat Ooredoo Hutchison Logo"
                   width={112}
                   height={112}

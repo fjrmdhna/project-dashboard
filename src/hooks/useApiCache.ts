@@ -4,6 +4,7 @@ interface CacheEntry<T> {
   data: T
   timestamp: number
   expiry: number
+  isEmpty?: boolean // Flag untuk empty data (cache dengan waktu lebih pendek)
 }
 
 interface UseApiCacheOptions {
@@ -11,6 +12,7 @@ interface UseApiCacheOptions {
   cacheTime?: number // Time in ms before data is removed from cache (default: 10 minutes)
   refetchOnMount?: boolean // Refetch when component mounts if data is stale
   refetchInterval?: number // Auto refetch interval in ms
+  validateFn?: <T>(data: T) => boolean // Custom validation function - return false to prevent caching
 }
 
 interface UseApiCacheReturn<T> {
@@ -44,7 +46,8 @@ export function useApiCache<T>(
     staleTime = 5 * 60 * 1000, // 5 minutes
     cacheTime = 10 * 60 * 1000, // 10 minutes
     refetchOnMount = true,
-    refetchInterval
+    refetchInterval,
+    validateFn
   } = options
 
   const [data, setData] = useState<T | null>(null)
@@ -54,6 +57,9 @@ export function useApiCache<T>(
   
   const abortControllerRef = useRef<AbortController | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const fetchingRef = useRef<Set<string>>(new Set()) // Track ongoing fetches per cacheKey
+  const lastCacheKeyRef = useRef<string>(cacheKey) // Track last cacheKey to detect changes
+  const lastFetchTimeRef = useRef<Map<string, number>>(new Map()) // Track last fetch time per cacheKey
 
   // Check if data is stale
   const isStale = useCallback(() => {
@@ -61,7 +67,13 @@ export function useApiCache<T>(
     if (!cached) return true
     
     const now = Date.now()
-    return now > cached.timestamp + staleTime
+    // Data is stale if it's past staleTime, but not if it's already expired (should be removed)
+    // Also, don't consider data stale if it was just fetched (within last 500ms)
+    const timeSinceFetch = now - cached.timestamp
+    if (timeSinceFetch < 500) {
+      return false // Too soon to be stale
+    }
+    return timeSinceFetch > staleTime
   }, [cacheKey, staleTime])
 
   // Get cached data
@@ -79,19 +91,82 @@ export function useApiCache<T>(
     return cached.data
   }, [cacheKey])
 
-  // Set data in cache
-  const setCachedData = useCallback((newData: T) => {
+  // Validation function to check if data should be cached
+  const shouldCache = useCallback((data: T, error: string | null, validateFn?: (data: T) => boolean): { shouldCache: boolean; isEmpty: boolean } => {
+    // Don't cache if there's an error
+    if (error) {
+      return { shouldCache: false, isEmpty: false }
+    }
+
+    // Don't cache null or undefined
+    if (data === null || data === undefined) {
+      return { shouldCache: false, isEmpty: false }
+    }
+
+    // Check if data is empty
+    const isEmpty = 
+      (Array.isArray(data) && data.length === 0) ||
+      (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length === 0)
+
+    // Use custom validation function if provided
+    if (validateFn && !validateFn(data)) {
+      // If validateFn returns false, check if it's because data is empty
+      // If empty, we still cache it but with shorter expiry to prevent infinite refetch
+      if (isEmpty) {
+        return { shouldCache: true, isEmpty: true }
+      }
+      return { shouldCache: false, isEmpty: false }
+    }
+
+    // Cache empty data to prevent infinite refetch, but with shorter expiry
+    if (isEmpty) {
+      return { shouldCache: true, isEmpty: true }
+    }
+
+    return { shouldCache: true, isEmpty: false }
+  }, [])
+
+  // Set data in cache with validation
+  const setCachedData = useCallback((newData: T, error: string | null = null) => {
+    const { shouldCache: canCache, isEmpty } = shouldCache(newData, error, validateFn)
+    
+    if (!canCache) {
+      console.warn(`[useApiCache] Skipping cache for ${cacheKey}: data is invalid or failed validation`)
+      return
+    }
+
     const now = Date.now()
+    // Cache empty data with shorter expiry (1 minute) to prevent infinite refetch
+    // but still cache it to avoid refetching immediately
+    const expiryTime = isEmpty ? 1 * 60 * 1000 : cacheTime
+    
     memoryCache.set(cacheKey, {
       data: newData,
       timestamp: now,
-      expiry: cacheTime
+      expiry: expiryTime,
+      isEmpty
     })
-  }, [cacheKey, cacheTime])
+  }, [cacheKey, cacheTime, validateFn, shouldCache])
 
   // Fetch data function
   const fetchData = useCallback(async (force = false) => {
-    // Cancel previous request
+    // Prevent multiple concurrent fetches for the same cacheKey
+    if (fetchingRef.current.has(cacheKey) && !force) {
+      console.log(`[useApiCache] Fetch already in progress for ${cacheKey}, skipping...`)
+      return
+    }
+
+    // Prevent rapid successive fetches (debounce: minimum 500ms between fetches for same cacheKey)
+    if (!force) {
+      const lastFetchTime = lastFetchTimeRef.current.get(cacheKey)
+      const now = Date.now()
+      if (lastFetchTime && (now - lastFetchTime) < 500) {
+        console.log(`[useApiCache] Too soon to refetch ${cacheKey}, skipping...`)
+        return
+      }
+    }
+
+    // Cancel previous request for this cacheKey
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
@@ -102,39 +177,63 @@ export function useApiCache<T>(
       if (cached && !isStale()) {
         setData(cached)
         setLastFetched(memoryCache.get(cacheKey)?.timestamp || null)
+        setLoading(false) // Ensure loading is false when using cache
         return
       }
     }
 
+    // Mark as fetching and record fetch time
+    fetchingRef.current.add(cacheKey)
+    lastFetchTimeRef.current.set(cacheKey, Date.now())
     setLoading(true)
     setError(null)
     
     // Create new abort controller
-    abortControllerRef.current = new AbortController()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
+    let fetchSucceeded = false
+    
     try {
       const result = await fetchFn()
       
-      // Check if request was aborted
-      if (abortControllerRef.current?.signal.aborted) {
+      // Check if request was aborted or cacheKey changed
+      if (controller.signal.aborted || lastCacheKeyRef.current !== cacheKey) {
+        fetchingRef.current.delete(cacheKey)
         return
       }
       
+      // Set data to state (even if empty - this prevents infinite refetch)
+      // Always set data, even if empty, to stop loading state
       setData(result)
-      setCachedData(result)
+      setCachedData(result, null)
       setLastFetched(Date.now())
       setError(null)
+      fetchSucceeded = true
+      setLoading(false) // Ensure loading is false after setting data
     } catch (err) {
-      // Check if request was aborted
-      if (abortControllerRef.current?.signal.aborted) {
+      // Check if request was aborted or cacheKey changed
+      if (controller.signal.aborted || lastCacheKeyRef.current !== cacheKey) {
+        fetchingRef.current.delete(cacheKey)
         return
       }
       
       const errorMessage = err instanceof Error ? err.message : 'An error occurred'
       setError(errorMessage)
+      // Don't set data to null on error - keep previous data if available
       console.error(`API Cache Error for ${cacheKey}:`, err)
     } finally {
-      setLoading(false)
+      // Only update loading if this is still the current request
+      if (abortControllerRef.current === controller && lastCacheKeyRef.current === cacheKey) {
+        fetchingRef.current.delete(cacheKey)
+        // Only set loading to false if we didn't already set it (error case)
+        if (!fetchSucceeded) {
+          setLoading(false)
+        }
+      } else {
+        // Request was cancelled or cacheKey changed
+        fetchingRef.current.delete(cacheKey)
+      }
     }
   }, [cacheKey, fetchFn, getCachedData, isStale, setCachedData])
 
@@ -143,29 +242,67 @@ export function useApiCache<T>(
     await fetchData(true)
   }, [fetchData])
 
-  // Initialize data on mount
+  // Initialize data on mount and when cacheKey changes
   useEffect(() => {
-    const cached = getCachedData()
-    if (cached) {
-      setData(cached)
-      setLastFetched(memoryCache.get(cacheKey)?.timestamp || null)
-      
-      // Refetch if stale and refetchOnMount is true
-      if (refetchOnMount && isStale()) {
-        fetchData()
-      }
-    } else {
-      // No cached data, fetch immediately
-      fetchData()
+    let isMounted = true
+    const currentCacheKey = cacheKey
+    
+    // Update lastCacheKeyRef
+    const cacheKeyChanged = lastCacheKeyRef.current !== currentCacheKey
+    if (cacheKeyChanged) {
+      lastCacheKeyRef.current = currentCacheKey
     }
+    
+    // Skip if already fetching for this cacheKey
+    if (fetchingRef.current.has(currentCacheKey)) {
+      return
+    }
+    
+    const initialize = async () => {
+      // Double check mounted and not already fetching
+      if (!isMounted || fetchingRef.current.has(currentCacheKey)) {
+        return
+      }
+      
+      const cached = getCachedData()
+      if (cached && isMounted) {
+        // Set cached data immediately
+        setData(cached)
+        setLastFetched(memoryCache.get(currentCacheKey)?.timestamp || null)
+        setLoading(false)
+        
+        // Only refetch if stale and refetchOnMount is true AND cacheKey hasn't changed
+        // AND not already fetching AND enough time has passed since last fetch
+        if (refetchOnMount && isStale() && lastCacheKeyRef.current === currentCacheKey) {
+          const lastFetchTime = lastFetchTimeRef.current.get(currentCacheKey)
+          const now = Date.now()
+          if (!lastFetchTime || (now - lastFetchTime) >= 500) {
+            await fetchData()
+          }
+        }
+      } else if (isMounted && !fetchingRef.current.has(currentCacheKey) && lastCacheKeyRef.current === currentCacheKey) {
+        // No cached data, fetch immediately (only if not already fetching and cacheKey hasn't changed)
+        // AND enough time has passed since last fetch
+        const lastFetchTime = lastFetchTimeRef.current.get(currentCacheKey)
+        const now = Date.now()
+        if (!lastFetchTime || (now - lastFetchTime) >= 500) {
+          await fetchData()
+        }
+      }
+    }
+    
+    initialize()
 
-    // Cleanup on unmount
+    // Cleanup on unmount or cacheKey change
     return () => {
+      isMounted = false
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
+      // Don't remove from fetchingRef here - let fetchData handle it
     }
-  }, [cacheKey]) // Only depend on cacheKey to avoid infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheKey]) // Only depend on cacheKey - other functions are stable via useCallback
 
   // Setup refetch interval
   useEffect(() => {

@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import { ProjectCardData } from "@/types/home"
 import { cn } from "@/lib/utils"
 
@@ -9,9 +11,10 @@ export function ProjectCard({ project }: ProjectCardProps) {
   const isPrimary = project.mood === "primary"
 
   return (
-    <article
+    <Link
+      href={project.href}
       className={cn(
-        "flex flex-col gap-3 rounded-3xl border border-slate-100 bg-white p-4 text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+        "flex flex-col gap-3 rounded-3xl border border-slate-100 bg-white p-4 text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
         isPrimary && "border-transparent bg-gradient-to-b from-white to-white/90 shadow-lg ring-2 ring-primary/30",
       )}
     >
@@ -46,6 +49,6 @@ export function ProjectCard({ project }: ProjectCardProps) {
         </div>
         <p className="mt-1 text-xs font-semibold text-slate-900">{project.progress}%</p>
       </div>
-    </article>
+    </Link>
   )
 }

@@ -9,6 +9,7 @@ export interface ProjectCardData {
   date: string
   progress: number
   mood?: ProjectMood
+  href: string
 }
 
 export interface HeroHighlight {

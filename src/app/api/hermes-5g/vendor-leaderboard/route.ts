@@ -11,14 +11,16 @@ export async function GET(request: NextRequest) {
     const programReports = searchParams.getAll('program_report') || []
     const impTtps = searchParams.getAll('imp_ttp') || []
     const nanoClusters = searchParams.getAll('nano_cluster') || []
+    const statusFilters = searchParams.getAll('status') || []
     
-    // Use Supabase to get site data
+    // Use Supabase to get site data with status filter support
     const { data } = await getSiteData5G({
       vendor_name: vendorNames.length > 0 ? vendorNames : undefined,
       program_report: programReports.length > 0 ? programReports : undefined,
       imp_ttp: impTtps.length > 0 ? impTtps : undefined,
       nano_cluster: nanoClusters.length > 0 ? nanoClusters : undefined,
       search: q || undefined,
+      status: statusFilters.length > 0 ? statusFilters : undefined,
       limit: 10000
     })
     
@@ -87,7 +89,7 @@ export async function GET(request: NextRequest) {
       status: 'success',
       data: vendorScores,
       timestamp: new Date().toISOString(),
-      filtered: vendorNames.length > 0 || programReports.length > 0 || impTtps.length > 0 || nanoClusters.length > 0 || q.length > 0,
+      filtered: vendorNames.length > 0 || programReports.length > 0 || impTtps.length > 0 || nanoClusters.length > 0 || q.length > 0 || statusFilters.length > 0,
       totalVendors: vendorScores.length
     })
   } catch (error) {

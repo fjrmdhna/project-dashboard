@@ -16,12 +16,19 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const { q, vendorNames, programReports, impTtps, nanoClusters } = parseFilterParams(url);
     
-    // Build Supabase query with filters
+    // Build Supabase query with filters - optimized: only select issue_category column
     let query = supabase
       .from('site_data_5g')
-      .select('issue_category')
+      .select('issue_category', { count: 'exact' }) // Only select needed column, get count for total
       .not('issue_category', 'is', null)
       .neq('issue_category', '');
+    
+    // Filter out excluded categories at query level to reduce data processing
+    query = query
+      .not('issue_category', 'ilike', '%no issue%')
+      .not('issue_category', 'ilike', '%caf ny submit%')
+      .not('issue_category', 'ilike', '%20. 5g activation done%')
+      .not('issue_category', 'ilike', '%18c. 5g integration done%');
     
     // Apply filters (multi-value support)
     if (q) {
@@ -41,7 +48,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Get data from Supabase
-    const { data, error } = await query;
+    const { data, error, count } = await query;
     
     if (error) {
       console.error('Supabase Error:', error);
@@ -56,7 +63,7 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Process data to count issue categories
+    // Process data to count issue categories (optimized: excluded categories already filtered at query level)
     const categoryCount: { [key: string]: number } = {};
     data?.forEach(row => {
       if (row.issue_category) {
@@ -64,16 +71,8 @@ export async function GET(request: NextRequest) {
       }
     });
     
-    // Filter out "No Issue", "CAF NY Submit", "20. 5G Activation Done", and "18c. 5G Integration Done" categories
-    const filteredCategories = Object.entries(categoryCount).filter(([category]) => 
-      !category.toLowerCase().includes('no issue') &&
-      !category.toLowerCase().includes('caf ny submit') &&
-      !category.toLowerCase().includes('20. 5g activation done') &&
-      !category.toLowerCase().includes('18c. 5g integration done')
-    );
-    
-    // Sort by count and get top 5 categories (excluding filtered ones)
-    const sortedCategories = filteredCategories
+    // Sort by count and get top 5 categories (excluded categories already filtered at query level)
+    const sortedCategories = Object.entries(categoryCount)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 5);
     
@@ -84,10 +83,10 @@ export async function GET(request: NextRequest) {
       color: ISSUE_COLORS[index % ISSUE_COLORS.length]
     }));
     
-    // Calculate totals
-    const totalCount = data?.length || 0;
+    // Calculate totals (use count from query if available, otherwise fallback to data length)
+    const totalCount = count || data?.length || 0;
     const top5Count = result.reduce((sum, item) => sum + item.count, 0);
-    const filteredTotalCount = filteredCategories.reduce((sum, [, count]) => sum + count, 0);
+    const filteredTotalCount = Object.values(categoryCount).reduce((sum, count) => sum + count, 0);
     
     // Debug logging
     console.log('Top 5 Issue API Debug:', {

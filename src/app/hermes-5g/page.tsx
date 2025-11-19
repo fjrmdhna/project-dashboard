@@ -38,7 +38,20 @@ export default function Hermes5GPage() {
     status: filterContext.statusFilters || []
   }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.statusFilters])
   
-  // Menggunakan hook useSiteData untuk mengambil data berdasarkan filter
+  // Convert debounced filters to FilterValue format - use debouncedFilters for data fetching
+  const debouncedFilter: FilterValue = useMemo(() => {
+    const debounced = filterContext.debouncedFilters || filterContext
+    return {
+      q: debounced.searchTerm,
+      vendor_name: debounced.vendorFilter !== 'all' ? debounced.vendorFilter.split(',').filter(Boolean) : [],
+      program_report: debounced.programFilter !== 'all' ? debounced.programFilter.split(',').filter(Boolean) : [],
+      imp_ttp: debounced.cityFilter !== 'all' ? debounced.cityFilter.split(',').filter(Boolean) : [],
+      nano_cluster: debounced.nanoClusterFilter !== 'all' ? debounced.nanoClusterFilter.split(',').filter(Boolean) : [],
+      status: debounced.statusFilters || []
+    }
+  }, [filterContext.debouncedFilters, filterContext])
+  
+  // Menggunakan hook useSiteData untuk mengambil data berdasarkan debounced filter
   const { 
     rows, 
     loading, 
@@ -46,31 +59,31 @@ export default function Hermes5GPage() {
     count, 
     filter, 
     updateFilter 
-  } = useSiteData({ initialFilter: currentFilter })
+  } = useSiteData({ initialFilter: debouncedFilter })
 
   // Menggunakan hook useTopIssueData untuk mengambil data top 5 issue
-  // Meneruskan filter yang sama dengan useSiteData
+  // Meneruskan debounced filter untuk unified debouncing
   const {
     data: topIssuesData,
     loading: topIssuesLoading,
     topIssuesTotal,
     totalIssues
-  } = useTopIssueData({ filter })
-  
+  } = useTopIssueData({ filter: debouncedFilter })
+
   // Menggunakan hook useDailyRunrateData untuk mengambil data daily runrate
-  // Meneruskan filter yang sama dengan useSiteData
+  // Meneruskan debounced filter untuk unified debouncing
   const {
     data: dailyRunrateData,
     loading: dailyRunrateLoading
-  } = useDailyRunrateData({ filter })
+  } = useDailyRunrateData({ filter: debouncedFilter })
 
   // Menggunakan hook useVendorLeaderboard untuk mengambil data vendor leaderboard
-  // Meneruskan filter yang sama dengan useSiteData
+  // Meneruskan debounced filter untuk unified debouncing
   const {
     data: vendorLeaderboardData,
     loading: vendorLeaderboardLoading,
     totalVendors
-  } = useVendorLeaderboard({ filter })
+  } = useVendorLeaderboard({ filter: debouncedFilter })
 
   const isMobile = useIsMobile()
   const [hasMounted, setHasMounted] = useState(false)
@@ -406,7 +419,7 @@ export default function Hermes5GPage() {
 
           <div className="flex-1 flex justify-center">
             <img
-              src="/logo indosat putih.png"
+              src="/logo-indosat-putih.png"
               alt="Indosat Logo"
               className="h-8"
             />

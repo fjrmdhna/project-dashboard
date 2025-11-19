@@ -17,6 +17,9 @@ export function FilterProvider({ children }: FilterProviderProps) {
   
   // Load filters from localStorage on initialization
   const [filters, setFiltersState] = useState<FilterState>(DEFAULT_FILTERS)
+  
+  // Debounced filters for use in hooks (300ms delay)
+  const [debouncedFilters, setDebouncedFilters] = useState<FilterState>(DEFAULT_FILTERS)
 
   // Handle hydration
   useEffect(() => {
@@ -43,6 +46,17 @@ export function FilterProvider({ children }: FilterProviderProps) {
       }
     }
   }, [filters, isHydrated])
+
+  // Unified debouncing: update debouncedFilters 300ms after filters change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFilters(filters)
+    }, 300)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [filters])
 
   // Filter Actions
   const setVendorFilter = useCallback((vendor: string) => {
@@ -90,6 +104,7 @@ export function FilterProvider({ children }: FilterProviderProps) {
     // State
     ...filters,
     isHydrated,
+    debouncedFilters,
     
     // Actions
     setVendorFilter,

@@ -9,6 +9,9 @@ interface GreetingHeaderProps {
   logoSrc?: string
   logoAlt?: string
   align?: "start" | "center"
+  logoShift?: "none" | "right"
+  className?: string
+  logoClassName?: string
 }
 
 export function GreetingHeader({
@@ -18,18 +21,24 @@ export function GreetingHeader({
   logoSrc,
   logoAlt = "Logo",
   align = "start",
+  logoShift = "none",
+  className,
+  logoClassName,
 }: GreetingHeaderProps) {
   const isDark = tone === "dark"
   const isCenter = align === "center"
+  const shiftRight = logoShift === "right"
 
   return (
-    <div className={cn("space-y-0.5", isCenter && "text-center")}>
+    <div className={cn("space-y-0.5", isCenter && "text-center", className)}>
       <p className={cn("text-sm", isDark ? "text-white/60" : "text-muted-foreground")}>Home</p>
       {logoSrc ? (
         <div
           className={cn(
             "relative h-10 w-32",
-            isCenter && "mx-auto pr-4 transform translate-x-4 sm:translate-x-3",
+            logoClassName,
+            isCenter && "mx-auto",
+            shiftRight && "translate-x-4 sm:translate-x-6 lg:translate-x-8",
           )}
         >
           <Image src={logoSrc} alt={logoAlt} fill className="object-contain" sizes="128px" priority />

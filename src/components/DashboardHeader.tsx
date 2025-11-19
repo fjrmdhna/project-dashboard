@@ -32,7 +32,7 @@ export function DashboardHeader() {
           <div className="flex items-center">
             <div className="relative">
               <Image
-                src="/logo indosat putih.png"
+                src="/logo-indosat-putih.png"
                 alt="Indosat Ooredoo Hutchison"
                 width={60}
                 height={60}
