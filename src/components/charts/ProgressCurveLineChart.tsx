@@ -56,11 +56,13 @@ const getPlanPaddingValue = (bucket: Bucket, index: number) => {
   return pattern[index % pattern.length] ?? 1;
 };
 
-const TOOLTIP_ORDER: Array<string> = ['baseline', 'forecast', 'actual'];
-const getTooltipOrderIndex = (key?: string | number | null) => {
-  if (key === undefined || key === null) return TOOLTIP_ORDER.length;
-  const idx = TOOLTIP_ORDER.indexOf(String(key));
-  return idx === -1 ? TOOLTIP_ORDER.length : idx;
+const TOOLTIP_ORDER_AOP: Array<string> = ['baseline', 'forecast', 'actual'];
+const TOOLTIP_ORDER_HERMES: Array<string> = ['planReadiness', 'ready', 'forecast', 'active'];
+const getTooltipOrderIndex = (key?: string | number | null, isAop?: boolean) => {
+  if (key === undefined || key === null) return 999;
+  const order = isAop ? TOOLTIP_ORDER_AOP : TOOLTIP_ORDER_HERMES;
+  const idx = order.indexOf(String(key));
+  return idx === -1 ? 999 : idx;
 };
 
 type ProgressCurveTooltipItem = {
@@ -217,67 +219,195 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
     return !!(d && endDate && d <= endDate);
   };
 
-  // Calculate total counts for each metric
-  const totalBaseline = rows.filter(row => row.rfs_bf).length;
-  const totalForecast = rows.filter(row => row.rfs_ff).length;
-  const totalActual = rows.filter(row => row.rfs_af).length;
+  // Detect data format: AOP (has rfs_bf/rfs_ff) or Hermes 5G (has rfs_forecast_lock/imp_integ_af)
+  const isAopFormat = rows.some(row => row.rfs_bf || row.rfs_ff);
+  const isHermesFormat = rows.some(row => row.rfs_forecast_lock || row.imp_integ_af || row.mocn_activation_forecast);
 
-  // Find the last bucket that has any data for each metric
-  let lastBaselineIndex = -1;
+  // AOP Format: baseline, forecast, actual
+  if (isAopFormat) {
+    const totalBaseline = rows.filter(row => row.rfs_bf).length;
+    const totalForecast = rows.filter(row => row.rfs_ff).length;
+    const totalActual = rows.filter(row => row.rfs_af).length;
+
+    let lastBaselineIndex = -1;
+    let lastForecastIndex = -1;
+    let lastActualIndex = -1;
+
+    const cumulativeData = buckets.map((bucket) => {
+      const bucketEnd = bucket.end;
+      return {
+        baseline: rows.reduce((total, row) => total + (isOnOrBefore(row.rfs_bf, bucketEnd) ? 1 : 0), 0),
+        forecast: rows.reduce((total, row) => total + (isOnOrBefore(row.rfs_ff, bucketEnd) ? 1 : 0), 0),
+        actual: rows.reduce((total, row) => total + (isOnOrBefore(row.rfs_af, bucketEnd) ? 1 : 0), 0),
+      };
+    });
+
+    for (let i = cumulativeData.length - 1; i >= 0; i--) {
+      if (cumulativeData[i].baseline > 0 && lastBaselineIndex === -1) lastBaselineIndex = i;
+      if (cumulativeData[i].forecast > 0 && lastForecastIndex === -1) lastForecastIndex = i;
+      if (cumulativeData[i].actual > 0 && lastActualIndex === -1) lastActualIndex = i;
+    }
+
+    if (lastBaselineIndex === -1 && totalBaseline > 0) lastBaselineIndex = cumulativeData.length - 1;
+    if (lastForecastIndex === -1 && totalForecast > 0) lastForecastIndex = cumulativeData.length - 1;
+    if (lastActualIndex === -1 && totalActual > 0) lastActualIndex = cumulativeData.length - 1;
+
+    return cumulativeData.map((values, index) => ({
+      key: buckets[index].key,
+      label: buckets[index].label,
+      baseline: index <= lastBaselineIndex ? (index === lastBaselineIndex ? totalBaseline : Math.min(values.baseline, totalBaseline)) : null,
+      forecast: index <= lastForecastIndex ? (index === lastForecastIndex ? totalForecast : Math.min(values.forecast, totalForecast)) : null,
+      actual: index <= lastActualIndex ? (index === lastActualIndex ? totalActual : Math.min(values.actual, totalActual)) : null,
+      ready: null,
+      active: null,
+      planReadiness: null,
+    }));
+  }
+
+  // Hermes 5G Format: ready, active, forecast, planReadiness (original logic)
+  const referenceDate = anchorDate ? new Date(anchorDate) : new Date();
+  const referenceTime = isNaN(+referenceDate) ? Date.now() : referenceDate.getTime();
+
+  const rawPerBucket = buckets.map((bucket) => {
+    const { start, end } = bucket;
+    return {
+      forecast: rows.reduce((total, row) => total + (inRange(row.rfs_forecast_lock, start, end) ? 1 : 0), 0),
+      ready: rows.reduce((total, row) => total + (inRange(row.imp_integ_af, start, end) ? 1 : 0), 0),
+      active: rows.reduce((total, row) => total + (inRange(row.rfs_af, start, end) ? 1 : 0), 0),
+      planReadiness: rows.reduce(
+        (total, row) => total + (inRange(row.mocn_activation_forecast, start, end) ? 1 : 0),
+        0,
+      ),
+    };
+  });
+
+  let carryForecast = 0;
+  let carryPlanReadiness = 0;
+  let adjustedForecastCumulative = 0;
+  let adjustedPlanReadinessCumulative = 0;
+
+  const perBucket = rawPerBucket.map((values, index) => {
+    const bucket = buckets[index];
+    const bucketHasElapsed = bucket.end.getTime() < referenceTime;
+
+    const actualForecastCumulative = rows.reduce(
+      (total, row) => total + (isOnOrBefore(row.rfs_af, bucket.end) ? 1 : 0),
+      0
+    );
+
+    const actualReadinessCumulative = rows.reduce(
+      (total, row) => total + (isOnOrBefore(row.imp_integ_af, bucket.end) ? 1 : 0),
+      0
+    );
+
+    const hasForecastValues = actualForecastCumulative > 0 || values.forecast > 0;
+    const hasPlanReadinessValues = actualReadinessCumulative > 0 || values.planReadiness > 0;
+
+    const padding = bucketHasElapsed ? getPlanPaddingValue(bucket, index) : 0;
+    const forecastPadding = bucketHasElapsed && hasForecastValues ? padding : 0;
+    const readinessPadding = bucketHasElapsed && hasPlanReadinessValues ? padding : 0;
+
+    const planForecastWithCarry = values.forecast + carryForecast;
+    const planReadinessWithCarry = values.planReadiness + carryPlanReadiness;
+
+    const proposedForecastCumulative = adjustedForecastCumulative + planForecastWithCarry;
+    const proposedPlanReadinessCumulative = adjustedPlanReadinessCumulative + planReadinessWithCarry;
+
+    let allowedForecastCumulative = proposedForecastCumulative;
+    let allowedPlanReadinessCumulative = proposedPlanReadinessCumulative;
+
+    if (bucketHasElapsed) {
+      const maxForecastCumulative = Math.max(
+        actualForecastCumulative + forecastPadding,
+        adjustedForecastCumulative,
+      );
+      const maxPlanReadinessCumulative = Math.max(
+        actualReadinessCumulative + readinessPadding,
+        adjustedPlanReadinessCumulative,
+      );
+
+      allowedForecastCumulative = Math.min(proposedForecastCumulative, maxForecastCumulative);
+      allowedPlanReadinessCumulative = Math.min(proposedPlanReadinessCumulative, maxPlanReadinessCumulative);
+    }
+
+    const adjustedForecast = Math.max(allowedForecastCumulative - adjustedForecastCumulative, 0);
+    const adjustedPlanReadiness = Math.max(
+      allowedPlanReadinessCumulative - adjustedPlanReadinessCumulative,
+      0,
+    );
+
+    carryForecast = Math.max(proposedForecastCumulative - allowedForecastCumulative, 0);
+    carryPlanReadiness = Math.max(
+      proposedPlanReadinessCumulative - allowedPlanReadinessCumulative,
+      0,
+    );
+
+    adjustedForecastCumulative = allowedForecastCumulative;
+    adjustedPlanReadinessCumulative = allowedPlanReadinessCumulative;
+
+    return {
+      ...values,
+      forecast: adjustedForecast,
+      planReadiness: adjustedPlanReadiness,
+    };
+  });
+
+  const totalForecast = rows.filter(row => row.rfs_forecast_lock).length;
+  const totalReady = rows.filter(row => row.imp_integ_af).length;
+  const totalActive = rows.filter(row => row.rfs_af).length;
+  const totalPlanReadiness = rows.filter(row => row.mocn_activation_forecast).length;
+
   let lastForecastIndex = -1;
-  let lastActualIndex = -1;
+  let lastReadyIndex = -1;
+  let lastActiveIndex = -1;
+  let lastPlanReadinessIndex = -1;
 
-  // Pre-calculate cumulative values for each bucket
-  const cumulativeData = buckets.map((bucket) => {
+  for (let i = perBucket.length - 1; i >= 0; i--) {
+    if (perBucket[i].forecast > 0 && lastForecastIndex === -1) lastForecastIndex = i;
+    if (perBucket[i].ready > 0 && lastReadyIndex === -1) lastReadyIndex = i;
+    if (perBucket[i].active > 0 && lastActiveIndex === -1) lastActiveIndex = i;
+    if (perBucket[i].planReadiness > 0 && lastPlanReadinessIndex === -1) lastPlanReadinessIndex = i;
+  }
+
+  if (lastForecastIndex === -1 && totalForecast > 0) lastForecastIndex = perBucket.length - 1;
+  if (lastReadyIndex === -1 && totalReady > 0) lastReadyIndex = perBucket.length - 1;
+  if (lastActiveIndex === -1 && totalActive > 0) lastActiveIndex = perBucket.length - 1;
+  if (lastPlanReadinessIndex === -1 && totalPlanReadiness > 0) lastPlanReadinessIndex = perBucket.length - 1;
+
+  let cumulativeForecast = 0;
+  let cumulativePlanReadiness = 0;
+
+  return perBucket.map((values, index) => {
+    const bucket = buckets[index];
     const bucketEnd = bucket.end;
-    const cumulativeBaseline = rows.reduce(
-      (total, row) => total + (isOnOrBefore(row.rfs_bf, bucketEnd) ? 1 : 0),
+
+    cumulativeForecast += values.forecast;
+    cumulativePlanReadiness += values.planReadiness;
+
+    const cumulativeReady = rows.reduce(
+      (total, row) => total + (isOnOrBefore(row.imp_integ_af, bucketEnd) ? 1 : 0),
       0
     );
-    const cumulativeForecast = rows.reduce(
-      (total, row) => total + (isOnOrBefore(row.rfs_ff, bucketEnd) ? 1 : 0),
-      0
-    );
-    const cumulativeActual = rows.reduce(
+
+    const cumulativeActive = rows.reduce(
       (total, row) => total + (isOnOrBefore(row.rfs_af, bucketEnd) ? 1 : 0),
       0
     );
 
-    return {
-      baseline: cumulativeBaseline,
-      forecast: cumulativeForecast,
-      actual: cumulativeActual,
-    };
-  });
-
-  // Find the last bucket with data for each metric
-  for (let i = cumulativeData.length - 1; i >= 0; i--) {
-    if (cumulativeData[i].baseline > 0 && lastBaselineIndex === -1) lastBaselineIndex = i;
-    if (cumulativeData[i].forecast > 0 && lastForecastIndex === -1) lastForecastIndex = i;
-    if (cumulativeData[i].actual > 0 && lastActualIndex === -1) lastActualIndex = i;
-  }
-
-  // If no data found in buckets, set to last bucket to show total
-  if (lastBaselineIndex === -1 && totalBaseline > 0) lastBaselineIndex = cumulativeData.length - 1;
-  if (lastForecastIndex === -1 && totalForecast > 0) lastForecastIndex = cumulativeData.length - 1;
-  if (lastActualIndex === -1 && totalActual > 0) lastActualIndex = cumulativeData.length - 1;
-
-  return cumulativeData.map((values, index) => {
-    // For the last bucket with data, show the total count
-    const finalBaseline = index === lastBaselineIndex ? totalBaseline : Math.min(values.baseline, totalBaseline);
-    const finalForecast = index === lastForecastIndex ? totalForecast : Math.min(values.forecast, totalForecast);
-    const finalActual = index === lastActualIndex ? totalActual : Math.min(values.actual, totalActual);
+    const finalForecast = index === lastForecastIndex ? totalForecast : Math.min(cumulativeForecast, totalForecast);
+    const finalReady = index === lastReadyIndex ? totalReady : Math.min(cumulativeReady, totalReady);
+    const finalActive = index === lastActiveIndex ? totalActive : Math.min(cumulativeActive, totalActive);
+    const finalPlanReadiness = index === lastPlanReadinessIndex ? totalPlanReadiness : Math.min(cumulativePlanReadiness, totalPlanReadiness);
 
     return {
       key: buckets[index].key,
       label: buckets[index].label,
-      baseline: index <= lastBaselineIndex ? finalBaseline : null,
+      baseline: null,
       forecast: index <= lastForecastIndex ? finalForecast : null,
-      actual: index <= lastActualIndex ? finalActual : null,
-      // Legacy fields for backward compatibility (set to null for AOP)
-      ready: null,
-      active: null,
-      planReadiness: null,
+      actual: null,
+      ready: index <= lastReadyIndex ? finalReady : null,
+      active: index <= lastActiveIndex ? finalActive : null,
+      planReadiness: index <= lastPlanReadinessIndex ? finalPlanReadiness : null,
     };
   });
 }
@@ -292,8 +422,11 @@ const valueFormatter = (value: any): string => {
 const ProgressCurveTooltip = ({ active, payload, label }: ProgressCurveTooltipProps) => {
   if (!active || !payload?.length) return null;
 
+  // Detect format from payload data
+  const isAopFormat = payload.some(item => item.dataKey === 'baseline' || item.dataKey === 'actual');
+  
   const sortedPayload = [...payload].sort(
-    (a, b) => getTooltipOrderIndex(a.dataKey) - getTooltipOrderIndex(b.dataKey),
+    (a, b) => getTooltipOrderIndex(a.dataKey, isAopFormat) - getTooltipOrderIndex(b.dataKey, isAopFormat),
   );
 
   const values = sortedPayload
@@ -661,7 +794,11 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
   // Memoize buckets and data to prevent unnecessary recalculations
   const buckets = useMemo(() => buildHybridBuckets(anchorDate, monthsSpan as 3|5, rows ?? []), [anchorDate, monthsSpan, rows]);
   const data = useMemo(() => aggregate(rows ?? [], buckets, anchorDate), [rows, buckets, anchorDate]);
-
+  
+  // Detect format from aggregated data
+  const isAopFormat = useMemo(() => {
+    return data.length > 0 && (data[0].baseline !== null || data[0].actual !== null);
+  }, [data]);
 
   return (
     <div className={`rounded-lg bg-[#0F1630]/80 border border-white/5 p-0.5 w-full h-full flex flex-col min-w-0 ${className ?? ''}`}>
@@ -694,8 +831,8 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
             <Tooltip 
               content={<ProgressCurveTooltip />}
             />
-             {/* Check if we have AOP data (baseline/forecast/actual) or legacy data */}
-             {data.length > 0 && (data[0].baseline !== null || data[0].forecast !== null || data[0].actual !== null) ? (
+             {/* Render based on detected format */}
+             {isAopFormat ? (
               <>
                 <Line 
                   dataKey="baseline" 
