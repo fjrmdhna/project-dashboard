@@ -275,7 +275,7 @@ export async function getAopFilterOptions() {
         throw error
       }
 
-      const rows = data as Record<string, string | null>[] | null
+      const rows = (data as unknown) as Record<string, string | null>[] | null
       rows?.forEach(row => {
         const value = row[column]
         if (typeof value === 'string') {
