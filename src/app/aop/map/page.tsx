@@ -29,7 +29,7 @@ const STATUS_COPY: Record<StatusLabel, string> = {
 
 export default function AopMapPage() {
   const [filterValue, setFilterValue] = useState<FilterValue>(AOP_INITIAL_FILTER)
-  const [selectedKey, setSelectedKey] = useState<string | null>(AOP_DASHBOARD_ROWS[0]?.system_key ?? null)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
   const filteredRows = useMemo(
     () => filterAopRows(AOP_DASHBOARD_ROWS, filterValue),
