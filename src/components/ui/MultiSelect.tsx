@@ -122,6 +122,7 @@ export function MultiSelect({
       case "Vendor": return "w-[100px]";
       case "Program": return "w-[110px]";
       case "City (imp_ttp)": return "w-[120px]";
+      case "RAN Score": return "w-[110px]";
       default: return "w-[110px]";
     }
   }

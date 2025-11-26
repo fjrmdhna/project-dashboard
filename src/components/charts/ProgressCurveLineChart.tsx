@@ -5,10 +5,13 @@ import { TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line } from 'recharts';
 
 export type Row = {
-  rfs_forecast_lock?: string | null; // forecast date
-  imp_integ_af?: string | null;      // readiness date
-  rfs_af?: string | null;            // activated date
-  mocn_activation_forecast?: string | null; // plan 5G readiness date
+  rfs_bf?: string | null;             // Baseline date
+  rfs_ff?: string | null;             // Forecast date
+  rfs_af?: string | null;             // Actual date
+  // Legacy fields (for backward compatibility with other pages)
+  rfs_forecast_lock?: string | null; // forecast date (legacy)
+  imp_integ_af?: string | null;       // readiness date (legacy)
+  mocn_activation_forecast?: string | null; // plan 5G readiness date (legacy)
 };
 
 export type ProgressCurveProps = {
@@ -53,7 +56,7 @@ const getPlanPaddingValue = (bucket: Bucket, index: number) => {
   return pattern[index % pattern.length] ?? 1;
 };
 
-const TOOLTIP_ORDER: Array<string> = ['planReadiness', 'ready', 'forecast', 'active'];
+const TOOLTIP_ORDER: Array<string> = ['baseline', 'forecast', 'actual'];
 const getTooltipOrderIndex = (key?: string | number | null) => {
   if (key === undefined || key === null) return TOOLTIP_ORDER.length;
   const idx = TOOLTIP_ORDER.indexOf(String(key));
@@ -78,9 +81,12 @@ function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = 
 
   const collectedDates = rows
     .flatMap((row) => [
+      safeDate(row.rfs_bf),  // Baseline
+      safeDate(row.rfs_ff),  // Forecast
+      safeDate(row.rfs_af),  // Actual
+      // Legacy fields for backward compatibility
       safeDate(row.rfs_forecast_lock),
       safeDate(row.imp_integ_af),
-      safeDate(row.rfs_af),
       safeDate(row.mocn_activation_forecast),
     ])
     .filter((value): value is Date => Boolean(value));
@@ -187,7 +193,10 @@ function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, ra
 type Point = {
   key: string;
   label: string;
-  forecast: number | null;
+  baseline: number | null;  // rfs_bf
+  forecast: number | null;  // rfs_ff
+  actual: number | null;    // rfs_af
+  // Legacy fields for backward compatibility
   ready: number | null;
   active: number | null;
   planReadiness: number | null;
@@ -202,168 +211,73 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
     return !!(d && s && e && d >= s && d <= e);
   };
 
-  const rawPerBucket = buckets.map((bucket) => {
-    const { start, end } = bucket;
-    return {
-      forecast: rows.reduce((total, row) => total + (inRange(row.rfs_forecast_lock, start, end) ? 1 : 0), 0),
-      ready: rows.reduce((total, row) => total + (inRange(row.imp_integ_af, start, end) ? 1 : 0), 0),
-      active: rows.reduce((total, row) => total + (inRange(row.rfs_af, start, end) ? 1 : 0), 0),
-      planReadiness: rows.reduce(
-        (total, row) => total + (inRange(row.mocn_activation_forecast, start, end) ? 1 : 0),
-        0,
-      ),
-    };
-  });
-
-  const referenceDate = anchorDate ? new Date(anchorDate) : new Date();
-  const referenceTime = isNaN(+referenceDate) ? Date.now() : referenceDate.getTime();
-
   // Helper function to check if date is <= end date (for cumulative calculation)
   const isOnOrBefore = (val?: string | null, endDate?: Date) => {
     const d = safeDate(val);
     return !!(d && endDate && d <= endDate);
   };
 
-  let carryForecast = 0;
-  let carryPlanReadiness = 0;
-
-  let adjustedForecastCumulative = 0;
-  let adjustedPlanReadinessCumulative = 0;
-
-  // Traverse buckets chronologically so plan surplus flows forward and padding stays bounded.
-  const perBucket = rawPerBucket.map((values, index) => {
-    const bucket = buckets[index];
-    const bucketHasElapsed = bucket.end.getTime() < referenceTime;
-
-    // Calculate actual cumulative values up to bucket end date (not just within bucket range)
-    // This ensures plan follows actual when bucket has elapsed
-    const actualForecastCumulative = rows.reduce(
-      (total, row) => total + (isOnOrBefore(row.rfs_af, bucket.end) ? 1 : 0),
-      0
-    );
-
-    const actualReadinessCumulative = rows.reduce(
-      (total, row) => total + (isOnOrBefore(row.imp_integ_af, bucket.end) ? 1 : 0),
-      0
-    );
-
-    const hasForecastValues = actualForecastCumulative > 0 || values.forecast > 0;
-    const hasPlanReadinessValues = actualReadinessCumulative > 0 || values.planReadiness > 0;
-
-    const padding = bucketHasElapsed ? getPlanPaddingValue(bucket, index) : 0;
-    const forecastPadding = bucketHasElapsed && hasForecastValues ? padding : 0;
-    const readinessPadding = bucketHasElapsed && hasPlanReadinessValues ? padding : 0;
-
-    const planForecastWithCarry = values.forecast + carryForecast;
-    const planReadinessWithCarry = values.planReadiness + carryPlanReadiness;
-
-    const proposedForecastCumulative = adjustedForecastCumulative + planForecastWithCarry;
-    const proposedPlanReadinessCumulative = adjustedPlanReadinessCumulative + planReadinessWithCarry;
-
-    let allowedForecastCumulative = proposedForecastCumulative;
-    let allowedPlanReadinessCumulative = proposedPlanReadinessCumulative;
-
-    if (bucketHasElapsed) {
-      // When bucket has elapsed, plan should follow actual (with padding allowance)
-      // Plan cannot exceed actual + padding
-      const maxForecastCumulative = Math.max(
-        actualForecastCumulative + forecastPadding,
-        adjustedForecastCumulative,
-      );
-      const maxPlanReadinessCumulative = Math.max(
-        actualReadinessCumulative + readinessPadding,
-        adjustedPlanReadinessCumulative,
-      );
-
-      allowedForecastCumulative = Math.min(proposedForecastCumulative, maxForecastCumulative);
-      allowedPlanReadinessCumulative = Math.min(proposedPlanReadinessCumulative, maxPlanReadinessCumulative);
-    }
-
-    const adjustedForecast = Math.max(allowedForecastCumulative - adjustedForecastCumulative, 0);
-    const adjustedPlanReadiness = Math.max(
-      allowedPlanReadinessCumulative - adjustedPlanReadinessCumulative,
-      0,
-    );
-
-    carryForecast = Math.max(proposedForecastCumulative - allowedForecastCumulative, 0);
-    carryPlanReadiness = Math.max(
-      proposedPlanReadinessCumulative - allowedPlanReadinessCumulative,
-      0,
-    );
-
-    adjustedForecastCumulative = allowedForecastCumulative;
-    adjustedPlanReadinessCumulative = allowedPlanReadinessCumulative;
-
-    return {
-      ...values,
-      forecast: adjustedForecast,
-      planReadiness: adjustedPlanReadiness,
-    };
-  });
-
-  // Calculate total counts for each metric to determine the last index
-  const totalForecast = rows.filter(row => row.rfs_forecast_lock).length;
-  const totalReady = rows.filter(row => row.imp_integ_af).length;
-  const totalActive = rows.filter(row => row.rfs_af).length;
-  const totalPlanReadiness = rows.filter(row => row.mocn_activation_forecast).length;
+  // Calculate total counts for each metric
+  const totalBaseline = rows.filter(row => row.rfs_bf).length;
+  const totalForecast = rows.filter(row => row.rfs_ff).length;
+  const totalActual = rows.filter(row => row.rfs_af).length;
 
   // Find the last bucket that has any data for each metric
+  let lastBaselineIndex = -1;
   let lastForecastIndex = -1;
-  let lastReadyIndex = -1;
-  let lastActiveIndex = -1;
-  let lastPlanReadinessIndex = -1;
+  let lastActualIndex = -1;
 
-  // Find the last bucket with data for each metric
-  for (let i = perBucket.length - 1; i >= 0; i--) {
-    if (perBucket[i].forecast > 0 && lastForecastIndex === -1) lastForecastIndex = i;
-    if (perBucket[i].ready > 0 && lastReadyIndex === -1) lastReadyIndex = i;
-    if (perBucket[i].active > 0 && lastActiveIndex === -1) lastActiveIndex = i;
-    if (perBucket[i].planReadiness > 0 && lastPlanReadinessIndex === -1) lastPlanReadinessIndex = i;
-  }
-
-  // If no data found in buckets, set to last bucket to show total
-  if (lastForecastIndex === -1 && totalForecast > 0) lastForecastIndex = perBucket.length - 1;
-  if (lastReadyIndex === -1 && totalReady > 0) lastReadyIndex = perBucket.length - 1;
-  if (lastActiveIndex === -1 && totalActive > 0) lastActiveIndex = perBucket.length - 1;
-  if (lastPlanReadinessIndex === -1 && totalPlanReadiness > 0) lastPlanReadinessIndex = perBucket.length - 1;
-
-  let cumulativeForecast = 0;
-  let cumulativePlanReadiness = 0;
-
-  return perBucket.map((values, index) => {
-    const bucket = buckets[index];
+  // Pre-calculate cumulative values for each bucket
+  const cumulativeData = buckets.map((bucket) => {
     const bucketEnd = bucket.end;
-
-    // For forecast and planReadiness, keep the existing logic (they use adjusted values)
-    cumulativeForecast += values.forecast;
-    cumulativePlanReadiness += values.planReadiness;
-
-    // For ready and active, calculate cumulative values (all data <= bucket end date)
-    // This ensures W46 shows all readiness/activated data up to end of W46,
-    // and W47 shows all readiness/activated data up to end of W47
-    const cumulativeReady = rows.reduce(
-      (total, row) => total + (isOnOrBefore(row.imp_integ_af, bucketEnd) ? 1 : 0),
+    const cumulativeBaseline = rows.reduce(
+      (total, row) => total + (isOnOrBefore(row.rfs_bf, bucketEnd) ? 1 : 0),
       0
     );
-
-    const cumulativeActive = rows.reduce(
+    const cumulativeForecast = rows.reduce(
+      (total, row) => total + (isOnOrBefore(row.rfs_ff, bucketEnd) ? 1 : 0),
+      0
+    );
+    const cumulativeActual = rows.reduce(
       (total, row) => total + (isOnOrBefore(row.rfs_af, bucketEnd) ? 1 : 0),
       0
     );
 
+    return {
+      baseline: cumulativeBaseline,
+      forecast: cumulativeForecast,
+      actual: cumulativeActual,
+    };
+  });
+
+  // Find the last bucket with data for each metric
+  for (let i = cumulativeData.length - 1; i >= 0; i--) {
+    if (cumulativeData[i].baseline > 0 && lastBaselineIndex === -1) lastBaselineIndex = i;
+    if (cumulativeData[i].forecast > 0 && lastForecastIndex === -1) lastForecastIndex = i;
+    if (cumulativeData[i].actual > 0 && lastActualIndex === -1) lastActualIndex = i;
+  }
+
+  // If no data found in buckets, set to last bucket to show total
+  if (lastBaselineIndex === -1 && totalBaseline > 0) lastBaselineIndex = cumulativeData.length - 1;
+  if (lastForecastIndex === -1 && totalForecast > 0) lastForecastIndex = cumulativeData.length - 1;
+  if (lastActualIndex === -1 && totalActual > 0) lastActualIndex = cumulativeData.length - 1;
+
+  return cumulativeData.map((values, index) => {
     // For the last bucket with data, show the total count
-    const finalForecast = index === lastForecastIndex ? totalForecast : Math.min(cumulativeForecast, totalForecast);
-    const finalReady = index === lastReadyIndex ? totalReady : Math.min(cumulativeReady, totalReady);
-    const finalActive = index === lastActiveIndex ? totalActive : Math.min(cumulativeActive, totalActive);
-    const finalPlanReadiness = index === lastPlanReadinessIndex ? totalPlanReadiness : Math.min(cumulativePlanReadiness, totalPlanReadiness);
+    const finalBaseline = index === lastBaselineIndex ? totalBaseline : Math.min(values.baseline, totalBaseline);
+    const finalForecast = index === lastForecastIndex ? totalForecast : Math.min(values.forecast, totalForecast);
+    const finalActual = index === lastActualIndex ? totalActual : Math.min(values.actual, totalActual);
 
     return {
       key: buckets[index].key,
       label: buckets[index].label,
+      baseline: index <= lastBaselineIndex ? finalBaseline : null,
       forecast: index <= lastForecastIndex ? finalForecast : null,
-      ready: index <= lastReadyIndex ? finalReady : null,
-      active: index <= lastActiveIndex ? finalActive : null,
-      planReadiness: index <= lastPlanReadinessIndex ? finalPlanReadiness : null,
+      actual: index <= lastActualIndex ? finalActual : null,
+      // Legacy fields for backward compatibility (set to null for AOP)
+      ready: null,
+      active: null,
+      planReadiness: null,
     };
   });
 }
@@ -442,6 +356,56 @@ const ProgressCurveTooltip = ({ active, payload, label }: ProgressCurveTooltipPr
   );
 };
 
+// Custom dot with label for Baseline (Blue) - Label above left of point
+const BaselineDotWithLabel = (props: any) => {
+  const { cx, cy, payload } = props;
+  const value = payload?.baseline;
+  
+  // Don't render if value is null, 0, or empty
+  if (value === null || !value || value === '0' || value === '') {
+    return null;
+  }
+  
+  return (
+    <g>
+      {/* Dot */}
+      <circle cx={cx} cy={cy} r={3} fill="#2196F3" />
+      
+      {/* Background rectangle with blue color - Above left of point */}
+      <rect
+        x={cx - 22}
+        y={cy - 16}
+        width={16}
+        height={12}
+        fill="rgba(33, 150, 243, 0.95)"
+        rx={3}
+        ry={3}
+        stroke="rgba(255, 255, 255, 0.5)"
+        strokeWidth={1}
+        style={{
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
+        }}
+      />
+      {/* Text label */}
+      <text
+        x={cx - 14}
+        y={cy - 10}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="#FFFFFF"
+        fontSize={8}
+        fontWeight={600}
+        style={{
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
+          textShadow: '0px 0px 3px rgba(0,0,0,1)'
+        }}
+      >
+        {Number(value).toLocaleString()}
+      </text>
+    </g>
+  );
+};
+
 // Custom dot with label for Forecast (Purple) - Label below left of point
 const ForecastDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
@@ -449,7 +413,7 @@ const ForecastDotWithLabel = (props: any) => {
   
   // Don't render if value is null, 0, or empty
   if (value === null || !value || value === '0' || value === '') {
-    return null; // Don't render dot at all for null values
+    return null;
   }
   
   return (
@@ -475,6 +439,56 @@ const ForecastDotWithLabel = (props: any) => {
       {/* Text label */}
       <text
         x={cx - 14}
+        y={cy + 10}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="#FFFFFF"
+        fontSize={8}
+        fontWeight={600}
+        style={{
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
+          textShadow: '0px 0px 3px rgba(0,0,0,1)'
+        }}
+      >
+        {Number(value).toLocaleString()}
+      </text>
+    </g>
+  );
+};
+
+// Custom dot with label for Actual (Green) - Label below right of point
+const ActualDotWithLabel = (props: any) => {
+  const { cx, cy, payload } = props;
+  const value = payload?.actual;
+  
+  // Don't render if value is null, 0, or empty
+  if (value === null || !value || value === '0' || value === '') {
+    return null;
+  }
+  
+  return (
+    <g>
+      {/* Dot */}
+      <circle cx={cx} cy={cy} r={3} fill="#7CB342" />
+      
+      {/* Background rectangle with green color - Below right of point */}
+      <rect
+        x={cx + 6}
+        y={cy + 4}
+        width={16}
+        height={12}
+        fill="rgba(124, 179, 66, 0.95)"
+        rx={3}
+        ry={3}
+        stroke="rgba(255, 255, 255, 0.5)"
+        strokeWidth={1}
+        style={{
+          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
+        }}
+      />
+      {/* Text label */}
+      <text
+        x={cx + 14}
         y={cy + 10}
         textAnchor="middle"
         dominantBaseline="central"
@@ -680,39 +694,73 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
             <Tooltip 
               content={<ProgressCurveTooltip />}
             />
-             <Line 
-               dataKey="planReadiness" 
-               name="Plan 5G Readiness" 
-               stroke="#2196F3" 
-               strokeWidth={0.8} 
-               dot={<PlanReadinessDotWithLabel />}
-               isAnimationActive={false}
-             />
-             <Line 
-               dataKey="ready" 
-               name="Readiness" 
-               stroke="#E53935" 
-               strokeWidth={0.8} 
-               dot={<ReadinessDotWithLabel />}
-               isAnimationActive={false}
-             />
-             <Line 
-               dataKey="forecast" 
-               name="Plan 5G Activated" 
-               stroke="#8A5AA3" 
-               strokeWidth={1} 
-               dot={<ForecastDotWithLabel />}
-               activeDot={{ r:2 }}
-               isAnimationActive={false}
-             />
-             <Line 
-               dataKey="active" 
-               name="Activated" 
-               stroke="#7CB342" 
-               strokeWidth={0.8} 
-               dot={<ActivatedDotWithLabel />}
-               isAnimationActive={false}
-             />
+             {/* Check if we have AOP data (baseline/forecast/actual) or legacy data */}
+             {data.length > 0 && (data[0].baseline !== null || data[0].forecast !== null || data[0].actual !== null) ? (
+              <>
+                <Line 
+                  dataKey="baseline" 
+                  name="Baseline" 
+                  stroke="#2196F3" 
+                  strokeWidth={0.8} 
+                  dot={<BaselineDotWithLabel />}
+                  isAnimationActive={false}
+                />
+                <Line 
+                  dataKey="forecast" 
+                  name="Forecast" 
+                  stroke="#8A5AA3" 
+                  strokeWidth={1} 
+                  dot={<ForecastDotWithLabel />}
+                  activeDot={{ r:2 }}
+                  isAnimationActive={false}
+                />
+                <Line 
+                  dataKey="actual" 
+                  name="Actual" 
+                  stroke="#7CB342" 
+                  strokeWidth={0.8} 
+                  dot={<ActualDotWithLabel />}
+                  isAnimationActive={false}
+                />
+              </>
+            ) : (
+              <>
+                {/* Legacy lines for backward compatibility with other pages */}
+                <Line 
+                  dataKey="planReadiness" 
+                  name="Plan 5G Readiness" 
+                  stroke="#2196F3" 
+                  strokeWidth={0.8} 
+                  dot={<PlanReadinessDotWithLabel />}
+                  isAnimationActive={false}
+                />
+                <Line 
+                  dataKey="ready" 
+                  name="Readiness" 
+                  stroke="#E53935" 
+                  strokeWidth={0.8} 
+                  dot={<ReadinessDotWithLabel />}
+                  isAnimationActive={false}
+                />
+                <Line 
+                  dataKey="forecast" 
+                  name="Plan 5G Activated" 
+                  stroke="#8A5AA3" 
+                  strokeWidth={1} 
+                  dot={<ForecastDotWithLabel />}
+                  activeDot={{ r:2 }}
+                  isAnimationActive={false}
+                />
+                <Line 
+                  dataKey="active" 
+                  name="Activated" 
+                  stroke="#7CB342" 
+                  strokeWidth={0.8} 
+                  dot={<ActivatedDotWithLabel />}
+                  isAnimationActive={false}
+                />
+              </>
+            )}
             <Legend verticalAlign="bottom" align="center" wrapperStyle={{ marginTop: 0, paddingTop: 0 }} iconType="circle" iconSize={3} />
           </LineChart>
         </ResponsiveContainer>

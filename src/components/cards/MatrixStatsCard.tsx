@@ -11,8 +11,10 @@ export interface Row {
   imp_integ_af?: string | null
   rfs_af?: string | null
   rfs_forecast_lock?: string | null
+  rfc_approved?: string | null
   hotnews_af?: string | null
   endorse_af?: string | null
+  pac_accepted_af?: string | null
   vendor_name?: string
   program_report?: string
   imp_ttp?: string
@@ -31,9 +33,11 @@ const METRIC_CONFIG = [
   { key: "install", label: "INSTALL" },
   { key: "readiness", label: "READINESS" },
   { key: "activated", label: "ACTIVATED" },
+  { key: "rfc", label: "RFC" },
   { key: "patp", label: "PATP" },
-  { key: "hotnews", label: "HOT NEWS" },
-  { key: "endorse", label: "ENDORSE" }
+  { key: "hotnews", label: "HN" },
+  { key: "endorse", label: "ENDORSE" },
+  { key: "pac", label: "PAC" }
 ] as const
 
 type MetricKey = (typeof METRIC_CONFIG)[number]["key"]
@@ -67,8 +71,10 @@ export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
     const install = rows.filter(row => row.ic_000040_af).length
     const readiness = rows.filter(row => row.imp_integ_af).length
     const activated = rows.filter(row => row.rfs_af).length
+    const rfc = rows.filter(row => row.rfc_approved).length
     const hotnews = rows.filter(row => row.hotnews_af).length
     const endorse = rows.filter(row => row.endorse_af).length
+    const pac = rows.filter(row => row.pac_accepted_af).length
     const patp = patpCount
 
     return {
@@ -78,9 +84,11 @@ export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
       install,
       readiness,
       activated,
+      rfc,
       patp,
       hotnews,
-      endorse
+      endorse,
+      pac
     }
   }, [rows, patpCount])
 
@@ -90,9 +98,11 @@ export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
     install: stats.install,
     readiness: stats.readiness,
     activated: stats.activated,
+    rfc: stats.rfc,
     patp: stats.patp,
     hotnews: stats.hotnews,
-    endorse: stats.endorse
+    endorse: stats.endorse,
+    pac: stats.pac
   }
 
   return (

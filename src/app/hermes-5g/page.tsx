@@ -34,7 +34,7 @@ const HermesLoadingScreen = ({ message }: { message: string }) => (
     <div className="relative z-10 flex w-full max-w-5xl flex-col items-center gap-10 px-6 text-center">
       <div className="flex flex-col gap-3">
         <p className="text-xs uppercase tracking-[0.65em] text-white/60">Hermes 5G</p>
-        <h1 className="text-3xl font-semibold tracking-wide">Menyiapkan Dashboard</h1>
+        <h1 className="text-3xl font-semibold tracking-wide">Preparing Dashboard</h1>
         <p className="text-sm text-white/70">{message}</p>
       </div>
 
@@ -46,7 +46,7 @@ const HermesLoadingScreen = ({ message }: { message: string }) => (
         </div>
         <div className="w-52">
           <div className="hermes-loading-pill h-2 w-full rounded-full bg-white/20" />
-          <p className="mt-3 text-xs uppercase tracking-[0.35em] text-white/60">Sinkronisasi data</p>
+          <p className="mt-3 text-xs uppercase tracking-[0.35em] text-white/60">Data Synchronization</p>
         </div>
       </div>
 
@@ -62,7 +62,7 @@ const HermesLoadingScreen = ({ message }: { message: string }) => (
               <div className="hermes-loading-pill h-2 w-3/4 rounded-full bg-white/10" />
               <div className="flex items-center gap-3 text-[11px] text-white/50">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-300/80" />
-                <span>Mengambil metrik terbaru...</span>
+                <span>Retrieving latest metrics...</span>
               </div>
             </div>
           </div>
@@ -83,8 +83,9 @@ export default function Hermes5GPage() {
     program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
     imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
     nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
+    ran_score: filterContext.ranScoreFilter !== 'all' ? filterContext.ranScoreFilter.split(',').filter(Boolean) : [],
     status: filterContext.statusFilters || []
-  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.statusFilters])
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.ranScoreFilter, filterContext.statusFilters])
   
   // Convert debounced filters to FilterValue format - use debouncedFilters for data fetching
   const debouncedFilter: FilterValue = useMemo(() => {
@@ -95,6 +96,7 @@ export default function Hermes5GPage() {
       program_report: debounced.programFilter !== 'all' ? debounced.programFilter.split(',').filter(Boolean) : [],
       imp_ttp: debounced.cityFilter !== 'all' ? debounced.cityFilter.split(',').filter(Boolean) : [],
       nano_cluster: debounced.nanoClusterFilter !== 'all' ? debounced.nanoClusterFilter.split(',').filter(Boolean) : [],
+      ran_score: debounced.ranScoreFilter !== 'all' ? debounced.ranScoreFilter.split(',').filter(Boolean) : [],
       status: debounced.statusFilters || []
     }
   }, [filterContext.debouncedFilters, filterContext])
@@ -237,6 +239,7 @@ export default function Hermes5GPage() {
     filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report.join(',') : 'all')
     filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp.join(',') : 'all')
     filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster.join(',') : 'all')
+    filterContext.setRanScoreFilter(newFilters.ran_score.length > 0 ? newFilters.ran_score.join(',') : 'all')
     updateFilter(newFilters)
   }
 
@@ -269,6 +272,9 @@ export default function Hermes5GPage() {
     filter.nano_cluster.forEach((value) => {
       params.append('nano_cluster', value)
     })
+    filter.ran_score.forEach((value) => {
+      params.append('ran_score', value)
+    })
 
     return params
   }
@@ -284,7 +290,7 @@ export default function Hermes5GPage() {
       const response = await fetch(`/api/hermes-5g/export?${params.toString()}`)
 
       if (!response.ok) {
-        let errorMessage = 'Gagal mengekspor data.'
+        let errorMessage = 'Failed to export data.'
         const contentType = response.headers.get('Content-Type') || response.headers.get('content-type') || ''
 
         try {
@@ -328,11 +334,11 @@ export default function Hermes5GPage() {
 
       setExportStatus({
         type: 'success',
-        message: 'Data Activation berhasil diunduh.'
+        message: 'Activation data downloaded successfully.'
       })
     } catch (error) {
       console.error('Failed to export Hermes 5G data', error)
-      const message = error instanceof Error ? error.message : 'Terjadi kesalahan saat ekspor.'
+      const message = error instanceof Error ? error.message : 'An error occurred during export.'
       setExportStatus({
         type: 'error',
         message
@@ -355,7 +361,7 @@ export default function Hermes5GPage() {
             disabled={isExporting}
           >
             <Download className="h-3.5 w-3.5" />
-            {isExporting ? 'Mengunduh...' : 'Export Activation'}
+            {isExporting ? 'Downloading...' : 'Export Activation'}
           </button>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
@@ -570,8 +576,8 @@ export default function Hermes5GPage() {
   )
 
   const initialLoaderMessage = !filterContext.isHydrated
-    ? "Menginisialisasi preferensi filter..."
-    : "Mengambil data Hermes 5G terbaru..."
+    ? "Initializing filter preferences..."
+    : "Retrieving latest Hermes 5G data..."
 
   if (!filterContext.isHydrated || !hasInitialDataLoaded) {
     return <HermesLoadingScreen message={initialLoaderMessage} />

@@ -182,6 +182,7 @@ const INITIAL_FILTER: FilterValue = {
   program_report: [],
   imp_ttp: [],
   nano_cluster: [],
+  ran_score: [],
   status: []
 }
 

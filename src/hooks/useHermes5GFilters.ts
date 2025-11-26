@@ -4,6 +4,7 @@ interface FilterOptions {
   vendors: string[]
   programs: string[]
   cities: string[]
+  ranScores: string[]
 }
 
 interface FilterState {
@@ -59,7 +60,8 @@ export function useHermes5GFilters(): UseHermes5GFiltersReturn {
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     vendors: [],
     programs: [],
-    cities: []
+    cities: [],
+    ranScores: []
   })
 
   // Fetch filter options on mount

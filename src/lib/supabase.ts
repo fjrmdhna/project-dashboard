@@ -13,6 +13,7 @@ export interface SiteData5G {
   program_report?: string
   imp_ttp?: string
   nano_cluster?: string
+  ran_score?: string | null
   issue_category?: string | null
   caf_approved?: string
   mos_af?: string
@@ -20,9 +21,11 @@ export interface SiteData5G {
   imp_integ_af?: string
   rfs_af?: string
   rfs_forecast_lock?: string
+  rfc_approved?: string
   mocn_activation_forecast?: string
   hotnews_af?: string
   endorse_af?: string
+  pac_accepted_af?: string
   site_id?: string
   site_name?: string
   lat?: number | null
@@ -37,6 +40,7 @@ export interface SiteData5GFilters {
   program_report?: string[]
   imp_ttp?: string[]
   nano_cluster?: string[]
+  ran_score?: string[]
   search?: string
   status?: string[] // New status filter
   limit?: number
@@ -59,6 +63,7 @@ export async function getSiteData5G(
     'program_report',
     'imp_ttp',
     'nano_cluster',
+    'ran_score',
     'issue_category',
     'caf_approved',
     'mos_af',
@@ -66,9 +71,11 @@ export async function getSiteData5G(
     'imp_integ_af',
     'rfs_af',
     'rfs_forecast_lock',
+    'rfc_approved',
     'mocn_activation_forecast',
     'hotnews_af',
     'endorse_af',
+    'pac_accepted_af',
     'site_id',
     'site_name',
     'lat',
@@ -125,6 +132,10 @@ export async function getSiteData5G(
 
   if (filters.nano_cluster && filters.nano_cluster.length > 0) {
     query = query.in('nano_cluster', filters.nano_cluster)
+  }
+
+  if (filters.ran_score && filters.ran_score.length > 0) {
+    query = query.in('ran_score', filters.ran_score)
   }
 
   if (filters.search) {
@@ -218,14 +229,93 @@ export async function getFilterOptions() {
     .select('nano_cluster')
     .not('nano_cluster', 'is', null)
 
-  if (vendorError || programError || cityError || nanoClusterError) {
-    throw new Error(`Supabase error: ${vendorError?.message || programError?.message || cityError?.message || nanoClusterError?.message}`)
+  const { data: ranScores, error: ranScoreError } = await supabase
+    .from('site_data_5g')
+    .select('ran_score')
+    .not('ran_score', 'is', null)
+    .neq('ran_score', '')
+
+  if (vendorError || programError || cityError || nanoClusterError || ranScoreError) {
+    throw new Error(`Supabase error: ${vendorError?.message || programError?.message || cityError?.message || nanoClusterError?.message || ranScoreError?.message}`)
   }
 
   return {
     vendors: [...new Set(vendors.map(v => v.vendor_name))].sort(),
     programs: [...new Set(filterExcludedProgramReports(programs?.map(p => p.program_report)))].sort(),
     cities: [...new Set(cities.map(c => c.imp_ttp))].sort(),
-    nanoClusters: [...new Set(nanoClusters.map(nc => nc.nano_cluster))].sort()
+    nanoClusters: [...new Set(nanoClusters.map(nc => nc.nano_cluster))].sort(),
+    ranScores: [...new Set((ranScores || []).map(rs => rs.ran_score).filter((value): value is string => Boolean(value)))].sort()
+  }
+}
+
+const formatCircleValue = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/\b\w/g, char => char.toUpperCase())
+
+export async function getAopFilterOptions() {
+  const fetchDistinctValues = async (column: string) => {
+    const values = new Map<string, string>()
+    const pageSize = 5000
+    let page = 0
+    let hasMore = true
+
+    while (hasMore) {
+      const from = page * pageSize
+      const to = from + pageSize - 1
+
+      const { data, error } = await supabase
+        .from('site_data_aop')
+        .select(column)
+        .not(column, 'is', null)
+        .neq(column, '')
+        .range(from, to)
+
+      if (error) {
+        throw error
+      }
+
+      const rows = data as Record<string, string | null>[] | null
+      rows?.forEach(row => {
+        const value = row[column]
+        if (typeof value === 'string') {
+          const trimmed = value.trim()
+          if (trimmed) {
+            const normalized = trimmed.toLowerCase()
+            if (!values.has(normalized)) {
+              const formatted =
+                column === 'region_circle' ? formatCircleValue(trimmed) : trimmed
+              values.set(normalized, formatted)
+            }
+          }
+        }
+      })
+
+      hasMore = !!rows && rows.length === pageSize
+      page += 1
+
+      if (page > 50) {
+        console.warn(`Pagination limit reached while fetching ${column}`)
+        break
+      }
+    }
+
+    return Array.from(values.values())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
+  }
+
+  const [vendors, programs, circles, ranScores] = await Promise.all([
+    fetchDistinctValues('vendor_name'),
+    fetchDistinctValues('program_report'),
+    fetchDistinctValues('region_circle'),
+    fetchDistinctValues('ran_score')
+  ])
+
+  return {
+    vendors,
+    programs,
+    circles,
+    ranScores
   }
 }

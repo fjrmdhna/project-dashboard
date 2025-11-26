@@ -6,11 +6,12 @@ export async function GET(request: NextRequest) {
   try {
     // Get filter parameters from query string
     const url = new URL(request.url)
-    const { vendorNames, programReports, impTtps } = parseFilterParams(url)
+    const { vendorNames, programReports, impTtps, ranScores } = parseFilterParams(url)
     const result = await getActivatedChartData({
       vendorNames,
       programReports,
-      impTtps
+      impTtps,
+      ranScores
     })
     
     return NextResponse.json(result)

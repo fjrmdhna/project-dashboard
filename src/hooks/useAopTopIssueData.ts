@@ -2,7 +2,6 @@
 
 import { useMemo, useEffect, useCallback, useRef } from 'react'
 import { FilterValue } from '@/components/filters/FilterBar'
-import { buildFilterParams } from '@/lib/filters'
 import { useApiCache } from './useApiCache'
 import { fetchWithRetry } from '@/lib/api-utils'
 
@@ -12,11 +11,11 @@ export interface TopIssue {
   color: string
 }
 
-interface UseTopIssueDataOptions {
+interface UseAopTopIssueDataOptions {
   filter?: FilterValue
 }
 
-interface UseTopIssueDataReturn {
+interface UseAopTopIssueDataReturn {
   data: TopIssue[]
   loading: boolean
   error: Error | null
@@ -25,20 +24,25 @@ interface UseTopIssueDataReturn {
   refreshData: () => Promise<void>
 }
 
-export function useTopIssueData(options: UseTopIssueDataOptions = {}): UseTopIssueDataReturn {
-  const filter = options.filter || { q: '', vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], ran_score: [], status: [] }
+export function useAopTopIssueData(options: UseAopTopIssueDataOptions = {}): UseAopTopIssueDataReturn {
+  const filter = options.filter || { q: '', vendor_name: [], program_report: [], circle: [], ran_score: [], status: [] }
 
   // Generate cache key dari filter
   const cacheKey = useMemo(() => {
-    return `top-issue-${JSON.stringify(filter)}`
+    return `aop-top-issue-${JSON.stringify(filter)}`
   }, [filter])
 
   // Fetch function untuk useApiCache dengan retry logic
   const fetchFn = useCallback(async () => {
-    // Build consistent filter params (supports multi-value)
-    const params = buildFilterParams(filter)
+    // Build filter params untuk AOP (menggunakan circle bukan imp_ttp/nano_cluster)
+    const params = new URLSearchParams()
+    if (filter.q) params.append('q', filter.q)
+    filter.vendor_name?.forEach(v => params.append('vendor_name', v))
+    filter.program_report?.forEach(p => params.append('program_report', p))
+    filter.circle?.forEach(c => params.append('region_circle', c))
+    filter.ran_score?.forEach(score => params.append('ran_score', score))
 
-    const response = await fetchWithRetry(`/api/hermes-5g/top-5-issue?${params.toString()}`, {}, 3)
+    const response = await fetchWithRetry(`/api/aop/top-5-issue?${params.toString()}`, {}, 3)
     
     const result = await response.json()
     
@@ -54,7 +58,6 @@ export function useTopIssueData(options: UseTopIssueDataOptions = {}): UseTopIss
   }, [filter])
 
   // Use useApiCache dengan validasi
-  // useApiCache akan otomatis refetch saat cacheKey berubah, tidak perlu useEffect manual
   const { data: cachedData, loading, error, refetch: cacheRefetch } = useApiCache<{ data: TopIssue[], topIssuesTotal: number, totalIssues: number }>(
     cacheKey,
     fetchFn,
@@ -63,10 +66,14 @@ export function useTopIssueData(options: UseTopIssueDataOptions = {}): UseTopIss
       cacheTime: 5 * 60 * 1000, // 5 menit
       refetchOnMount: true,
       validateFn: (data) => {
-        // Cache semua valid data (termasuk empty) untuk mencegah infinite refetch
-        // Empty data akan di-cache dengan expiry lebih pendek (1 menit)
+        // Validasi struktur data - cache semua valid data (termasuk empty) untuk mencegah infinite refetch
         const typedData = data as { data?: TopIssue[], topIssuesTotal?: number, totalIssues?: number }
-        return data !== null && data !== undefined && typeof data === 'object' && Array.isArray(typedData.data)
+        if (!data || !typedData.data) {
+          return false
+        }
+        // Validasi bahwa data adalah array
+        // Cache data kosong juga (dengan expiry lebih pendek) untuk mencegah refetch berulang
+        return Array.isArray(typedData.data)
       }
     }
   )
@@ -80,4 +87,5 @@ export function useTopIssueData(options: UseTopIssueDataOptions = {}): UseTopIss
     totalIssues: cachedData?.totalIssues || 0,
     refreshData: cacheRefetch
   }
-} 
+}
+

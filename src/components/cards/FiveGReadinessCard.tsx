@@ -14,9 +14,11 @@ import {
   ReferenceLine
 } from "recharts"
 
-// Tipe data untuk row dari site_data_5g
+// Tipe data untuk row dari site_data_5g atau site_data_aop
 type Row = {
   imp_ttp?: string | null
+  nano_cluster?: string | null
+  region_circle?: string | null
   imp_integ_af?: string | null
 }
 
@@ -24,11 +26,13 @@ type Row = {
 type Props = {
   rows: Row[]
   maxCities?: number
+  variant?: 'city' | 'circle' // Variant untuk menentukan apakah menggunakan city atau circle
 }
 
 // Tipe data untuk item chart
 type ChartItem = {
   city: string
+  circle: string
   ny: number // Nilai negatif untuk NY Readiness
   rdy: number | null // Nilai positif untuk Readiness, bisa null untuk nilai 0
   total: number // Total absolut
@@ -39,6 +43,16 @@ function normalizeCity(city: string | null | undefined): string {
   if (!city) return "Unknown"
   // Trim whitespace dan konversi ke uppercase untuk konsistensi
   return city.trim().toUpperCase()
+}
+
+// Fungsi helper untuk normalisasi nama circle dengan Title Case
+function normalizeCircle(circle: string | null | undefined): string {
+  if (!circle) return "Unknown"
+  const trimmed = circle.trim()
+  // Konversi ke Title Case (sama seperti formatCircleValue di supabase.ts)
+  return trimmed
+    .toLowerCase()
+    .replace(/\b\w/g, char => char.toUpperCase())
 }
 
 // Komponen untuk custom tick pada YAxis
@@ -52,7 +66,10 @@ function CityTick(props: any) {
   
   // Cari data yang sesuai dengan payload value
   const chartData = props.chartData || []
-  const item = chartData.find((d: ChartItem) => d.city === payload.value)
+  const variant = props.variant || 'city'
+  const item = chartData.find((d: ChartItem) => 
+    variant === 'circle' ? d.circle === payload.value : d.city === payload.value
+  )
   
   if (!item) {
     return (
@@ -69,6 +86,8 @@ function CityTick(props: any) {
     )
   }
   
+  const displayName = variant === 'circle' ? item.circle : item.city
+  
   return (
     <text 
       x={x} 
@@ -78,7 +97,7 @@ function CityTick(props: any) {
       fill="#E7ECF3" 
       fontSize={10}
     >
-      {item.city} ({item.total})
+      {displayName} ({item.total})
     </text>
   )
 }
@@ -129,34 +148,38 @@ const ReadyLabel = (props: any) => {
   )
 }
 
-export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
+export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city' }: Props) {
   // Agregasi data untuk chart
   const chartData = useMemo(() => {
-    // Buat map untuk menghitung jumlah NY dan Ready per kota
-    const cityMap = new Map<string, { ny: number; rdy: number }>()
+    // Buat map untuk menghitung jumlah NY dan Ready per kota/circle
+    const locationMap = new Map<string, { ny: number; rdy: number }>()
     
     // Iterasi setiap row untuk agregasi
     rows.forEach(row => {
-      const city = normalizeCity(row.imp_ttp)
+      // Tentukan lokasi berdasarkan variant
+      const location = variant === 'circle' 
+        ? normalizeCircle(row.nano_cluster || row.region_circle)
+        : normalizeCity(row.imp_ttp)
       const isReady = !!row.imp_integ_af
       
-      // Ambil atau inisialisasi data kota
-      const cityData = cityMap.get(city) || { ny: 0, rdy: 0 }
+      // Ambil atau inisialisasi data lokasi
+      const locationData = locationMap.get(location) || { ny: 0, rdy: 0 }
       
       // Update counter sesuai status
       if (isReady) {
-        cityData.rdy++
+        locationData.rdy++
       } else {
-        cityData.ny++
+        locationData.ny++
       }
       
       // Simpan kembali ke map
-      cityMap.set(city, cityData)
+      locationMap.set(location, locationData)
     })
     
     // Konversi map ke array untuk sorting
-    const result: ChartItem[] = Array.from(cityMap.entries()).map(([city, data]) => ({
-      city,
+    const result: ChartItem[] = Array.from(locationMap.entries()).map(([location, data]) => ({
+      city: variant === 'circle' ? '' : location, // Untuk backward compatibility
+      circle: variant === 'circle' ? location : '', // Untuk circle variant
       ny: Math.abs(data.ny || 0), // Nilai POSITIF untuk NY Readiness
       rdy: data.rdy > 0 ? Math.abs(data.rdy) : null, // Nilai POSITIF untuk Readiness
       total: data.ny + data.rdy // Total absolut
@@ -167,22 +190,10 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
       (b.rdy || 0) + (b.ny || 0) - ((a.rdy || 0) + (a.ny || 0))
     )
     
-    // Cek apakah Surabaya ada dalam data
-    const surabayaIndex = sortedResult.findIndex(item => 
-      item.city === "SURABAYA"
-    )
-    
-    // Jika Surabaya ada tapi tidak dalam top maxCities
-    if (surabayaIndex >= maxCities && surabayaIndex !== -1) {
-      // Ambil top (maxCities-1) dan tambahkan Surabaya
-      const topCities = sortedResult.slice(0, maxCities - 1)
-      topCities.push(sortedResult[surabayaIndex])
-      return topCities
-    }
-    
-    // Jika tidak, ambil top maxCities seperti biasa
+    // Untuk variant circle, tidak ada logika khusus seperti Surabaya
+    // Langsung return top maxCities
     return sortedResult.slice(0, maxCities)
-  }, [rows, maxCities])
+  }, [rows, maxCities, variant])
 
   // Hitung nilai maksimum untuk domain
   const maxValue = useMemo(() => {
@@ -195,8 +206,11 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
 
   // Render custom tick dengan data chart
   const renderCityTick = (props: any) => {
-    return <CityTick {...props} chartData={chartData} />
+    return <CityTick {...props} chartData={chartData} variant={variant} />
   }
+
+  const displayLabel = variant === 'circle' ? 'Readiness by Circle' : '5G Readiness by City'
+  const dataKey = variant === 'circle' ? 'circle' : 'city'
 
   return (
     <div className="readiness-card rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'calc(var(--wb-card-padding) - 4px)' }}>
@@ -206,7 +220,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
           <BarChart3 className="h-3.5 w-3.5 text-purple-400" />
         </div>
         <div className="text-[10px] font-semibold bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">
-          5G Readiness by City
+          {displayLabel}
         </div>
       </div>
       
@@ -226,7 +240,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10 }: Props) {
             />
             <YAxis
               type="category"
-              dataKey="city"
+              dataKey={dataKey}
               orientation="right"
               axisLine={false}
               tickLine={false}

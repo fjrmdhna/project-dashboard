@@ -175,6 +175,7 @@ export interface FilterOptionsData {
   programs: string[]
   cities: string[]
   nanoClusters: string[]
+  ranScores: string[]
 }
 
 export interface FilterOptionsResponse {
@@ -366,16 +367,30 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
       .not('nano_cluster', 'is', null)
       .neq('nano_cluster', '');
     
-    if (vendorsError || programsError || citiesError || nanoClustersError) {
-      console.error('Supabase Error:', vendorsError || programsError || citiesError || nanoClustersError);
-      throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message || nanoClustersError?.message}`);
+    // Get unique RAN scores
+    const { data: ranScoresData, error: ranScoresError } = await supabase
+      .from('site_data_5g')
+      .select('ran_score')
+      .not('ran_score', 'is', null)
+      .neq('ran_score', '');
+    
+    if (vendorsError || programsError || citiesError || nanoClustersError || ranScoresError) {
+      console.error('Supabase Error:', vendorsError || programsError || citiesError || nanoClustersError || ranScoresError);
+      throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message || nanoClustersError?.message || ranScoresError?.message}`);
     }
     
     const data: FilterOptionsData = {
       vendors: [...new Set(vendorsData?.map(row => row.vendor_name) || [])].sort(),
       programs: [...new Set(filterExcludedProgramReports(programsData?.map(row => row.program_report)))].sort(),
       cities: [...new Set(citiesData?.map(row => row.imp_ttp) || [])].sort(),
-      nanoClusters: [...new Set(nanoClustersData?.map(row => row.nano_cluster) || [])].sort()
+      nanoClusters: [...new Set(nanoClustersData?.map(row => row.nano_cluster) || [])].sort(),
+      ranScores: [
+        ...new Set(
+          (ranScoresData || [])
+            .map(row => row.ran_score)
+            .filter((value): value is string => Boolean(value))
+        )
+      ].sort()
     };
     
     console.log('Filter options from Supabase:', data);
@@ -393,7 +408,8 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
         vendors: [],
         programs: [],
         cities: [],
-        nanoClusters: []
+        nanoClusters: [],
+        ranScores: []
       },
       timestamp: new Date().toISOString()
     };
@@ -405,6 +421,7 @@ export async function getReadinessChartData(filters?: {
   vendorNames?: string[];
   programReports?: string[];
   impTtps?: string[];
+  ranScores?: string[];
 }): Promise<ReadinessChartResponse> {
   try {
     const sanitizedProgramReports = filterExcludedProgramReports(filters?.programReports);
@@ -412,7 +429,7 @@ export async function getReadinessChartData(filters?: {
     // Build Supabase query with filters
     let query = supabase
       .from('site_data_5g')
-      .select('imp_ttp, imp_integ_af')
+      .select('imp_ttp, imp_integ_af, ran_score')
       .not('imp_ttp', 'is', null);
 
     EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
@@ -428,6 +445,9 @@ export async function getReadinessChartData(filters?: {
     }
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
+    }
+    if (filters?.ranScores && filters.ranScores.length > 0) {
+      query = query.in('ran_score', filters.ranScores)
     }
     
     const { data, error } = await query;
@@ -486,6 +506,7 @@ export async function getActivatedChartData(filters?: {
   vendorNames?: string[];
   programReports?: string[];
   impTtps?: string[];
+  ranScores?: string[];
 }): Promise<ActivatedChartResponse> {
   try {
     const sanitizedProgramReports = filterExcludedProgramReports(filters?.programReports);
@@ -493,7 +514,7 @@ export async function getActivatedChartData(filters?: {
     // Build Supabase query with filters
     let query = supabase
       .from('site_data_5g')
-      .select('imp_ttp, rfs_af')
+      .select('imp_ttp, rfs_af, ran_score')
       .not('imp_ttp', 'is', null);
 
     EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
@@ -509,6 +530,9 @@ export async function getActivatedChartData(filters?: {
     }
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
+    }
+    if (filters?.ranScores && filters.ranScores.length > 0) {
+      query = query.in('ran_score', filters.ranScores)
     }
     
     const { data, error } = await query;
@@ -567,6 +591,7 @@ export async function getProgressCurveData(filters?: {
   vendorNames?: string[];
   programReports?: string[];
   impTtps?: string[];
+  ranScores?: string[];
 }): Promise<ProgressCurveResponse> {
   try {
     const sanitizedProgramReports = filterExcludedProgramReports(filters?.programReports);
@@ -574,7 +599,7 @@ export async function getProgressCurveData(filters?: {
     // Build Supabase query with filters
     let query = supabase
       .from('site_data_5g')
-      .select('rfs_forecast_lock, imp_integ_af, rfs_af')
+      .select('rfs_forecast_lock, imp_integ_af, rfs_af, ran_score')
       .not('rfs_forecast_lock', 'is', null);
 
     EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
@@ -590,6 +615,9 @@ export async function getProgressCurveData(filters?: {
     }
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
+    }
+    if (filters?.ranScores && filters.ranScores.length > 0) {
+      query = query.in('ran_score', filters.ranScores)
     }
     
     const { data, error } = await query;
@@ -960,6 +988,7 @@ export async function getNanoClusterData(filters?: {
   vendorNames?: string[];
   programReports?: string[];
   impTtps?: string[];
+  ranScores?: string[];
 }): Promise<NanoClusterResponse> {
   try {
     const sanitizedProgramReports = filterExcludedProgramReports(filters?.programReports);
@@ -967,7 +996,7 @@ export async function getNanoClusterData(filters?: {
     // Build Supabase query with filters
     let query = supabase
       .from('site_data_5g')
-      .select('nano_cluster, imp_integ_af, rfs_af')
+      .select('nano_cluster, imp_integ_af, rfs_af, ran_score')
       .not('nano_cluster', 'is', null)
       .neq('nano_cluster', '');
 
@@ -984,6 +1013,9 @@ export async function getNanoClusterData(filters?: {
     }
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
+    }
+    if (filters?.ranScores && filters.ranScores.length > 0) {
+      query = query.in('ran_score', filters.ranScores)
     }
     
     const { data, error } = await query;

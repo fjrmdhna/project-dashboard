@@ -12,7 +12,9 @@ export interface FilterValue {
   program_report: string[]
   imp_ttp: string[]
   nano_cluster: string[]
+  ran_score: string[]
   status: string[] // New status filter array
+  circle?: string[]
 }
 
 // Props untuk FilterBar
@@ -20,6 +22,8 @@ export interface FilterBarProps {
   value: FilterValue
   onChange: (value: FilterValue) => void
   onReset?: () => void
+  variant?: "default" | "aop"
+  endpoint?: string
 }
 
 // Tipe data filter options
@@ -28,6 +32,8 @@ interface FilterOptions {
   programs: string[]
   cities: string[]
   nanoClusters: string[]
+  circles: string[]
+  ranScores: string[]
 }
 
 // Fungsi helper untuk memendekkan teks yang terlalu panjang
@@ -37,7 +43,7 @@ const truncateText = (text: string | undefined | null, maxLength: number = 20): 
   return text.substring(0, maxLength - 3) + '...';
 }
 
-export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
+export function FilterBar({ value, onChange, onReset, variant = "default", endpoint = "/api/filters" }: FilterBarProps) {
   // State lokal untuk search input (sebelum debounce)
   const [searchInput, setSearchInput] = useState(value.q)
   
@@ -46,7 +52,9 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     vendors: [],
     programs: [],
     cities: [],
-    nanoClusters: []
+    nanoClusters: [],
+    circles: [],
+    ranScores: []
   })
   
   // State untuk loading
@@ -62,7 +70,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     async function fetchOptions() {
       try {
         setIsLoading(true)
-        const response = await fetch('/api/filters')
+        const response = await fetch(endpoint)
         
         if (!isMounted) return
         
@@ -73,7 +81,9 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
               vendors: data.data.vendors || [],
               programs: data.data.programs || [],
               cities: data.data.cities || [],
-              nanoClusters: data.data.nanoClusters || []
+              nanoClusters: data.data.nanoClusters || [],
+              circles: data.data.circles || [],
+              ranScores: data.data.ranScores || []
             })
           }
         }
@@ -91,7 +101,7 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [endpoint])
   
   // Update search value ketika debounce selesai
   useEffect(() => {
@@ -123,12 +133,22 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     console.log('Nano cluster filter changed:', selected)
     onChange({ ...value, nano_cluster: selected })
   }, [onChange, value])
+
+  const handleCircleChange = useCallback((selected: string[]) => {
+    console.log('Circle filter changed:', selected)
+    onChange({ ...value, circle: selected })
+  }, [onChange, value])
+
+  const handleRanScoreChange = useCallback((selected: string[]) => {
+    console.log('RAN score filter changed:', selected)
+    onChange({ ...value, ran_score: selected })
+  }, [onChange, value])
   
   // Handler untuk reset semua filter
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], ran_score: [], status: [], circle: [] })
   }
 
   // Handler untuk remove individual filter
@@ -151,12 +171,19 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     (value.program_report?.length || 0) > 0 || 
     (value.imp_ttp?.length || 0) > 0 ||
     (value.nano_cluster?.length || 0) > 0 ||
+    (value.ran_score?.length || 0) > 0 ||
+    (value.circle?.length || 0) > 0 ||
     (value.status?.length || 0) > 0
+
+  const gridClass =
+    variant === "aop"
+      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2"
+      : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
   return (
     <div className="h-full flex flex-col min-w-0">
       {/* Filter Controls - Responsive grid layout */}
-      <div className="grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2">
+      <div className={gridClass}>
         {/* Search Input */}
         <div className="col-span-2 md:col-span-1 relative min-w-0">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
@@ -197,25 +224,59 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
           className="col-span-2 sm:col-span-1 md:col-span-1"
         />
 
-        <MultiSelect
-          options={options.cities}
-          selected={value.imp_ttp}
-          placeholder="City"
-          onChange={handleCityChange}
-          disabled={isLoading}
-          width="w-full"
-          className="col-span-2 sm:col-span-1 md:col-span-1"
-        />
+        {variant === "aop" ? (
+          <>
+            <MultiSelect
+              options={options.circles}
+              selected={value.circle ?? []}
+              placeholder="Circle"
+              onChange={handleCircleChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 sm:col-span-1 md:col-span-1"
+            />
+            <MultiSelect
+              options={options.ranScores}
+              selected={value.ran_score ?? []}
+              placeholder="RAN Score"
+              onChange={handleRanScoreChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 sm:col-span-1 md:col-span-1"
+            />
+          </>
+        ) : (
+          <>
+            <MultiSelect
+              options={options.cities}
+              selected={value.imp_ttp}
+              placeholder="City"
+              onChange={handleCityChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 sm:col-span-1 md:col-span-1"
+            />
 
-        <MultiSelect
-          options={options.nanoClusters}
-          selected={value.nano_cluster}
-          placeholder="Cluster"
-          onChange={handleNanoClusterChange}
-          disabled={isLoading}
-          width="w-full"
-          className="col-span-2 sm:col-span-1 md:col-span-1"
-        />
+            <MultiSelect
+              options={options.nanoClusters}
+              selected={value.nano_cluster}
+              placeholder="Cluster"
+              onChange={handleNanoClusterChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 sm:col-span-1 md:col-span-1"
+            />
+            <MultiSelect
+              options={options.ranScores}
+              selected={value.ran_score ?? []}
+              placeholder="RAN Score"
+              onChange={handleRanScoreChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 sm:col-span-1 md:col-span-1"
+            />
+          </>
+        )}
 
         <button
           onClick={handleReset}
@@ -315,6 +376,34 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
               />
             </div>
           ))}
+
+          {value.ran_score?.map(score => (
+            <div
+              key={`ran-score-${score}`}
+              className="bg-pink-500/20 text-pink-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`RAN Score: ${score}`}
+            >
+              <span>RAN: {truncateText(score, 10)}</span>
+              <X
+                className="h-2 w-2 cursor-pointer"
+                onClick={() => removeFilter('ran_score', score)}
+              />
+            </div>
+          ))}
+
+          {value.circle?.map(circle => (
+            <div
+              key={`circle-${circle}`}
+              className="bg-cyan-500/20 text-cyan-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`Circle: ${circle}`}
+            >
+              <span>Circle: {truncateText(circle, 10)}</span>
+              <X
+                className="h-2 w-2 cursor-pointer"
+                onClick={() => removeFilter('circle', circle)}
+              />
+            </div>
+          ))}
           
           {value.status?.map(status => (
             <div 
@@ -334,8 +423,6 @@ export function FilterBar({ value, onChange, onReset }: FilterBarProps) {
     </div>
   )
 } 
-
-
 
 
 

@@ -28,7 +28,8 @@ export function FilterProvider({ children }: FilterProviderProps) {
       try {
         const saved = localStorage.getItem('hermes-filter-state')
         if (saved) {
-          setFiltersState(JSON.parse(saved))
+          const parsed = JSON.parse(saved)
+          setFiltersState(prev => ({ ...DEFAULT_FILTERS, ...prev, ...parsed }))
         }
       } catch (error) {
         console.warn('Failed to load filter state from localStorage:', error)
@@ -75,6 +76,10 @@ export function FilterProvider({ children }: FilterProviderProps) {
     setFiltersState(prev => ({ ...prev, nanoClusterFilter: nanoCluster }))
   }, [])
 
+  const setRanScoreFilter = useCallback((ranScore: string) => {
+    setFiltersState(prev => ({ ...prev, ranScoreFilter: ranScore }))
+  }, [])
+
   const setSearchTerm = useCallback((search: string) => {
     setFiltersState(prev => ({ ...prev, searchTerm: search }))
   }, [])
@@ -111,6 +116,7 @@ export function FilterProvider({ children }: FilterProviderProps) {
     setProgramFilter,
     setCityFilter,
     setNanoClusterFilter,
+    setRanScoreFilter,
     setSearchTerm,
     setStatusFilter,
     setRegionFilter,

@@ -12,13 +12,17 @@ import {
   Legend
 } from "recharts"
 import { DailyRunrateItem } from "@/hooks/useDailyRunrateData"
+import { AopDailyRunrateItem } from "@/hooks/useAopDailyRunrateData"
 
 export interface DailyRunrateCardProps {
-  data: DailyRunrateItem[]
+  data: DailyRunrateItem[] | AopDailyRunrateItem[]
   isLoading?: boolean
 }
 
 export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardProps) {
+  // Detect if data is AOP format (has forecast/actual) or legacy format (has readiness/activated)
+  const isAopFormat = data.length > 0 && ('forecast' in data[0] || 'actual' in data[0])
+  
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -26,14 +30,29 @@ export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardPr
         <div className="bg-[#1A2340] border border-white/10 px-3 py-2 rounded-md text-xs">
           <p className="text-white/90 font-semibold mb-1">{label}</p>
           <div className="space-y-1">
-            <p className="text-[#8A5AA3]">
-              <span className="text-white/80">Readiness: </span>
-              {payload[0].value}
-            </p>
-            <p className="text-[#7CB342]">
-              <span className="text-white/80">Activated: </span>
-              {payload[1].value}
-            </p>
+            {isAopFormat ? (
+              <>
+                <p className="text-[#8A5AA3]">
+                  <span className="text-white/80">Forecast: </span>
+                  {payload[0].value}
+                </p>
+                <p className="text-[#7CB342]">
+                  <span className="text-white/80">Actual: </span>
+                  {payload[1].value}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[#8A5AA3]">
+                  <span className="text-white/80">Readiness: </span>
+                  {payload[0].value}
+                </p>
+                <p className="text-[#7CB342]">
+                  <span className="text-white/80">Activated: </span>
+                  {payload[1].value}
+                </p>
+              </>
+            )}
           </div>
         </div>
       );
@@ -139,30 +158,61 @@ export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardPr
               )}
               wrapperStyle={{ paddingTop: '5px' }}
             />
-            <Line 
-              type="monotone"
-              dataKey="readiness"
-              name="5G Readiness"
-              stroke="#8A5AA3"
-              strokeWidth={1.5}
-              dot={{ r: 3, fill: '#8A5AA3', strokeWidth: 0 }}
-              activeDot={{ r: 4, fill: '#8A5AA3', stroke: '#fff', strokeWidth: 1 }}
-              isAnimationActive={true}
-              animationDuration={800}
-              label={renderLabel}
-            />
-            <Line 
-              type="monotone"
-              dataKey="activated"
-              name="5G Activated"
-              stroke="#7CB342"
-              strokeWidth={1.5}
-              dot={{ r: 3, fill: '#7CB342', strokeWidth: 0 }}
-              activeDot={{ r: 4, fill: '#7CB342', stroke: '#fff', strokeWidth: 1 }}
-              isAnimationActive={true}
-              animationDuration={1000}
-              label={renderLabel}
-            />
+            {isAopFormat ? (
+              <>
+                <Line 
+                  type="monotone"
+                  dataKey="forecast"
+                  name="Forecast"
+                  stroke="#8A5AA3"
+                  strokeWidth={1.5}
+                  dot={{ r: 3, fill: '#8A5AA3', strokeWidth: 0 }}
+                  activeDot={{ r: 4, fill: '#8A5AA3', stroke: '#fff', strokeWidth: 1 }}
+                  isAnimationActive={true}
+                  animationDuration={800}
+                  label={renderLabel}
+                />
+                <Line 
+                  type="monotone"
+                  dataKey="actual"
+                  name="Actual"
+                  stroke="#7CB342"
+                  strokeWidth={1.5}
+                  dot={{ r: 3, fill: '#7CB342', strokeWidth: 0 }}
+                  activeDot={{ r: 4, fill: '#7CB342', stroke: '#fff', strokeWidth: 1 }}
+                  isAnimationActive={true}
+                  animationDuration={1000}
+                  label={renderLabel}
+                />
+              </>
+            ) : (
+              <>
+                <Line 
+                  type="monotone"
+                  dataKey="readiness"
+                  name="5G Readiness"
+                  stroke="#8A5AA3"
+                  strokeWidth={1.5}
+                  dot={{ r: 3, fill: '#8A5AA3', strokeWidth: 0 }}
+                  activeDot={{ r: 4, fill: '#8A5AA3', stroke: '#fff', strokeWidth: 1 }}
+                  isAnimationActive={true}
+                  animationDuration={800}
+                  label={renderLabel}
+                />
+                <Line 
+                  type="monotone"
+                  dataKey="activated"
+                  name="5G Activated"
+                  stroke="#7CB342"
+                  strokeWidth={1.5}
+                  dot={{ r: 3, fill: '#7CB342', strokeWidth: 0 }}
+                  activeDot={{ r: 4, fill: '#7CB342', stroke: '#fff', strokeWidth: 1 }}
+                  isAnimationActive={true}
+                  animationDuration={1000}
+                  label={renderLabel}
+                />
+              </>
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>

@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
         programs: result.data.programs,
         cities: result.data.cities,
         nanoClusters: result.data.nanoClusters,
+        ranScores: result.data.ranScores,
       },
       timestamp: result.timestamp,
     })

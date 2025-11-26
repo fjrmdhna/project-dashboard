@@ -51,7 +51,7 @@ export function useApiCache<T>(
   } = options
 
   const [data, setData] = useState<T | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true) // Start with true, will be set to false if cached data exists
   const [error, setError] = useState<string | null>(null)
   const [lastFetched, setLastFetched] = useState<number | null>(null)
   
@@ -109,13 +109,15 @@ export function useApiCache<T>(
       (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length === 0)
 
     // Use custom validation function if provided
-    if (validateFn && !validateFn(data)) {
-      // If validateFn returns false, check if it's because data is empty
-      // If empty, we still cache it but with shorter expiry to prevent infinite refetch
-      if (isEmpty) {
-        return { shouldCache: true, isEmpty: true }
+    if (validateFn) {
+      const isValid = validateFn(data)
+      // Jika validateFn return false, jangan cache (termasuk data kosong)
+      // Ini untuk kasus dimana user ingin menolak data tertentu (misalnya data gagal atau bernilai 0)
+      if (!isValid) {
+        return { shouldCache: false, isEmpty: false }
       }
-      return { shouldCache: false, isEmpty: false }
+      // Jika valid, cache dengan expiry sesuai apakah empty atau tidak
+      return { shouldCache: true, isEmpty }
     }
 
     // Cache empty data to prevent infinite refetch, but with shorter expiry
@@ -149,7 +151,7 @@ export function useApiCache<T>(
   }, [cacheKey, cacheTime, validateFn, shouldCache])
 
   // Fetch data function
-  const fetchData = useCallback(async (force = false) => {
+  const fetchData = useCallback(async (force = false, background = false) => {
     // Prevent multiple concurrent fetches for the same cacheKey
     if (fetchingRef.current.has(cacheKey) && !force) {
       console.log(`[useApiCache] Fetch already in progress for ${cacheKey}, skipping...`)
@@ -185,7 +187,10 @@ export function useApiCache<T>(
     // Mark as fetching and record fetch time
     fetchingRef.current.add(cacheKey)
     lastFetchTimeRef.current.set(cacheKey, Date.now())
-    setLoading(true)
+    // Hanya set loading true jika bukan background fetch (untuk UX yang lebih baik)
+    if (!background) {
+      setLoading(true)
+    }
     setError(null)
     
     // Create new abort controller
@@ -210,7 +215,10 @@ export function useApiCache<T>(
       setLastFetched(Date.now())
       setError(null)
       fetchSucceeded = true
-      setLoading(false) // Ensure loading is false after setting data
+      // Hanya set loading false jika bukan background fetch
+      if (!background) {
+        setLoading(false) // Ensure loading is false after setting data
+      }
     } catch (err) {
       // Check if request was aborted or cacheKey changed
       if (controller.signal.aborted || lastCacheKeyRef.current !== cacheKey) {
@@ -227,7 +235,8 @@ export function useApiCache<T>(
       if (abortControllerRef.current === controller && lastCacheKeyRef.current === cacheKey) {
         fetchingRef.current.delete(cacheKey)
         // Only set loading to false if we didn't already set it (error case)
-        if (!fetchSucceeded) {
+        // Dan hanya jika bukan background fetch
+        if (!fetchSucceeded && !background) {
           setLoading(false)
         }
       } else {
@@ -266,28 +275,38 @@ export function useApiCache<T>(
       
       const cached = getCachedData()
       if (cached && isMounted) {
-        // Set cached data immediately
+        // Set cached data immediately - tampilkan data cached dulu untuk UX yang lebih baik
         setData(cached)
         setLastFetched(memoryCache.get(currentCacheKey)?.timestamp || null)
-        setLoading(false)
+        setLoading(false) // Pastikan loading false saat menggunakan cache
         
-        // Only refetch if stale and refetchOnMount is true AND cacheKey hasn't changed
-        // AND not already fetching AND enough time has passed since last fetch
+        // Refetch di background jika stale dan refetchOnMount is true
+        // Jangan set loading true saat refetch background untuk UX yang lebih baik
         if (refetchOnMount && isStale() && lastCacheKeyRef.current === currentCacheKey) {
           const lastFetchTime = lastFetchTimeRef.current.get(currentCacheKey)
           const now = Date.now()
+          // Hanya refetch jika cukup waktu telah berlalu (prevent rapid refetch)
           if (!lastFetchTime || (now - lastFetchTime) >= 500) {
-            await fetchData()
+            // Refetch di background tanpa set loading true (background = true)
+            fetchData(false, true).catch(err => {
+              // Error handling - jika refetch gagal, tetap gunakan cached data
+              console.warn(`[useApiCache] Background refetch failed for ${currentCacheKey}:`, err)
+            })
           }
         }
       } else if (isMounted && !fetchingRef.current.has(currentCacheKey) && lastCacheKeyRef.current === currentCacheKey) {
-        // No cached data, fetch immediately (only if not already fetching and cacheKey hasn't changed)
-        // AND enough time has passed since last fetch
+        // No cached data, fetch immediately (loading sudah true dari initial state)
         const lastFetchTime = lastFetchTimeRef.current.get(currentCacheKey)
         const now = Date.now()
         if (!lastFetchTime || (now - lastFetchTime) >= 500) {
           await fetchData()
+        } else {
+          // Jika terlalu cepat, set loading false
+          setLoading(false)
         }
+      } else {
+        // No cached data and already fetching or cacheKey changed, set loading false
+        setLoading(false)
       }
     }
     

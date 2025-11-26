@@ -1,43 +1,47 @@
 "use client"
 
-import { useMemo, useEffect, useCallback, useRef } from 'react'
+import { useMemo, useCallback } from 'react'
 import { FilterValue } from '@/components/filters/FilterBar'
 import { format, subDays } from 'date-fns'
-import { buildFilterParams } from '@/lib/filters'
 import { useApiCache } from './useApiCache'
 import { fetchWithRetry } from '@/lib/api-utils'
 
-export interface DailyRunrateItem {
+export interface AopDailyRunrateItem {
   date: string
-  readiness: number
-  activated: number
+  forecast: number
+  actual: number
 }
 
-interface UseDailyRunrateDataOptions {
+interface UseAopDailyRunrateDataOptions {
   filter?: FilterValue
 }
 
-interface UseDailyRunrateDataReturn {
-  data: DailyRunrateItem[]
+interface UseAopDailyRunrateDataReturn {
+  data: AopDailyRunrateItem[]
   loading: boolean
   error: Error | null
   refreshData: () => Promise<void>
 }
 
-export function useDailyRunrateData(options: UseDailyRunrateDataOptions = {}): UseDailyRunrateDataReturn {
-  const filter = options.filter || { q: '', vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], ran_score: [], status: [] }
+export function useAopDailyRunrateData(options: UseAopDailyRunrateDataOptions = {}): UseAopDailyRunrateDataReturn {
+  const filter = options.filter || { q: '', vendor_name: [], program_report: [], circle: [], ran_score: [], status: [] }
 
   // Generate cache key dari filter
   const cacheKey = useMemo(() => {
-    return `daily-runrate-${JSON.stringify(filter)}`
+    return `aop-daily-runrate-${JSON.stringify(filter)}`
   }, [filter])
 
   // Fetch function untuk useApiCache dengan retry logic
   const fetchFn = useCallback(async () => {
-    // Prepare consistent filter params
-    const params = buildFilterParams(filter)
+    // Build filter params untuk AOP
+    const params = new URLSearchParams()
+    if (filter.q) params.append('q', filter.q)
+    filter.vendor_name?.forEach(v => params.append('vendor_name', v))
+    filter.program_report?.forEach(p => params.append('program_report', p))
+    filter.circle?.forEach(c => params.append('region_circle', c))
+    filter.ran_score?.forEach(score => params.append('ran_score', score))
 
-    const response = await fetchWithRetry(`/api/hermes-5g/daily-runrate?${params.toString()}`, {}, 3)
+    const response = await fetchWithRetry(`/api/aop/daily-runrate?${params.toString()}`, {}, 3)
     
     const result = await response.json()
     
@@ -49,8 +53,7 @@ export function useDailyRunrateData(options: UseDailyRunrateDataOptions = {}): U
   }, [filter])
 
   // Use useApiCache dengan validasi
-  // useApiCache akan otomatis refetch saat cacheKey berubah, tidak perlu useEffect manual
-  const { data: cachedData, loading, error, refetch: cacheRefetch } = useApiCache<DailyRunrateItem[]>(
+  const { data: cachedData, loading, error, refetch: cacheRefetch } = useApiCache<AopDailyRunrateItem[]>(
     cacheKey,
     fetchFn,
     {
@@ -59,19 +62,18 @@ export function useDailyRunrateData(options: UseDailyRunrateDataOptions = {}): U
       refetchOnMount: true,
       validateFn: (data) => {
         // Cache semua valid array (termasuk empty) untuk mencegah infinite refetch
-        // Empty array akan di-cache dengan expiry lebih pendek (1 menit)
         return Array.isArray(data)
       }
     }
   )
 
   // Generate fallback data jika error (tidak di-cache)
-  const fallbackData: DailyRunrateItem[] = useMemo(() => {
+  const fallbackData: AopDailyRunrateItem[] = useMemo(() => {
     const today = new Date()
     return Array.from({ length: 7 }, (_, i) => ({
       date: format(subDays(today, 6 - i), 'dd-MMM-yy'),
-      readiness: 0,
-      activated: 0
+      forecast: 0,
+      actual: 0
     }))
   }, [])
 
@@ -82,4 +84,5 @@ export function useDailyRunrateData(options: UseDailyRunrateDataOptions = {}): U
     error: error ? new Error(error) : null,
     refreshData: cacheRefetch
   }
-} 
+}
+

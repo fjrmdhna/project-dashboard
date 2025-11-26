@@ -4,6 +4,7 @@ export interface FilterState {
   programFilter: string;
   cityFilter: string;
   nanoClusterFilter: string;
+  ranScoreFilter: string;
   searchTerm: string;
   statusFilter: string;
   regionFilter: string;
@@ -16,6 +17,7 @@ export interface FilterActions {
   setProgramFilter: (program: string) => void;
   setCityFilter: (city: string) => void;
   setNanoClusterFilter: (nanoCluster: string) => void;
+  setRanScoreFilter: (ranScore: string) => void;
   setSearchTerm: (search: string) => void;
   setStatusFilter: (status: string) => void;
   setRegionFilter: (region: string) => void;
@@ -37,6 +39,7 @@ export interface FilterOptions {
   cities: string[];
   statuses: string[];
   regions: string[];
+  ranScores?: string[];
 }
 
 // Default Filter Values
@@ -45,6 +48,7 @@ export const DEFAULT_FILTERS: FilterState = {
   programFilter: 'all',
   cityFilter: 'all',
   nanoClusterFilter: 'all',
+  ranScoreFilter: 'all',
   searchTerm: '',
   statusFilter: 'all',
   regionFilter: 'all',
