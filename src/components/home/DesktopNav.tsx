@@ -7,14 +7,12 @@ import { cn } from "@/lib/utils"
 interface DesktopNavProps {
   actions: NavigationAction[]
   activeId?: string
-  primaryAction: NavigationAction
+  primaryAction?: NavigationAction
   logoSrc?: string
   logoAlt?: string
 }
 
 export function DesktopNav({ actions, activeId, primaryAction, logoSrc, logoAlt = "Logo" }: DesktopNavProps) {
-  const PrimaryIcon = primaryAction.icon
-
   return (
     <header className="hidden lg:flex lg:justify-center">
       <div className="fixed inset-x-0 top-0 z-30 flex justify-center bg-[#05050F]/95 backdrop-blur">
@@ -48,13 +46,22 @@ export function DesktopNav({ actions, activeId, primaryAction, logoSrc, logoAlt 
               )
             })}
           </nav>
-          <Link
-            href={primaryAction.href}
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition hover:bg-primary/90"
-          >
-            <PrimaryIcon className="size-4" aria-hidden="true" />
-            {primaryAction.label}
-          </Link>
+          {primaryAction && (
+            <Link
+              href={primaryAction.href}
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition hover:bg-primary/90"
+            >
+              {(() => {
+                const PrimaryIcon = primaryAction.icon
+                return (
+                  <>
+                    <PrimaryIcon className="size-4" aria-hidden="true" />
+                    {primaryAction.label}
+                  </>
+                )
+              })()}
+            </Link>
+          )}
         </div>
       </div>
     </header>

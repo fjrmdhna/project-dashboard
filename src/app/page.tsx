@@ -1,4 +1,4 @@
-import { Briefcase, Home as HomeIcon, Map, Plus, Users } from "lucide-react"
+import { Briefcase, Home as HomeIcon, Map, Users } from "lucide-react"
 
 import { BottomNav } from "@/components/home/BottomNav"
 import { DesktopNav } from "@/components/home/DesktopNav"
@@ -20,18 +20,6 @@ const heroHighlight: HeroHighlight = {
 // Static project data (untuk project yang belum menggunakan data real)
 const staticProjects: ProjectCardData[] = [
   {
-    id: "aop",
-    title: "AOP",
-    category: "Operational Planning",
-    date: new Date().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }),
-    progress: 64,
-    href: "/aop",
-  },
-  {
     id: "cme",
     title: "CME",
     category: "Civil & Mechanical",
@@ -42,6 +30,7 @@ const staticProjects: ProjectCardData[] = [
     }),
     progress: 45,
     href: "/cme",
+    isDummy: true, // Menandai sebagai dummy/placeholder data
   },
   {
     id: "tlm",
@@ -54,6 +43,7 @@ const staticProjects: ProjectCardData[] = [
     }),
     progress: 58,
     href: "/tlm",
+    isDummy: true, // Menandai sebagai dummy/placeholder data
   },
 ]
 
@@ -61,15 +51,8 @@ const navActions: NavigationAction[] = [
   { id: "home", label: "Home", href: "/", icon: HomeIcon },
   { id: "projects", label: "Project", href: "/projects", icon: Briefcase },
   { id: "vendor", label: "Vendor", href: "/vendors", icon: Users },
-  { id: "map", label: "Map", href: "/hermes-5g/map", icon: Map },
+  { id: "map", label: "Map", href: "/map", icon: Map },
 ]
-
-const primaryNavAction: NavigationAction = {
-  id: "create",
-  label: "Create",
-  href: "/projects/new",
-  icon: Plus,
-}
 
 export default async function Home() {
   // Fetch progress real untuk Hermes 5G
@@ -86,12 +69,23 @@ export default async function Home() {
     // Fallback ke 0 jika error
   }
 
-  // Build projects array dengan data real untuk Hermes 5G
+  // Fetch progress real untuk AOP dari site_data_aop
+  // Mengambil semua data AOP tanpa filter spesifik
+  let aopProgress = 0
+  try {
+    const aopProgressData = await getProjectProgress("site_data_aop")
+    aopProgress = aopProgressData.progress
+  } catch (error) {
+    console.error("Error fetching AOP progress:", error)
+    // Fallback ke 0 jika error
+  }
+
+  // Build projects array dengan data real untuk Hermes 5G dan AOP
   const projects: ProjectCardData[] = [
     {
       id: "hermes",
       title: "Hermes 5G",
-      category: "Realtime Oversight",
+      category: "RAN",
       date: new Date().toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
@@ -101,6 +95,19 @@ export default async function Home() {
       mood: "primary",
       href: "/hermes-5g",
     },
+    {
+      id: "aop",
+      title: "AOP",
+      category: "RAN",
+      date: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      progress: aopProgress,
+      mood: "primary",
+      href: "/aop",
+    },
     ...staticProjects,
   ]
 
@@ -108,7 +115,6 @@ export default async function Home() {
     <main className="relative min-h-screen overflow-hidden bg-[#05050F]">
       <DesktopNav
         actions={navActions}
-        primaryAction={primaryNavAction}
         activeId="home"
         logoSrc="/logo-indosat-putih.png"
         logoAlt="Indosat Ooredoo Hutchison"
@@ -162,7 +168,7 @@ export default async function Home() {
         </div>
       </div>
       <div className="lg:hidden">
-        <BottomNav actions={navActions} primaryAction={primaryNavAction} activeId="home" />
+        <BottomNav actions={navActions} activeId="home" />
       </div>
     </main>
   )

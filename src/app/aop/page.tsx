@@ -1,6 +1,8 @@
 "use client"
 
-import { useMemo, useState, useEffect, type ReactNode } from "react"
+import Link from "next/link"
+import { useMemo, useState, useEffect, type ReactNode, type CSSProperties } from "react"
+import { ChevronDown, SlidersHorizontal } from "lucide-react"
 
 import { FilterBar, type FilterValue } from "@/components/filters/FilterBar"
 import { useDebounce } from "@/hooks/useDebounce"
@@ -227,6 +229,7 @@ const INITIAL_FILTER: FilterValue = {
 export default function AOPPage() {
   const [filterValue, setFilterValue] = useState<FilterValue>(INITIAL_FILTER)
   const [hasInitialDataLoaded, setHasInitialDataLoaded] = useState(false)
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   const isMobile = useIsMobile()
 
   // Debounce filter untuk unified debouncing (300ms seperti Hermes 5G)
@@ -287,6 +290,18 @@ export default function AOPPage() {
       }),
     []
   )
+
+  // Calculate active filter count
+  const activeFilterCount = (
+    (filterValue.q ? 1 : 0) +
+    filterValue.vendor_name.length +
+    filterValue.program_report.length +
+    filterValue.imp_ttp.length +
+    filterValue.nano_cluster.length +
+    filterValue.ran_score.length +
+    (filterValue.circle?.length ?? 0)
+  )
+  const hasActiveFilters = activeFilterCount > 0
 
   const totalSites = rows.length
   const readinessCount = rows.filter(row => row.imp_integ_af).length
@@ -377,58 +392,146 @@ export default function AOPPage() {
     />
   )
 
-  const renderMobileCard = (node: ReactNode, minHeight?: number) => (
-    <div className="w-full" style={minHeight ? { minHeight, height: minHeight } : undefined}>
-      {node}
-    </div>
-  )
+  const renderMobileCard = (node: ReactNode, minHeight?: number) => {
+    const style: CSSProperties = minHeight
+      ? { minHeight, height: minHeight }
+      : {}
+
+    return (
+      <div className="w-full flex flex-col" style={style}>
+        {node}
+      </div>
+    )
+  }
 
   const mobileLayout = (
-    <div className="flex min-h-screen flex-col bg-[#050B1B] text-white">
-      <main className="flex-1 space-y-4 overflow-y-auto px-4 pb-8 pt-6">
-        <div className="rounded-2xl border border-white/10 bg-[#0F1630]/80 p-3">
-          <FilterBar
-            value={filterValue}
-            onChange={handleFilterChange}
-            onReset={handleFilterReset}
-            variant="aop"
-            endpoint="/api/aop/filters"
-          />
-          {aopLoading && (
-            <p className="mt-2 text-[11px] text-white/50">
-              Loading AOP data...
-            </p>
-          )}
-          {aopError && (
-            <p className="mt-2 text-[11px] text-red-400">
-              Error: {aopError}. Using placeholder data.
-            </p>
-          )}
-          {!aopLoading && !aopError && aopData && aopData.length > 0 && (
-            <p className="mt-2 text-[11px] text-white/50">
-              Live AOP operational metrics from database ({aopData.length} sites).
-            </p>
-          )}
-          {!aopLoading && !aopError && (!aopData || aopData.length === 0) && (
-            <p className="mt-2 text-[11px] text-white/50">
-              Placeholder data shown. No AOP data found in database.
-            </p>
-          )}
+    <div className="min-h-screen bg-[#050B1B] text-white flex flex-col">
+      <header className="bg-gradient-to-b from-[#121c3e] to-transparent px-4 pt-5 pb-4 shadow-[0_12px_32px_rgba(0,0,0,0.35)]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1 flex justify-start">
+            <button
+              type="button"
+              onClick={() => window.location.href = '/'}
+              className="flex items-center justify-center w-9 h-9 rounded-full border border-white/20 bg-white/10 backdrop-blur hover:bg-white/20 transition"
+            >
+              <svg 
+                className="w-4 h-4 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex-1 flex justify-center">
+            <img
+              src="/logo-indosat-putih.png"
+              alt="Indosat Logo"
+              className="h-8"
+            />
+          </div>
+
+          <div className="flex-1 text-right text-[11px] leading-tight text-white/80">
+            <div className="font-medium">{formattedDate}</div>
+          </div>
         </div>
 
-        {renderMobileCard(matrixStats)}
-        {renderMobileCard(readinessCard, 260)}
-        {renderMobileCard(activatedCard, 260)}
-        {renderMobileCard(progressCurve, 300)}
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          {renderMobileCard(dailyRunrate, 260)}
-          {renderMobileCard(topIssueCard, 260)}
+        <h1 className="mt-4 text-center text-xl font-semibold tracking-wide text-white">
+          DASHBOARD AOP 2025
+        </h1>
+        <div className="mt-3 flex justify-center gap-3 text-[11px] uppercase tracking-[0.32em]">
+          <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-3 py-1 font-semibold text-[#34D399]">Overview</span>
+          <Link
+            href="/aop/map"
+            className="rounded-full border border-white/20 px-3 py-1 font-medium text-white/80 transition hover:bg-white/10"
+          >
+            Map
+          </Link>
         </div>
+      </header>
 
-        {renderMobileCard(gapStatusCard)}
-        {renderMobileCard(nanoClusterList)}
-        {renderMobileCard(leaderboard, 320)}
+      <main className="flex-1 overflow-y-auto pb-8">
+        <section className="px-4 pt-4">
+          <div className="rounded-2xl border border-white/10 bg-[#111d41]/90 backdrop-blur-sm shadow-[0_10px_30px_rgba(5,11,27,0.45)] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setIsMobileFilterOpen((prev) => !prev)}
+              className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-white"
+            >
+              <span className="flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-white/80" />
+                <span>Filter Data</span>
+                {hasActiveFilters && (
+                  <span className="inline-flex items-center justify-center rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-white/80">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${isMobileFilterOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {isMobileFilterOpen && (
+              <div className="border-t border-white/10 bg-[#050B1B]/60 px-3 py-3">
+                <FilterBar
+                  value={filterValue}
+                  onChange={handleFilterChange}
+                  onReset={handleFilterReset}
+                  variant="aop"
+                  endpoint="/api/aop/filters"
+                />
+                {aopLoading && (
+                  <p className="mt-2 text-[11px] text-white/50">
+                    Loading AOP data...
+                  </p>
+                )}
+                {aopError && (
+                  <p className="mt-2 text-[11px] text-red-400">
+                    Error: {aopError}. Using placeholder data.
+                  </p>
+                )}
+                {!aopLoading && !aopError && aopData && aopData.length > 0 && (
+                  <p className="mt-2 text-[11px] text-white/50">
+                    Live AOP operational metrics from database ({aopData.length} sites).
+                  </p>
+                )}
+                {!aopLoading && !aopError && (!aopData || aopData.length === 0) && (
+                  <p className="mt-2 text-[11px] text-white/50">
+                    Placeholder data shown. No AOP data found in database.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="px-4 pt-4 pb-8 space-y-4">
+          {renderMobileCard(matrixStats)}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {renderMobileCard(readinessCard, 260)}
+            {renderMobileCard(activatedCard, 260)}
+          </div>
+
+          {renderMobileCard(progressCurve, 280)}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {renderMobileCard(dailyRunrate, 280)}
+            {renderMobileCard(topIssueCard, 280)}
+          </div>
+
+          {renderMobileCard(gapStatusCard, 200)}
+          {renderMobileCard(nanoClusterList, 200)}
+          {renderMobileCard(leaderboard, 280)}
+        </section>
       </main>
     </div>
   )

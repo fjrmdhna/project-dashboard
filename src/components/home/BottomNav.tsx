@@ -4,13 +4,11 @@ import { cn } from "@/lib/utils"
 
 interface BottomNavProps {
   actions: NavigationAction[]
-  primaryAction: NavigationAction
+  primaryAction?: NavigationAction
   activeId?: string
 }
 
 export function BottomNav({ actions, primaryAction, activeId }: BottomNavProps) {
-  const PrimaryIcon = primaryAction.icon
-
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-6 pb-6">
       <nav className="pointer-events-auto relative flex w-full max-w-md items-center justify-around rounded-full bg-card px-6 py-4 text-muted-foreground shadow-2xl">
@@ -34,13 +32,18 @@ export function BottomNav({ actions, primaryAction, activeId }: BottomNavProps) 
             </Link>
           )
         })}
-        <Link
-          href={primaryAction.href}
-          aria-label={primaryAction.label}
-          className="absolute left-1/2 top-0 flex -translate-y-1/2 -translate-x-1/2 items-center justify-center rounded-full bg-primary p-4 text-primary-foreground shadow-xl transition hover:bg-primary/90"
-        >
-          <PrimaryIcon className="size-5" aria-hidden="true" />
-        </Link>
+        {primaryAction && (
+          <Link
+            href={primaryAction.href}
+            aria-label={primaryAction.label}
+            className="absolute left-1/2 top-0 flex -translate-y-1/2 -translate-x-1/2 items-center justify-center rounded-full bg-primary p-4 text-primary-foreground shadow-xl transition hover:bg-primary/90"
+          >
+            {(() => {
+              const PrimaryIcon = primaryAction.icon
+              return <PrimaryIcon className="size-5" aria-hidden="true" />
+            })()}
+          </Link>
+        )}
       </nav>
     </div>
   )

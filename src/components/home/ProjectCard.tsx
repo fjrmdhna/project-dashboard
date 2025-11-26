@@ -9,15 +9,26 @@ interface ProjectCardProps {
 
 export function ProjectCard({ project }: ProjectCardProps) {
   const isPrimary = project.mood === "primary"
+  const isDummy = project.isDummy === true
 
   return (
     <Link
       href={project.href}
       className={cn(
-        "flex flex-col gap-3 rounded-3xl border border-slate-100 bg-white p-4 text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+        "relative flex flex-col gap-3 rounded-3xl border border-slate-100 bg-white p-4 text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
         isPrimary && "border-transparent bg-gradient-to-b from-white to-white/90 shadow-lg ring-2 ring-primary/30",
+        isDummy && "opacity-90",
       )}
     >
+      {isDummy && (
+        <span
+          className="absolute right-2 top-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700"
+          title="Placeholder data"
+          aria-label="Placeholder data"
+        >
+          Demo
+        </span>
+      )}
       <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide">
         <span className="text-slate-500">{project.date}</span>
         <span

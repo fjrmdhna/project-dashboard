@@ -10,6 +10,7 @@ export interface ProjectCardData {
   progress: number
   mood?: ProjectMood
   href: string
+  isDummy?: boolean // Flag untuk menandai card sebagai dummy/placeholder data
 }
 
 export interface HeroHighlight {

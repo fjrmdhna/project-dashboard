@@ -175,10 +175,10 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.circle?.length || 0) > 0 ||
     (value.status?.length || 0) > 0
 
-  const gridClass =
-    variant === "aop"
-      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2"
-      : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))_auto] md:items-center md:gap-2"
+const gridClass =
+  variant === "aop"
+    ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2"
+    : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
   return (
     <div className="h-full flex flex-col min-w-0">
@@ -224,28 +224,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
           className="col-span-2 sm:col-span-1 md:col-span-1"
         />
 
-        {variant === "aop" ? (
-          <>
-            <MultiSelect
-              options={options.circles}
-              selected={value.circle ?? []}
-              placeholder="Circle"
-              onChange={handleCircleChange}
-              disabled={isLoading}
-              width="w-full"
-              className="col-span-2 sm:col-span-1 md:col-span-1"
-            />
-            <MultiSelect
-              options={options.ranScores}
-              selected={value.ran_score ?? []}
-              placeholder="RAN Score"
-              onChange={handleRanScoreChange}
-              disabled={isLoading}
-              width="w-full"
-              className="col-span-2 sm:col-span-1 md:col-span-1"
-            />
-          </>
-        ) : (
+        {variant !== "aop" && (
           <>
             <MultiSelect
               options={options.cities}
@@ -262,6 +241,20 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.nano_cluster}
               placeholder="Cluster"
               onChange={handleNanoClusterChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 sm:col-span-1 md:col-span-1"
+            />
+          </>
+        )}
+
+        {variant === "aop" && (
+          <>
+            <MultiSelect
+              options={options.circles}
+              selected={value.circle ?? []}
+              placeholder="Circle"
+              onChange={handleCircleChange}
               disabled={isLoading}
               width="w-full"
               className="col-span-2 sm:col-span-1 md:col-span-1"
