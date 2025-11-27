@@ -11,10 +11,11 @@ import { HeroHighlight, NavigationAction, ProjectCardData } from "@/types/home"
 import { getProjectProgress } from "@/lib/project-progress"
 
 const heroHighlight: HeroHighlight = {
-  eyebrow: "Welcome!",
-  title: "Let’s schedule your projects",
-  description: "Prioritize the high-impact initiatives for this week and keep all stakeholders aligned.",
-  actionLabel: "Create plan",
+  eyebrow: "Explore",
+  title: "View site locations on map",
+  description: "Track and visualize all site deployments across Indonesia with interactive map view.",
+  actionLabel: "Open map",
+  href: "/map",
 }
 
 // Static project data (untuk project yang belum menggunakan data real)

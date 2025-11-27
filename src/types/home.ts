@@ -18,6 +18,7 @@ export interface HeroHighlight {
   title: string
   description: string
   actionLabel: string
+  href?: string
 }
 
 export interface NavigationAction {
