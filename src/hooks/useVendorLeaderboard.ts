@@ -39,7 +39,6 @@ export function useVendorLeaderboard(options: UseVendorLeaderboardOptions = {}):
     program_report: [],
     imp_ttp: [],
     nano_cluster: [],
-    ran_score: [],
     status: []
   }
 

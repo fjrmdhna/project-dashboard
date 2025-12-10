@@ -95,9 +95,8 @@ export default function Hermes5GMapPage() {
     program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
     imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
     nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
-    ran_score: filterContext.ranScoreFilter !== 'all' ? filterContext.ranScoreFilter.split(',').filter(Boolean) : [],
     status: filterContext.statusFilters || []
-  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.ranScoreFilter, filterContext.statusFilters])
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.statusFilters])
 
   const visiblePoints = useMemo(
     () => (showExcluded ? points : points.filter(point => !point.isExcluded)),
@@ -145,9 +144,6 @@ export default function Hermes5GMapPage() {
       })
       currentFilter.nano_cluster.forEach((value) => {
         params.append('nano_cluster', value)
-      })
-      currentFilter.ran_score.forEach((value) => {
-        params.append('ran_score', value)
       })
       currentFilter.status.forEach((value) => {
         params.append('status', value)
@@ -252,7 +248,7 @@ export default function Hermes5GMapPage() {
     filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report.join(',') : 'all')
     filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp.join(',') : 'all')
     filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster.join(',') : 'all')
-    filterContext.setRanScoreFilter(newFilters.ran_score.length > 0 ? newFilters.ran_score.join(',') : 'all')
+    // ran_score filter removed - no longer used
   }
 
   // Handler untuk reset filter

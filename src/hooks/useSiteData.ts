@@ -28,7 +28,6 @@ export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn
       program_report: [],
       imp_ttp: [],
       nano_cluster: [],
-      ran_score: [],
       status: []
     }
   )
@@ -46,7 +45,7 @@ export function useSiteData(options: UseSiteDataOptions = {}): UseSiteDataReturn
     filter.program_report.forEach(program => params.append('program_report', program))
     filter.imp_ttp.forEach(city => params.append('imp_ttp', city))
     filter.nano_cluster.forEach(cluster => params.append('nano_cluster', cluster))
-    filter.ran_score.forEach(score => params.append('ran_score', score))
+    // ran_score filter removed - no longer used
     const qs = params.toString()
     return qs ? `/api/hermes-5g/site-data?${qs}` : '/api/hermes-5g/site-data'
   }, [])

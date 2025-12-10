@@ -8,7 +8,7 @@ export function buildFilterParams(filter: FilterValue): URLSearchParams {
   filter.program_report?.forEach(pgm => pgm && p.append('program_report', pgm))
   filter.imp_ttp?.forEach(c => c && p.append('imp_ttp', c))
   filter.nano_cluster?.forEach(nc => nc && p.append('nano_cluster', nc))
-  filter.ran_score?.forEach(rs => rs && p.append('ran_score', rs))
+  // ran_score filter removed - no longer used
   return p
 }
 
@@ -19,7 +19,7 @@ export function parseFilterParams(url: URL) {
   const programReports = url.searchParams.getAll('program_report') || []
   const impTtps = url.searchParams.getAll('imp_ttp') || []
   const nanoClusters = url.searchParams.getAll('nano_cluster') || []
-  const ranScores = url.searchParams.getAll('ran_score') || []
+  // ran_score filter removed - no longer used
 
-  return { q, vendorNames, programReports, impTtps, nanoClusters, ranScores }
+  return { q, vendorNames, programReports, impTtps, nanoClusters }
 }

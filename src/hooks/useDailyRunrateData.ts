@@ -25,7 +25,7 @@ interface UseDailyRunrateDataReturn {
 }
 
 export function useDailyRunrateData(options: UseDailyRunrateDataOptions = {}): UseDailyRunrateDataReturn {
-  const filter = options.filter || { q: '', vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], ran_score: [], status: [] }
+  const filter = options.filter || { q: '', vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [] }
 
   // Generate cache key dari filter
   const cacheKey = useMemo(() => {

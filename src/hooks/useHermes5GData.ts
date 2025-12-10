@@ -45,7 +45,6 @@ export function useHermes5GData(options: UseHermes5GDataOptions = {}): UseHermes
     program_report: [],
     imp_ttp: [],
     nano_cluster: [],
-    ran_score: [],
     status: []
   }
 

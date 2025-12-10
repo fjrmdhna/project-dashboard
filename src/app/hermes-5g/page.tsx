@@ -83,9 +83,8 @@ export default function Hermes5GPage() {
     program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
     imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
     nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
-    ran_score: filterContext.ranScoreFilter !== 'all' ? filterContext.ranScoreFilter.split(',').filter(Boolean) : [],
     status: filterContext.statusFilters || []
-  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.ranScoreFilter, filterContext.statusFilters])
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.statusFilters])
   
   // Convert debounced filters to FilterValue format - use debouncedFilters for data fetching
   const debouncedFilter: FilterValue = useMemo(() => {
@@ -96,7 +95,6 @@ export default function Hermes5GPage() {
       program_report: debounced.programFilter !== 'all' ? debounced.programFilter.split(',').filter(Boolean) : [],
       imp_ttp: debounced.cityFilter !== 'all' ? debounced.cityFilter.split(',').filter(Boolean) : [],
       nano_cluster: debounced.nanoClusterFilter !== 'all' ? debounced.nanoClusterFilter.split(',').filter(Boolean) : [],
-      ran_score: debounced.ranScoreFilter !== 'all' ? debounced.ranScoreFilter.split(',').filter(Boolean) : [],
       status: debounced.statusFilters || []
     }
   }, [filterContext.debouncedFilters, filterContext])
@@ -239,7 +237,7 @@ export default function Hermes5GPage() {
     filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report.join(',') : 'all')
     filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp.join(',') : 'all')
     filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster.join(',') : 'all')
-    filterContext.setRanScoreFilter(newFilters.ran_score.length > 0 ? newFilters.ran_score.join(',') : 'all')
+    // ran_score filter removed - no longer used
     updateFilter(newFilters)
   }
 
@@ -272,9 +270,7 @@ export default function Hermes5GPage() {
     filter.nano_cluster.forEach((value) => {
       params.append('nano_cluster', value)
     })
-    filter.ran_score.forEach((value) => {
-      params.append('ran_score', value)
-    })
+    // ran_score filter removed - no longer used
 
     return params
   }

@@ -22,7 +22,6 @@ export const NEW_SITE_INITIAL_FILTER: FilterValue = {
   imp_ttp: [],
   nano_cluster: [],
   circle: [],
-  ran_score: [],
   status: []
 }
 
