@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getAopFilterOptions } from '@/lib/supabase'
+import { getNewSiteFilterOptions } from '@/lib/supabase'
 
 export async function GET() {
   try {
-    const options = await getAopFilterOptions()
+    const options = await getNewSiteFilterOptions()
 
     return NextResponse.json({
       status: 'success',
@@ -11,9 +11,9 @@ export async function GET() {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
-    console.error('Error fetching AOP filter options:', error)
+    console.error('Error fetching New Site filter options:', error)
     return NextResponse.json(
-      { status: 'error', message: 'Failed to fetch AOP filter options' },
+      { status: 'error', message: 'Failed to fetch New Site filter options' },
       { status: 500 }
     )
   }

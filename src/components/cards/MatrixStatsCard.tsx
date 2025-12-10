@@ -8,6 +8,8 @@ export interface Row {
   caf_approved?: string | null
   mos_af?: string | null
   ic_000040_af?: string | null
+  ic_000010_af?: string | null // RFI header for AOP
+  rfi_accepted?: string | null // CRFI for AOP
   imp_integ_af?: string | null
   rfs_af?: string | null
   rfs_forecast_lock?: string | null
@@ -25,9 +27,11 @@ export interface Row {
 export interface MatrixStatsCardProps {
   rows: Row[]
   patpCount?: number
+  variant?: "default" | "newSite"
 }
 
-const METRIC_CONFIG = [
+// Default metric configuration (Hermes 5G)
+const DEFAULT_METRIC_CONFIG = [
   { key: "caf", label: "CAF" },
   { key: "mos", label: "MOS" },
   { key: "install", label: "INSTALL" },
@@ -40,9 +44,23 @@ const METRIC_CONFIG = [
   { key: "pac", label: "PAC" }
 ] as const
 
-type MetricKey = (typeof METRIC_CONFIG)[number]["key"]
+// New Site metric configuration
+const NEW_SITE_METRIC_CONFIG = [
+  { key: "rfi", label: "RFI" },
+  { key: "crfi", label: "CRFI" },
+  { key: "mos", label: "MOS" },
+  { key: "install", label: "INSTALL" },
+  { key: "rfs", label: "RFS" },
+  { key: "rfc", label: "RFC" },
+  { key: "patp", label: "PATP" },
+  { key: "hotnews", label: "HN" },
+  { key: "endorse", label: "ENDORSE" },
+  { key: "pac", label: "PAC" }
+] as const
 
-type MetricMap = Record<MetricKey, number>
+type MetricKey = (typeof DEFAULT_METRIC_CONFIG)[number]["key"] | (typeof NEW_SITE_METRIC_CONFIG)[number]["key"]
+
+type MetricMap = Partial<Record<MetricKey, number>>
 
 function MetricItem({
   label,
@@ -63,9 +81,38 @@ function MetricItem({
   )
 }
 
-export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
+export function MatrixStatsCard({ rows, patpCount = 0, variant = "default" }: MatrixStatsCardProps) {
   const stats = useMemo(() => {
     const totalSites = rows.length
+    
+    if (variant === "newSite") {
+      // New Site variant metrics
+      const rfi = rows.filter(row => row.ic_000010_af).length
+      const crfi = rows.filter(row => row.rfi_accepted).length
+      const mos = rows.filter(row => row.mos_af).length
+      const install = rows.filter(row => row.ic_000040_af).length
+      const rfs = rows.filter(row => row.rfs_af).length
+      const rfc = rows.filter(row => row.rfc_approved).length
+      const hotnews = rows.filter(row => row.hotnews_af).length
+      const endorse = rows.filter(row => row.endorse_af).length
+      const pac = rows.filter(row => row.pac_accepted_af).length
+      const patp = patpCount
+
+      return {
+        totalSites,
+        rfi,
+        crfi,
+        mos,
+        install,
+        rfs,
+        rfc,
+        patp,
+        hotnews,
+        endorse,
+        pac
+      }
+    } else {
+      // Default variant metrics (Hermes 5G)
     const caf = rows.filter(row => row.caf_approved).length
     const mos = rows.filter(row => row.mos_af).length
     const install = rows.filter(row => row.ic_000040_af).length
@@ -90,14 +137,30 @@ export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
       endorse,
       pac
     }
-  }, [rows, patpCount])
+    }
+  }, [rows, patpCount, variant])
 
-  const metrics: MetricMap = {
-    caf: stats.caf,
+  const metricConfig = variant === "newSite" ? NEW_SITE_METRIC_CONFIG : DEFAULT_METRIC_CONFIG
+
+  const metrics: MetricMap = variant === "newSite" 
+    ? {
+        rfi: stats.rfi!,
+        crfi: stats.crfi!,
+        mos: stats.mos,
+        install: stats.install,
+        rfs: stats.rfs!,
+        rfc: stats.rfc,
+        patp: stats.patp,
+        hotnews: stats.hotnews,
+        endorse: stats.endorse,
+        pac: stats.pac
+      }
+    : {
+        caf: stats.caf!,
     mos: stats.mos,
     install: stats.install,
-    readiness: stats.readiness,
-    activated: stats.activated,
+        readiness: stats.readiness!,
+        activated: stats.activated!,
     rfc: stats.rfc,
     patp: stats.patp,
     hotnews: stats.hotnews,
@@ -127,8 +190,8 @@ export function MatrixStatsCard({ rows, patpCount = 0 }: MatrixStatsCardProps) {
             </span>
           </div>
 
-          {METRIC_CONFIG.map(({ key, label }) => (
-            <MetricItem key={key} label={label} value={metrics[key]} />
+          {metricConfig.map(({ key, label }) => (
+            <MetricItem key={key} label={label} value={metrics[key] ?? 0} />
           ))}
         </div>
       </div>

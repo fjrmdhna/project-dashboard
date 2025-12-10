@@ -27,6 +27,7 @@ type Props = {
   rows: Row[]
   maxCities?: number
   variant?: 'city' | 'circle' // Variant untuk menentukan apakah menggunakan city atau circle
+  dataVariant?: 'default' | 'newSite' // Data variant untuk menentukan label dan title
 }
 
 // Tipe data untuk item chart
@@ -148,7 +149,7 @@ const ActivatedLabel = (props: any) => {
   )
 }
 
-export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city' }: Props) {
+export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default' }: Props) {
   // Agregasi data untuk chart
   const chartData = useMemo(() => {
     // Buat map untuk menghitung jumlah NY dan Activated per kota/circle
@@ -209,8 +210,23 @@ export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city' }: P
     return <CityTick {...props} chartData={chartData} variant={variant} />
   }
 
-  const displayLabel = variant === 'circle' ? 'Activation by Circle' : '5G Activation by City'
+  // Determine display label based on variant and dataVariant
+  const displayLabel = useMemo(() => {
+    if (dataVariant === 'newSite' && variant === 'circle') {
+      return 'On Air by Circle'
+    }
+    if (variant === 'circle') {
+      return 'Activation by Circle'
+    }
+    return '5G Activation by City'
+  }, [variant, dataVariant])
+  
   const dataKey = variant === 'circle' ? 'circle' : 'city'
+  
+  // Determine legend labels based on dataVariant
+  // NY always comes first (left) in legend
+  const nyLegendLabel = dataVariant === 'newSite' ? 'NY On Air' : 'NY Active'
+  const actLegendLabel = dataVariant === 'newSite' ? 'On Air' : 'Activated'
 
   return (
     <div className="activated-card rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'calc(var(--wb-card-padding) - 4px)' }}>
@@ -272,9 +288,10 @@ export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city' }: P
               align="center" 
               wrapperStyle={{ paddingTop: 6 }}
             />
+            {/* NY bar comes first (left/top) - always displayed first in legend */}
             <Bar 
               dataKey="ny" 
-              name="NY Active" 
+              name={nyLegendLabel} 
               fill="#FF7043" 
               barSize={12}
               minPointSize={2}
@@ -283,9 +300,10 @@ export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city' }: P
                 content={<NyLabel />}
               />
             </Bar>
+            {/* Activated/On Air bar comes second (right/bottom) */}
             <Bar 
               dataKey="act" 
-              name="Activated" 
+              name={actLegendLabel} 
               fill="#26A69A" 
               barSize={12}
             >

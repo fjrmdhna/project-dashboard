@@ -34,6 +34,50 @@ export interface SiteData5G {
   updated_at?: string
 }
 
+// Database types for site_data_tlp table
+export interface SiteDataTLP {
+  system_key: string
+  'SBOQ.project_type'?: string | null
+  network_header?: string | null
+  project_name?: string | null
+  program_name?: string | null
+  site_id?: string | null
+  site_name?: string | null
+  wbs_status?: string | null
+  year?: string | null
+  new_site_id?: string | null
+  new_site_name?: string | null
+  region?: string | null
+  site_category?: string | null
+  twr_owner?: string | null
+  vendor_code?: string | null
+  wo_number_1?: string | null
+  ic_000010_bf?: string | null
+  ic_000010_ff?: string | null
+  ic_000010_af?: string | null
+  rfi_accepted?: string | null
+  progress_status?: string | null
+  price_month_actual?: string | null
+  site_id_tlp?: string | null
+  bauf_date?: string | null // DATE in database, returned as ISO string
+  lease_start_clause?: string | null
+  lease_start_date?: string | null // DATE in database, returned as ISO string
+  administration_status?: string | null
+  booking_status?: string | null
+  issue_ny_sc?: string | null
+  iom_date?: string | null // DATE in database, returned as ISO string
+  iom_number?: string | null
+  sc_number?: string | null
+  po_number?: string | null
+  baps_submit_date?: string | null // DATE in database, returned as ISO string
+  baps_number?: string | null
+  baps_date?: string | null // DATE in database, returned as ISO string
+  baps_status?: string | null
+  audit?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
 // Helper function to get site data with filters
 export interface SiteData5GFilters {
   vendor_name?: string[]
@@ -253,7 +297,7 @@ const formatCircleValue = (value: string) =>
     .toLowerCase()
     .replace(/\b\w/g, char => char.toUpperCase())
 
-export async function getAopFilterOptions() {
+export async function getNewSiteFilterOptions() {
   const fetchDistinctValues = async (column: string) => {
     const values = new Map<string, string>()
     const pageSize = 5000
@@ -305,17 +349,15 @@ export async function getAopFilterOptions() {
       .sort((a, b) => a.localeCompare(b))
   }
 
-  const [vendors, programs, circles, ranScores] = await Promise.all([
+  const [vendors, programs, circles] = await Promise.all([
     fetchDistinctValues('vendor_name'),
     fetchDistinctValues('program_report'),
-    fetchDistinctValues('region_circle'),
-    fetchDistinctValues('ran_score')
+    fetchDistinctValues('region_circle')
   ])
 
   return {
     vendors,
     programs,
-    circles,
-    ranScores
+    circles
   }
 }

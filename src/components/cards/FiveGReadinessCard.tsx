@@ -20,6 +20,7 @@ type Row = {
   nano_cluster?: string | null
   region_circle?: string | null
   imp_integ_af?: string | null
+  ic_000010_af?: string | null // RFI header for AOP
 }
 
 // Tipe data untuk props komponen
@@ -27,6 +28,7 @@ type Props = {
   rows: Row[]
   maxCities?: number
   variant?: 'city' | 'circle' // Variant untuk menentukan apakah menggunakan city atau circle
+  dataVariant?: 'default' | 'newSite' // Data variant untuk menentukan field yang digunakan
 }
 
 // Tipe data untuk item chart
@@ -148,11 +150,14 @@ const ReadyLabel = (props: any) => {
   )
 }
 
-export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city' }: Props) {
+export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default' }: Props) {
   // Agregasi data untuk chart
   const chartData = useMemo(() => {
     // Buat map untuk menghitung jumlah NY dan Ready per kota/circle
     const locationMap = new Map<string, { ny: number; rdy: number }>()
+    
+    // Tentukan field yang digunakan berdasarkan dataVariant
+    const readinessField = dataVariant === 'newSite' ? 'ic_000010_af' : 'imp_integ_af'
     
     // Iterasi setiap row untuk agregasi
     rows.forEach(row => {
@@ -160,7 +165,11 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city' }: P
       const location = variant === 'circle' 
         ? normalizeCircle(row.nano_cluster || row.region_circle)
         : normalizeCity(row.imp_ttp)
-      const isReady = !!row.imp_integ_af
+      
+      // Tentukan status readiness berdasarkan dataVariant
+      const isReady = dataVariant === 'newSite' 
+        ? !!row.ic_000010_af 
+        : !!row.imp_integ_af
       
       // Ambil atau inisialisasi data lokasi
       const locationData = locationMap.get(location) || { ny: 0, rdy: 0 }
@@ -209,8 +218,22 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city' }: P
     return <CityTick {...props} chartData={chartData} variant={variant} />
   }
 
-  const displayLabel = variant === 'circle' ? 'Readiness by Circle' : '5G Readiness by City'
+  // Determine display label based on variant and dataVariant
+  const displayLabel = useMemo(() => {
+    if (dataVariant === 'newSite' && variant === 'circle') {
+      return 'RFI by Circle'
+    }
+    if (variant === 'circle') {
+      return 'Readiness by Circle'
+    }
+    return '5G Readiness by City'
+  }, [variant, dataVariant])
+  
   const dataKey = variant === 'circle' ? 'circle' : 'city'
+  
+  // Determine legend labels based on dataVariant
+  const nyLegendLabel = dataVariant === 'newSite' ? 'NY RFI' : 'NY Readiness'
+  const rdyLegendLabel = dataVariant === 'newSite' ? 'RFI' : 'Readiness'
 
   return (
     <div className="readiness-card rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'calc(var(--wb-card-padding) - 4px)' }}>
@@ -274,7 +297,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city' }: P
             />
             <Bar 
               dataKey="ny" 
-              name="NY Readiness" 
+              name={nyLegendLabel} 
               fill="#8A5AA3" 
               barSize={12}
               minPointSize={2}
@@ -285,7 +308,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city' }: P
             </Bar>
             <Bar 
               dataKey="rdy" 
-              name="Readiness" 
+              name={rdyLegendLabel} 
               fill="#7CB342" 
               barSize={12}
             >

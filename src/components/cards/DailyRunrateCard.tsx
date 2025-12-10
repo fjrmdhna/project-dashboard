@@ -12,10 +12,10 @@ import {
   Legend
 } from "recharts"
 import { DailyRunrateItem } from "@/hooks/useDailyRunrateData"
-import { AopDailyRunrateItem } from "@/hooks/useAopDailyRunrateData"
+import { NewSiteDailyRunrateItem } from "@/hooks/useNewSiteDailyRunrateData"
 
 export interface DailyRunrateCardProps {
-  data: DailyRunrateItem[] | AopDailyRunrateItem[]
+  data: DailyRunrateItem[] | NewSiteDailyRunrateItem[]
   isLoading?: boolean
 }
 

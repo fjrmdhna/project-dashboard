@@ -19,7 +19,6 @@ export async function GET(request: NextRequest) {
     const vendorNames = searchParams.getAll('vendor_name') || [];
     const programReports = searchParams.getAll('program_report') || [];
     const circles = searchParams.getAll('region_circle') || [];
-    const ranScores = searchParams.getAll('ran_score') || [];
     
     // Build Supabase query with filters - optimized: only select issue_category column
     let query = supabase
@@ -47,9 +46,6 @@ export async function GET(request: NextRequest) {
     }
     if (circles.length > 0) {
       query = query.in('region_circle', circles);
-    }
-    if (ranScores.length > 0) {
-      query = query.in('ran_score', ranScores);
     }
     
     // Get data from Supabase
@@ -95,7 +91,7 @@ export async function GET(request: NextRequest) {
     
     // Debug logging
     console.log('AOP Top 5 Issue API Debug:', {
-      filter: { q, vendorNames, programReports, circles, ranScores },
+      filter: { q, vendorNames, programReports, circles },
       totalRecords: data?.length || 0,
       categoryCount,
       sortedCategories,

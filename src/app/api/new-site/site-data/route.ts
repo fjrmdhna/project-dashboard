@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
     const vendorNames = searchParams.getAll('vendor_name') || []
     const programReports = searchParams.getAll('program_report') || []
     const circles = searchParams.getAll('region_circle') || []
-    const ranScores = searchParams.getAll('ran_score') || []
     
     // Select columns that exist in site_data_aop table
     // Note: site_data_aop has different structure than site_data_5g
@@ -63,10 +62,6 @@ export async function GET(request: NextRequest) {
     
     if (circles.length > 0) {
       baseQuery = baseQuery.in('region_circle', circles)
-    }
-
-    if (ranScores.length > 0) {
-      baseQuery = baseQuery.in('ran_score', ranScores)
     }
 
     if (q) {
@@ -166,9 +161,11 @@ export async function GET(request: NextRequest) {
       system_key: row.system_key,
       vendor_name: row.vendor_name,
       program_report: row.program_report,
-      caf_approved: row.rfi_accepted || null, // Map rfi_accepted to caf_approved
+      caf_approved: row.rfi_accepted || null, // Map rfi_accepted to caf_approved (for backward compatibility)
       mos_af: row.mos_af || null,
-      ic_000040_af: row.ic_000010_af || null, // Map ic_000010_af to ic_000040_af
+      ic_000040_af: row.ic_000010_af || null, // Map ic_000010_af to ic_000040_af (for backward compatibility)
+      ic_000010_af: row.ic_000010_af || null, // RFI header for AOP
+      rfi_accepted: row.rfi_accepted || null, // CRFI for AOP
       imp_integ_af: row.imp_integ_af || null,
       rfs_bf: row.rfs_bf || null, // Baseline
       rfs_ff: row.rfs_ff || null, // Forecast

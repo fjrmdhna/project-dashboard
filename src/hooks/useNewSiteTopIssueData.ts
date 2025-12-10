@@ -11,11 +11,11 @@ export interface TopIssue {
   color: string
 }
 
-interface UseAopTopIssueDataOptions {
+interface UseNewSiteTopIssueDataOptions {
   filter?: FilterValue
 }
 
-interface UseAopTopIssueDataReturn {
+interface UseNewSiteTopIssueDataReturn {
   data: TopIssue[]
   loading: boolean
   error: Error | null
@@ -24,25 +24,24 @@ interface UseAopTopIssueDataReturn {
   refreshData: () => Promise<void>
 }
 
-export function useAopTopIssueData(options: UseAopTopIssueDataOptions = {}): UseAopTopIssueDataReturn {
-  const filter = options.filter || { q: '', vendor_name: [], program_report: [], circle: [], ran_score: [], status: [] }
+export function useNewSiteTopIssueData(options: UseNewSiteTopIssueDataOptions = {}): UseNewSiteTopIssueDataReturn {
+  const filter = options.filter || { q: '', vendor_name: [], program_report: [], circle: [], status: [] }
 
   // Generate cache key dari filter
   const cacheKey = useMemo(() => {
-    return `aop-top-issue-${JSON.stringify(filter)}`
+    return `new-site-top-issue-${JSON.stringify(filter)}`
   }, [filter])
 
   // Fetch function untuk useApiCache dengan retry logic
   const fetchFn = useCallback(async () => {
-    // Build filter params untuk AOP (menggunakan circle bukan imp_ttp/nano_cluster)
+    // Build filter params untuk New Site (menggunakan circle bukan imp_ttp/nano_cluster)
     const params = new URLSearchParams()
     if (filter.q) params.append('q', filter.q)
     filter.vendor_name?.forEach(v => params.append('vendor_name', v))
     filter.program_report?.forEach(p => params.append('program_report', p))
     filter.circle?.forEach(c => params.append('region_circle', c))
-    filter.ran_score?.forEach(score => params.append('ran_score', score))
 
-    const response = await fetchWithRetry(`/api/aop/top-5-issue?${params.toString()}`, {}, 3)
+    const response = await fetchWithRetry(`/api/new-site/top-5-issue?${params.toString()}`, {}, 3)
     
     const result = await response.json()
     

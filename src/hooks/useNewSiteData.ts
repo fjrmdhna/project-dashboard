@@ -5,12 +5,12 @@ import type { Row as MatrixRow } from '@/components/cards/MatrixStatsCard'
 import { useApiCache } from './useApiCache'
 import { fetchWithRetry } from '@/lib/api-utils'
 
-export interface AopSiteData extends MatrixRow {
+export interface NewSiteSiteData extends MatrixRow {
   rfc_approved?: string | null
   pac_accepted_af?: string | null
 }
 
-export interface AopDataStats {
+export interface NewSiteDataStats {
   totalSites: number
   caf: number
   mos: number
@@ -24,30 +24,29 @@ export interface AopDataStats {
   nanoClusters: number
 }
 
-export interface UseAopDataReturn {
-  data: AopSiteData[]
-  stats: AopDataStats
+export interface UseNewSiteDataReturn {
+  data: NewSiteSiteData[]
+  stats: NewSiteDataStats
   loading: boolean
   error: string | null
   refetch: () => Promise<void>
 }
 
-export interface UseAopDataOptions {
+export interface UseNewSiteDataOptions {
   vendorNames?: string[]
   programReports?: string[]
   circles?: string[]
-  ranScores?: string[]
   search?: string
   autoFetch?: boolean
 }
 
-export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
-  const { vendorNames = [], programReports = [], circles = [], ranScores = [], search = '' } = options
+export function useNewSiteData(options: UseNewSiteDataOptions = {}): UseNewSiteDataReturn {
+  const { vendorNames = [], programReports = [], circles = [], search = '' } = options
 
   // Generate cache key dari filter
   const cacheKey = useMemo(() => {
-    return `aop-site-data-${JSON.stringify({ vendorNames, programReports, circles, ranScores, search })}`
-  }, [vendorNames, programReports, circles, ranScores, search])
+    return `new-site-site-data-${JSON.stringify({ vendorNames, programReports, circles, search })}`
+  }, [vendorNames, programReports, circles, search])
 
   // Fetch function untuk useApiCache dengan retry logic
   const fetchFn = useCallback(async () => {
@@ -56,16 +55,15 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
     vendorNames.forEach(v => params.append('vendor_name', v))
     programReports.forEach(p => params.append('program_report', p))
     circles.forEach(c => params.append('region_circle', c))
-    ranScores.forEach(score => params.append('ran_score', score))
 
-    const url = `/api/aop/site-data?${params.toString()}`
-    console.log('Fetching AOP data with filter:', { vendorNames, programReports, circles, ranScores, search })
+    const url = `/api/new-site/site-data?${params.toString()}`
+    console.log('Fetching New Site data with filter:', { vendorNames, programReports, circles, search })
     
     const response = await fetchWithRetry(url, {}, 3)
     const result = await response.json()
 
     if (result.status === 'success') {
-      console.log('AOP data fetched successfully:', result.count, 'records')
+      console.log('New Site data fetched successfully:', result.count, 'records')
       return {
         data: result.data || [],
         stats: result.stats || {
@@ -83,12 +81,12 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
         }
       }
     } else {
-      throw new Error(result.message || 'Failed to fetch AOP data')
+      throw new Error(result.message || 'Failed to fetch New Site data')
     }
-  }, [vendorNames, programReports, circles, ranScores, search])
+  }, [vendorNames, programReports, circles, search])
 
   // Use useApiCache dengan validasi
-  const { data, loading, error, refetch: cacheRefetch } = useApiCache<{ data: AopSiteData[], stats: AopDataStats }>(
+  const { data, loading, error, refetch: cacheRefetch } = useApiCache<{ data: NewSiteSiteData[], stats: NewSiteDataStats }>(
     cacheKey,
     fetchFn,
     {
@@ -97,7 +95,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       refetchOnMount: true,
       validateFn: (data) => {
         // Validasi struktur data - cache semua valid data (termasuk empty) untuk mencegah infinite refetch
-        const typedData = data as { data?: AopSiteData[], stats?: AopDataStats }
+        const typedData = data as { data?: NewSiteSiteData[], stats?: NewSiteDataStats }
         if (!data || !typedData.data || !typedData.stats) {
           return false
         }

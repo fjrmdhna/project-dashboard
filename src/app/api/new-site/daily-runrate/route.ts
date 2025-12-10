@@ -24,7 +24,6 @@ export async function GET(request: NextRequest) {
     const vendorNames = searchParams.getAll('vendor_name') || [];
     const programReports = searchParams.getAll('program_report') || [];
     const circles = searchParams.getAll('region_circle') || [];
-    const ranScores = searchParams.getAll('ran_score') || [];
     
     // Generate dates for the last 7 days
     const today = new Date();
@@ -58,9 +57,6 @@ export async function GET(request: NextRequest) {
     }
     if (circles.length) {
       query = query.in('region_circle', circles);
-    }
-    if (ranScores.length) {
-      query = query.in('ran_score', ranScores);
     }
     
     // Get data from Supabase with pagination

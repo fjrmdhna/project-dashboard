@@ -18,11 +18,11 @@ import { VendorLeaderboardCard } from "@/components/cards/VendorLeaderboardCard"
 import { Wallboard1080 } from "@/layouts/Wallboard1080"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
-import { useAopTopIssueData } from "@/hooks/useAopTopIssueData"
-import { useAopData } from "@/hooks/useAopData"
-import { useAopDailyRunrateData } from "@/hooks/useAopDailyRunrateData"
+import { useNewSiteTopIssueData } from "@/hooks/useNewSiteTopIssueData"
+import { useNewSiteData } from "@/hooks/useNewSiteData"
+import { useNewSiteDailyRunrateData } from "@/hooks/useNewSiteDailyRunrateData"
 
-const AOPLoadingScreen = ({ message }: { message: string }) => (
+const NewSiteLoadingScreen = ({ message }: { message: string }) => (
   <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#030a1f] text-white">
     <div className="pointer-events-none absolute inset-0 opacity-80" aria-hidden="true">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(52,211,153,0.18),_transparent_55%)]" />
@@ -32,7 +32,7 @@ const AOPLoadingScreen = ({ message }: { message: string }) => (
 
     <div className="relative z-10 flex w-full max-w-5xl flex-col items-center gap-10 px-6 text-center">
       <div className="flex flex-col gap-3">
-        <p className="text-xs uppercase tracking-[0.65em] text-white/60">AOP Dashboard</p>
+        <p className="text-xs uppercase tracking-[0.65em] text-white/60">New Site Dashboard</p>
         <h1 className="text-3xl font-semibold tracking-wide">Preparing Dashboard</h1>
         <p className="text-sm text-white/70">{message}</p>
       </div>
@@ -221,12 +221,11 @@ const INITIAL_FILTER: FilterValue = {
   program_report: [],
   imp_ttp: [],
   nano_cluster: [],
-  ran_score: [],
   status: [],
   circle: []
 }
 
-export default function AOPPage() {
+export default function NewSitePage() {
   const [filterValue, setFilterValue] = useState<FilterValue>(INITIAL_FILTER)
   const [hasInitialDataLoaded, setHasInitialDataLoaded] = useState(false)
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
@@ -236,33 +235,32 @@ export default function AOPPage() {
   const debouncedFilterValue = useDebounce(filterValue, 300)
 
   // Fetch data from API menggunakan debounced filter
-  const { data: aopData, stats: aopStats, loading: aopLoading, error: aopError } = useAopData({
+  const { data: newSiteData, stats: newSiteStats, loading: newSiteLoading, error: newSiteError } = useNewSiteData({
     vendorNames: debouncedFilterValue.vendor_name || [],
     programReports: debouncedFilterValue.program_report || [],
     circles: debouncedFilterValue.circle || [],
-    ranScores: debouncedFilterValue.ran_score || [],
     search: debouncedFilterValue.q || ''
   })
 
   // Fetch top issues data from API menggunakan debounced filter
-  const { data: topIssues, loading: topIssuesLoading, topIssuesTotal, totalIssues } = useAopTopIssueData({
+  const { data: topIssues, loading: topIssuesLoading, topIssuesTotal, totalIssues } = useNewSiteTopIssueData({
     filter: debouncedFilterValue
   })
 
   // Fetch daily runrate data from API menggunakan debounced filter
-  const { data: dailyRunrateData, loading: dailyRunrateLoading } = useAopDailyRunrateData({
+  const { data: dailyRunrateData, loading: dailyRunrateLoading } = useNewSiteDailyRunrateData({
     filter: debouncedFilterValue
   })
 
   // Combine loading states untuk menentukan isAnyDataLoading (seperti Hermes 5G)
-  const isAnyDataLoading = aopLoading || topIssuesLoading || dailyRunrateLoading
+  const isAnyDataLoading = newSiteLoading || topIssuesLoading || dailyRunrateLoading
 
   // Track when initial data has been loaded
   useEffect(() => {
-    if (!isAnyDataLoading && (aopData || aopError)) {
+    if (!isAnyDataLoading && (newSiteData || newSiteError)) {
       setHasInitialDataLoaded(true)
     }
-  }, [isAnyDataLoading, aopData, aopError])
+  }, [isAnyDataLoading, newSiteData, newSiteError])
 
   // Use API data only - don't show placeholder data while loading
   const rows = useMemo(() => {
@@ -270,15 +268,15 @@ export default function AOPPage() {
     if (isAnyDataLoading && !hasInitialDataLoaded) {
       return [] // Return empty array while loading
     }
-    if (aopData && aopData.length > 0) {
-      return aopData as MatrixRow[]
+    if (newSiteData && newSiteData.length > 0) {
+      return newSiteData as MatrixRow[]
     }
     // Only show placeholder if there's an error and no data (after initial load)
-    if (hasInitialDataLoaded && aopError && (!aopData || aopData.length === 0)) {
+    if (hasInitialDataLoaded && newSiteError && (!newSiteData || newSiteData.length === 0)) {
       return DASHBOARD_ROWS
     }
     return []
-  }, [aopData, isAnyDataLoading, aopError, hasInitialDataLoaded])
+  }, [newSiteData, isAnyDataLoading, newSiteError, hasInitialDataLoaded])
 
   const formattedDate = useMemo(
     () =>
@@ -298,7 +296,6 @@ export default function AOPPage() {
     filterValue.program_report.length +
     filterValue.imp_ttp.length +
     filterValue.nano_cluster.length +
-    filterValue.ran_score.length +
     (filterValue.circle?.length ?? 0)
   )
   const hasActiveFilters = activeFilterCount > 0
@@ -308,7 +305,7 @@ export default function AOPPage() {
   const activatedCount = rows.filter(row => row.rfs_af).length
   
   // Calculate PATP count (using stats from API if available)
-  const patpCount = aopStats?.pac || 0
+  const patpCount = newSiteStats?.pac || 0
 
   const handleFilterChange = (value: FilterValue) => {
     setFilterValue(value)
@@ -324,35 +321,35 @@ export default function AOPPage() {
         value={filterValue}
         onChange={handleFilterChange}
         onReset={handleFilterReset}
-        variant="aop"
-        endpoint="/api/aop/filters"
+        variant="newSite"
+        endpoint="/api/new-site/filters"
       />
-      {aopLoading && (
+      {newSiteLoading && (
         <p className="text-[10px] text-white/50">
-          Loading AOP data...
+          Loading New Site data...
         </p>
       )}
-      {aopError && (
+      {newSiteError && (
         <p className="text-[10px] text-red-400">
-          Error: {aopError}. Using placeholder data.
+          Error: {newSiteError}. Using placeholder data.
         </p>
       )}
-      {!aopLoading && !aopError && aopData && aopData.length > 0 && (
+      {!newSiteLoading && !newSiteError && newSiteData && newSiteData.length > 0 && (
         <p className="text-[10px] text-white/50">
-          Live AOP operational metrics from database ({aopData.length} sites).
+          Live New Site operational metrics from database ({newSiteData.length} sites).
         </p>
       )}
-      {!aopLoading && !aopError && (!aopData || aopData.length === 0) && (
+      {!newSiteLoading && !newSiteError && (!newSiteData || newSiteData.length === 0) && (
         <p className="text-[10px] text-white/50">
-          Placeholder dataset. No AOP data found in database.
+          Placeholder dataset. No New Site data found in database.
         </p>
       )}
     </div>
   )
 
-  const matrixStats = <MatrixStatsCard rows={rows} patpCount={patpCount} />
-  const readinessCard = <FiveGReadinessCard rows={rows} maxCities={8} variant="circle" />
-  const activatedCard = <FiveGActivatedCard rows={rows} maxCities={8} variant="circle" />
+  const matrixStats = <MatrixStatsCard rows={rows} patpCount={patpCount} variant="newSite" />
+  const readinessCard = <FiveGReadinessCard rows={rows} maxCities={8} variant="circle" dataVariant="newSite" />
+  const activatedCard = <FiveGActivatedCard rows={rows} maxCities={8} variant="circle" dataVariant="newSite" />
   const gapStatusCard = <GapStatusCard rows={rows} />
   const progressCurve = (
     <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} monthsSpan={3} />
@@ -374,7 +371,7 @@ export default function AOPPage() {
   const nanoClusterList = <NanoClusterListCard rows={rows} />
   const leaderboard = <VendorLeaderboardCard rows={rows} />
 
-  const header = <ProgramHeader title="Dashboard AOP 2025" dateLabel={formattedDate} />
+  const header = <ProgramHeader title="Dashboard New Site 2025" dateLabel={formattedDate} />
 
   const wallboardView = (
     <Wallboard1080
@@ -444,12 +441,12 @@ export default function AOPPage() {
         </div>
 
         <h1 className="mt-4 text-center text-xl font-semibold tracking-wide text-white">
-          DASHBOARD AOP 2025
+          DASHBOARD NEW SITE 2025
         </h1>
         <div className="mt-3 flex justify-center gap-3 text-[11px] uppercase tracking-[0.32em]">
           <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-3 py-1 font-semibold text-[#34D399]">Overview</span>
           <Link
-            href="/aop/map"
+            href="/new-site/map"
             className="rounded-full border border-white/20 px-3 py-1 font-medium text-white/80 transition hover:bg-white/10"
           >
             Map
@@ -485,27 +482,27 @@ export default function AOPPage() {
                   value={filterValue}
                   onChange={handleFilterChange}
                   onReset={handleFilterReset}
-                  variant="aop"
-                  endpoint="/api/aop/filters"
+                  variant="newSite"
+                  endpoint="/api/new-site/filters"
                 />
-                {aopLoading && (
+                {newSiteLoading && (
                   <p className="mt-2 text-[11px] text-white/50">
-                    Loading AOP data...
+                    Loading New Site data...
                   </p>
                 )}
-                {aopError && (
+                {newSiteError && (
                   <p className="mt-2 text-[11px] text-red-400">
-                    Error: {aopError}. Using placeholder data.
+                    Error: {newSiteError}. Using placeholder data.
                   </p>
                 )}
-                {!aopLoading && !aopError && aopData && aopData.length > 0 && (
+                {!newSiteLoading && !newSiteError && newSiteData && newSiteData.length > 0 && (
                   <p className="mt-2 text-[11px] text-white/50">
-                    Live AOP operational metrics from database ({aopData.length} sites).
+                    Live New Site operational metrics from database ({newSiteData.length} sites).
                   </p>
                 )}
-                {!aopLoading && !aopError && (!aopData || aopData.length === 0) && (
+                {!newSiteLoading && !newSiteError && (!newSiteData || newSiteData.length === 0) && (
                   <p className="mt-2 text-[11px] text-white/50">
-                    Placeholder data shown. No AOP data found in database.
+                    Placeholder data shown. No New Site data found in database.
                   </p>
                 )}
               </div>
@@ -538,10 +535,10 @@ export default function AOPPage() {
 
   // Show loading screen while fetching initial data
   if (!hasInitialDataLoaded) {
-    const loadingMessage = aopLoading 
-      ? "Retrieving latest AOP operational metrics from database..."
+    const loadingMessage = newSiteLoading 
+      ? "Retrieving latest New Site operational metrics from database..."
       : "Initializing dashboard..."
-    return <AOPLoadingScreen message={loadingMessage} />
+    return <NewSiteLoadingScreen message={loadingMessage} />
   }
 
   return isMobile ? mobileLayout : wallboardView

@@ -27,11 +27,11 @@ const DASHBOARDS: DashboardCardData[] = [
     accent: "Jakarta, Indonesia"
   },
   {
-    id: "aop",
-    name: "AOP",
-    tagline: "Actionable Operations",
+    id: "new-site",
+    name: "New Site",
+    tagline: "New Site Operations",
     description: "Operational planning hub for aligning regional execution.",
-    href: "/aop",
+    href: "/new-site",
     image: "/AOP_thumbnail.png",
     accent: "Bandung, Indonesia"
   },

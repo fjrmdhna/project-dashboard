@@ -1,12 +1,12 @@
 import type { FilterValue } from "@/components/filters/FilterBar"
 import type { HermesMapPoint, StatusLabel } from "@/components/maps/Hermes5GMap"
-import type { AopDashboardRow } from "@/data/aop-dashboard"
+import type { NewSiteDashboardRow } from "@/data/aop-dashboard"
 
 /**
- * Derive AOP status from row data
+ * Derive New Site status from row data
  * Priority: ACTIVE > READY > RFI > SOW
  */
-export function deriveAopStatus(row: AopDashboardRow): StatusLabel {
+export function deriveNewSiteStatus(row: NewSiteDashboardRow): StatusLabel {
   // ACTIVE: rfs_af is filled
   if (row.rfs_af) {
     return 'ACTIVE'
@@ -27,9 +27,9 @@ export function deriveAopStatus(row: AopDashboardRow): StatusLabel {
 }
 
 /**
- * Filter AOP rows based on FilterValue
+ * Filter New Site rows based on FilterValue
  */
-export function filterAopRows(rows: AopDashboardRow[], filter: FilterValue): AopDashboardRow[] {
+export function filterNewSiteRows(rows: NewSiteDashboardRow[], filter: FilterValue): NewSiteDashboardRow[] {
   return rows.filter(row => {
     // Search filter
     if (filter.q) {
@@ -61,7 +61,7 @@ export function filterAopRows(rows: AopDashboardRow[], filter: FilterValue): Aop
       }
     }
 
-    // Circle filter (AOP uses circle instead of imp_ttp/nano_cluster)
+    // Circle filter (New Site uses circle instead of imp_ttp/nano_cluster)
     if (filter.circle && filter.circle.length > 0) {
       const rowCircle = row.region_circle || row.nano_cluster
       if (!rowCircle || !filter.circle.includes(rowCircle)) {
@@ -69,16 +69,9 @@ export function filterAopRows(rows: AopDashboardRow[], filter: FilterValue): Aop
       }
     }
 
-    // RAN Score filter
-    if (filter.ran_score && filter.ran_score.length > 0) {
-      if (!row.ran_score || !filter.ran_score.includes(row.ran_score)) {
-        return false
-      }
-    }
-
     // Status filter
     if (filter.status && filter.status.length > 0) {
-      const rowStatus = deriveAopStatus(row)
+      const rowStatus = deriveNewSiteStatus(row)
       if (!filter.status.includes(rowStatus)) {
         return false
       }
@@ -89,9 +82,9 @@ export function filterAopRows(rows: AopDashboardRow[], filter: FilterValue): Aop
 }
 
 /**
- * Convert AOP rows to HermesMapPoint format
+ * Convert New Site rows to HermesMapPoint format
  */
-export function toHermesMapPoints(rows: AopDashboardRow[]): HermesMapPoint[] {
+export function toHermesMapPoints(rows: NewSiteDashboardRow[]): HermesMapPoint[] {
   return rows
     .filter(row => {
       // Only include rows with valid coordinates
@@ -102,7 +95,7 @@ export function toHermesMapPoints(rows: AopDashboardRow[]): HermesMapPoint[] {
     .map(row => {
       const lat = Number(row.lat)
       const long = Number(row.long)
-      const status = deriveAopStatus(row)
+      const status = deriveNewSiteStatus(row)
 
       return {
         id: row.system_key || '',

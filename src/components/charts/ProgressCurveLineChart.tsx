@@ -242,17 +242,100 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
       };
     });
 
+    // Find the last bucket where each metric value CHANGES (not just reaches total)
+    // For cumulative data, we need to find where the value stops changing
+    // This means finding the last bucket where value differs from previous bucket
     for (let i = cumulativeData.length - 1; i >= 0; i--) {
-      if (cumulativeData[i].baseline > 0 && lastBaselineIndex === -1) lastBaselineIndex = i;
-      if (cumulativeData[i].forecast > 0 && lastForecastIndex === -1) lastForecastIndex = i;
-      if (cumulativeData[i].actual > 0 && lastActualIndex === -1) lastActualIndex = i;
+      // Find last index where baseline value changes (or first non-zero)
+      if (lastBaselineIndex === -1 && totalBaseline > 0) {
+        if (i === 0) {
+          // First bucket: if it has data, it's the last
+          if (cumulativeData[i].baseline > 0) {
+            lastBaselineIndex = i;
+          }
+        } else {
+          // Check if value changed from previous bucket
+          const prevValue = cumulativeData[i - 1].baseline;
+          const currValue = cumulativeData[i].baseline;
+          if (currValue !== prevValue && currValue > 0) {
+            lastBaselineIndex = i;
+          }
+        }
+      }
+      
+      // Find last index where forecast value changes (or first non-zero)
+      if (lastForecastIndex === -1 && totalForecast > 0) {
+        if (i === 0) {
+          // First bucket: if it has data, it's the last
+          if (cumulativeData[i].forecast > 0) {
+            lastForecastIndex = i;
+          }
+        } else {
+          // Check if value changed from previous bucket
+          const prevValue = cumulativeData[i - 1].forecast;
+          const currValue = cumulativeData[i].forecast;
+          if (currValue !== prevValue && currValue > 0) {
+            lastForecastIndex = i;
+          }
+        }
+      }
+      
+      // Find last index where actual value changes (or first non-zero)
+      if (lastActualIndex === -1 && totalActual > 0) {
+        if (i === 0) {
+          // First bucket: if it has data, it's the last
+          if (cumulativeData[i].actual > 0) {
+            lastActualIndex = i;
+          }
+        } else {
+          // Check if value changed from previous bucket
+          const prevValue = cumulativeData[i - 1].actual;
+          const currValue = cumulativeData[i].actual;
+          if (currValue !== prevValue && currValue > 0) {
+            lastActualIndex = i;
+          }
+        }
+      }
     }
 
-    if (lastBaselineIndex === -1 && totalBaseline > 0) lastBaselineIndex = cumulativeData.length - 1;
-    if (lastForecastIndex === -1 && totalForecast > 0) lastForecastIndex = cumulativeData.length - 1;
-    if (lastActualIndex === -1 && totalActual > 0) lastActualIndex = cumulativeData.length - 1;
+    // Fallback: if no change found but data exists, use first bucket with data
+    if (lastBaselineIndex === -1 && totalBaseline > 0) {
+      for (let i = 0; i < cumulativeData.length; i++) {
+        if (cumulativeData[i].baseline > 0) {
+          lastBaselineIndex = i;
+          break;
+        }
+      }
+    }
+    
+    if (lastForecastIndex === -1 && totalForecast > 0) {
+      for (let i = 0; i < cumulativeData.length; i++) {
+        if (cumulativeData[i].forecast > 0) {
+          lastForecastIndex = i;
+          break;
+        }
+      }
+    }
+    
+    if (lastActualIndex === -1 && totalActual > 0) {
+      for (let i = 0; i < cumulativeData.length; i++) {
+        if (cumulativeData[i].actual > 0) {
+          lastActualIndex = i;
+          break;
+        }
+      }
+    }
 
-    return cumulativeData.map((values, index) => ({
+    // Find the last index that has any data (baseline, forecast, or actual)
+    // This ensures the chart stops at the last data point, not at the end of monthsSpan
+    const lastDataIndex = Math.max(
+      lastBaselineIndex >= 0 ? lastBaselineIndex : -1,
+      lastForecastIndex >= 0 ? lastForecastIndex : -1,
+      lastActualIndex >= 0 ? lastActualIndex : -1
+    );
+
+    // Map data points, but only include up to lastDataIndex
+    const mappedData = cumulativeData.map((values, index) => ({
       key: buckets[index].key,
       label: buckets[index].label,
       baseline: index <= lastBaselineIndex ? (index === lastBaselineIndex ? totalBaseline : Math.min(values.baseline, totalBaseline)) : null,
@@ -262,6 +345,24 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
       active: null,
       planReadiness: null,
     }));
+
+    // For AOP format, only return data up to the last index that has any data
+    // This prevents showing empty buckets after the last data point
+    if (lastDataIndex >= 0 && lastDataIndex < mappedData.length) {
+      return mappedData.slice(0, lastDataIndex + 1);
+    }
+
+    // If no data found but we have buckets, return at least one empty data point (edge case)
+    if (mappedData.length > 0 && lastDataIndex === -1) {
+      return mappedData.slice(0, 1).map(point => ({
+        ...point,
+        baseline: null,
+        forecast: null,
+        actual: null,
+      }));
+    }
+
+    return mappedData;
   }
 
   // Hermes 5G Format: ready, active, forecast, planReadiness (original logic)

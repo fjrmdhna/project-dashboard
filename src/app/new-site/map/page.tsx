@@ -8,8 +8,8 @@ import { useEffect, useMemo, useState } from "react"
 import { FilterBar, type FilterValue } from "@/components/filters/FilterBar"
 import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
 import type { StatusLabel } from "@/components/maps/Hermes5GMap"
-import { AOP_DASHBOARD_ROWS, AOP_INITIAL_FILTER } from "@/data/aop-dashboard"
-import { deriveAopStatus, filterAopRows, toHermesMapPoints } from "@/lib/aop-utils"
+import { NEW_SITE_DASHBOARD_ROWS, NEW_SITE_INITIAL_FILTER } from "@/data/aop-dashboard"
+import { deriveNewSiteStatus, filterNewSiteRows, toHermesMapPoints } from "@/lib/aop-utils"
 
 const Hermes5GMap = dynamic(() => import("@/components/maps/Hermes5GMap"), { ssr: false })
 
@@ -27,12 +27,12 @@ const STATUS_COPY: Record<StatusLabel, string> = {
   SOW: "SOW"
 }
 
-export default function AopMapPage() {
-  const [filterValue, setFilterValue] = useState<FilterValue>(AOP_INITIAL_FILTER)
+export default function NewSiteMapPage() {
+  const [filterValue, setFilterValue] = useState<FilterValue>(NEW_SITE_INITIAL_FILTER)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
   const filteredRows = useMemo(
-    () => filterAopRows(AOP_DASHBOARD_ROWS, filterValue),
+    () => filterNewSiteRows(NEW_SITE_DASHBOARD_ROWS, filterValue),
     [filterValue]
   )
 
@@ -53,7 +53,7 @@ export default function AopMapPage() {
   const statusCounts = useMemo(() => {
     return filteredRows.reduce<Record<StatusLabel, number>>(
       (acc, row) => {
-        const status = deriveAopStatus(row)
+        const status = deriveNewSiteStatus(row)
         acc[status] += 1
         return acc
       },
@@ -84,20 +84,20 @@ export default function AopMapPage() {
   }
 
   const handleFilterReset = () => {
-    setFilterValue(AOP_INITIAL_FILTER)
+    setFilterValue(NEW_SITE_INITIAL_FILTER)
   }
 
   return (
     <div className="min-h-screen bg-[#050B1B] text-white">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-12 pt-6 lg:px-8">
         <div className="space-y-4">
-          <ProgramHeader title="AOP Deployment Map" dateLabel={formattedDate} />
+          <ProgramHeader title="New Site Deployment Map" dateLabel={formattedDate} />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-white/60">
               Track readiness and activation progress per city, then drill into city-level details for sequencing.
             </p>
             <Link
-              href="/aop"
+              href="/new-site"
               className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-white/15"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -137,8 +137,8 @@ export default function AopMapPage() {
                   value={filterValue}
                   onChange={handleFilterChange}
                   onReset={handleFilterReset}
-                  variant="aop"
-                  endpoint="/api/aop/filters"
+                  variant="newSite"
+                  endpoint="/api/new-site/filters"
                 />
               </div>
 
@@ -187,7 +187,7 @@ export default function AopMapPage() {
               </div>
               <div className="mt-4 flex max-h-[240px] flex-col gap-2 overflow-y-auto pr-1">
                 {filteredRows.map(row => {
-                  const status = deriveAopStatus(row)
+                  const status = deriveNewSiteStatus(row)
                   const isSelected = row.system_key === selectedKey
                   return (
                     <button

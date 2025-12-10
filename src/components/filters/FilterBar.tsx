@@ -12,7 +12,6 @@ export interface FilterValue {
   program_report: string[]
   imp_ttp: string[]
   nano_cluster: string[]
-  ran_score: string[]
   status: string[] // New status filter array
   circle?: string[]
 }
@@ -22,7 +21,7 @@ export interface FilterBarProps {
   value: FilterValue
   onChange: (value: FilterValue) => void
   onReset?: () => void
-  variant?: "default" | "aop"
+  variant?: "default" | "newSite"
   endpoint?: string
 }
 
@@ -33,7 +32,6 @@ interface FilterOptions {
   cities: string[]
   nanoClusters: string[]
   circles: string[]
-  ranScores: string[]
 }
 
 // Fungsi helper untuk memendekkan teks yang terlalu panjang
@@ -53,8 +51,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     programs: [],
     cities: [],
     nanoClusters: [],
-    circles: [],
-    ranScores: []
+    circles: []
   })
   
   // State untuk loading
@@ -82,8 +79,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               programs: data.data.programs || [],
               cities: data.data.cities || [],
               nanoClusters: data.data.nanoClusters || [],
-              circles: data.data.circles || [],
-              ranScores: data.data.ranScores || []
+              circles: data.data.circles || []
             })
           }
         }
@@ -138,17 +134,12 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     console.log('Circle filter changed:', selected)
     onChange({ ...value, circle: selected })
   }, [onChange, value])
-
-  const handleRanScoreChange = useCallback((selected: string[]) => {
-    console.log('RAN score filter changed:', selected)
-    onChange({ ...value, ran_score: selected })
-  }, [onChange, value])
   
   // Handler untuk reset semua filter
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], ran_score: [], status: [], circle: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], circle: [] })
   }
 
   // Handler untuk remove individual filter
@@ -171,14 +162,14 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.program_report?.length || 0) > 0 || 
     (value.imp_ttp?.length || 0) > 0 ||
     (value.nano_cluster?.length || 0) > 0 ||
-    (value.ran_score?.length || 0) > 0 ||
     (value.circle?.length || 0) > 0 ||
     (value.status?.length || 0) > 0
 
-const gridClass =
-  variant === "aop"
-    ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2"
-    : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2"
+  // Grid layout berbeda untuk variant New Site (3 filter) vs default (5 filter)
+  const gridClass =
+    variant === "newSite"
+      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto] md:items-center md:gap-2"
+      : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
   return (
     <div className="h-full flex flex-col min-w-0">
@@ -204,6 +195,7 @@ const gridClass =
           )}
         </div>
 
+        {/* Vendor Filter */}
         <MultiSelect
           options={options.vendors}
           selected={value.vendor_name}
@@ -211,9 +203,10 @@ const gridClass =
           onChange={handleVendorChange}
           disabled={isLoading}
           width="w-full"
-          className="col-span-2 sm:col-span-1 md:col-span-1"
+          className="col-span-2 md:col-span-1"
         />
 
+        {/* Program Filter */}
         <MultiSelect
           options={options.programs}
           selected={value.program_report}
@@ -221,10 +214,11 @@ const gridClass =
           onChange={handleProgramChange}
           disabled={isLoading}
           width="w-full"
-          className="col-span-2 sm:col-span-1 md:col-span-1"
+          className="col-span-2 md:col-span-1"
         />
 
-        {variant !== "aop" && (
+        {/* City & Cluster Filters - Default variant only */}
+        {variant !== "newSite" && (
           <>
             <MultiSelect
               options={options.cities}
@@ -233,7 +227,7 @@ const gridClass =
               onChange={handleCityChange}
               disabled={isLoading}
               width="w-full"
-              className="col-span-2 sm:col-span-1 md:col-span-1"
+              className="col-span-2 md:col-span-1"
             />
 
             <MultiSelect
@@ -243,13 +237,13 @@ const gridClass =
               onChange={handleNanoClusterChange}
               disabled={isLoading}
               width="w-full"
-              className="col-span-2 sm:col-span-1 md:col-span-1"
+              className="col-span-2 md:col-span-1"
             />
           </>
         )}
 
-        {variant === "aop" && (
-          <>
+        {/* Circle Filter - AOP variant only */}
+        {variant === "newSite" && (
             <MultiSelect
               options={options.circles}
               selected={value.circle ?? []}
@@ -257,20 +251,11 @@ const gridClass =
               onChange={handleCircleChange}
               disabled={isLoading}
               width="w-full"
-              className="col-span-2 sm:col-span-1 md:col-span-1"
+            className="col-span-2 md:col-span-1"
             />
-            <MultiSelect
-              options={options.ranScores}
-              selected={value.ran_score ?? []}
-              placeholder="RAN Score"
-              onChange={handleRanScoreChange}
-              disabled={isLoading}
-              width="w-full"
-              className="col-span-2 sm:col-span-1 md:col-span-1"
-            />
-          </>
         )}
 
+        {/* Reset Button - Desktop */}
         <button
           onClick={handleReset}
           className={`hidden md:inline-flex items-center justify-center md:col-span-1 md:justify-self-end rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${
@@ -285,7 +270,7 @@ const gridClass =
         </button>
       </div>
 
-      {/* Reset button row */}
+      {/* Reset Button - Mobile */}
       <div className="mt-3 flex justify-start md:hidden">
         <button
           onClick={handleReset}
@@ -295,6 +280,7 @@ const gridClass =
               : 'border-white/5 bg-transparent text-gray-400 cursor-not-allowed'
           }`}
           disabled={!hasActiveFilters}
+          aria-label="Reset filters"
         >
           <X className="h-3.5 w-3.5" />
           <span>Reset</span>
@@ -370,20 +356,6 @@ const gridClass =
             </div>
           ))}
 
-          {value.ran_score?.map(score => (
-            <div
-              key={`ran-score-${score}`}
-              className="bg-pink-500/20 text-pink-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
-              title={`RAN Score: ${score}`}
-            >
-              <span>RAN: {truncateText(score, 10)}</span>
-              <X
-                className="h-2 w-2 cursor-pointer"
-                onClick={() => removeFilter('ran_score', score)}
-              />
-            </div>
-          ))}
-
           {value.circle?.map(circle => (
             <div
               key={`circle-${circle}`}
@@ -416,14 +388,3 @@ const gridClass =
     </div>
   )
 } 
-
-
-
-
-
-
-
-
-
-
-

@@ -1,7 +1,7 @@
 import { FilterValue } from "@/components/filters/FilterBar"
 import type { Row as MatrixRow } from "@/components/cards/MatrixStatsCard"
 
-export type AopDashboardRow = MatrixRow & {
+export type NewSiteDashboardRow = MatrixRow & {
   site_id?: string | null
   site_name?: string | null
   nano_cluster?: string | null
@@ -13,9 +13,9 @@ export type AopDashboardRow = MatrixRow & {
 }
 
 // Placeholder data - akan diganti dengan data dari API saat halaman map menggunakan data real
-export const AOP_DASHBOARD_ROWS: AopDashboardRow[] = []
+export const NEW_SITE_DASHBOARD_ROWS: NewSiteDashboardRow[] = []
 
-export const AOP_INITIAL_FILTER: FilterValue = {
+export const NEW_SITE_INITIAL_FILTER: FilterValue = {
   q: "",
   vendor_name: [],
   program_report: [],
