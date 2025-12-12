@@ -130,7 +130,9 @@ export function Hermes5GMap({ points, colors, loading = false, error = null }: H
       ACTIVE: colors.ACTIVE ?? '#22C55E',  // Hijau untuk ACTIVE
       READY: colors.READY ?? '#2563EB',    // Biru untuk READY
       RFI: colors.RFI ?? '#FACC15',        // Kuning untuk RFI
-      SOW: colors.SOW ?? '#EF4444'         // Merah untuk SOW
+      SOW: colors.SOW ?? '#EF4444',        // Merah untuk SOW
+      INSTALL: colors.INSTALL ?? '#8B5CF6', // Ungu untuk INSTALL
+      ON_AIR: colors.ON_AIR ?? '#06B6D4'   // Cyan untuk ON_AIR
     }),
     [colors]
   )

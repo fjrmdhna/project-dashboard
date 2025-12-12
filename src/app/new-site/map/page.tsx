@@ -154,7 +154,7 @@ export default function NewSiteMapPage() {
       debouncedFilterValue.program_report.forEach((value) => {
         params.append('program_report', value)
       })
-      debouncedFilterValue.circle.forEach((value) => {
+      debouncedFilterValue.circle?.forEach((value) => {
         params.append('region_circle', value)
       })
       debouncedFilterValue.status.forEach((value) => {
@@ -195,7 +195,7 @@ export default function NewSiteMapPage() {
           debouncedFilterValue.program_report.forEach((value) => {
             totalParams.append('program_report', value)
           })
-          debouncedFilterValue.circle.forEach((value) => {
+          debouncedFilterValue.circle?.forEach((value) => {
             totalParams.append('region_circle', value)
           })
           // Don't include status filter for total counts

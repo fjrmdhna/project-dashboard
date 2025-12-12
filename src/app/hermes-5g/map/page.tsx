@@ -47,14 +47,18 @@ const DEFAULT_COUNTS: Record<StatusLabel, number> = {
   ACTIVE: 0,
   READY: 0,
   RFI: 0,
-  SOW: 0
+  SOW: 0,
+  INSTALL: 0,
+  ON_AIR: 0
 }
 
 const DEFAULT_COLORS: Record<StatusLabel, string> = {
   ACTIVE: '#22C55E',  // Hijau untuk ACTIVE
   READY: '#2563EB',   // Biru untuk READY
   RFI: '#FACC15',     // Kuning untuk RFI
-  SOW: '#EF4444'      // Merah untuk SOW
+  SOW: '#EF4444',     // Merah untuk SOW
+  INSTALL: '#8B5CF6', // Ungu untuk INSTALL
+  ON_AIR: '#06B6D4'   // Cyan untuk ON_AIR
 }
 
 function formatTimestamp(timestamp: string | null) {
