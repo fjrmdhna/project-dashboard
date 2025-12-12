@@ -1,275 +1,402 @@
 "use client"
 
-import Link from "next/link"
-import dynamic from "next/dynamic"
-import { ArrowLeft, Crosshair, Map } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { RefreshCw } from 'lucide-react'
+import dynamic from 'next/dynamic'
 
-import { FilterBar, type FilterValue } from "@/components/filters/FilterBar"
-import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
-import type { StatusLabel } from "@/components/maps/Hermes5GMap"
-import { NEW_SITE_DASHBOARD_ROWS, NEW_SITE_INITIAL_FILTER } from "@/data/aop-dashboard"
-import { deriveNewSiteStatus, filterNewSiteRows, toHermesMapPoints } from "@/lib/aop-utils"
-
-const Hermes5GMap = dynamic(() => import("@/components/maps/Hermes5GMap"), { ssr: false })
-
-const STATUS_COLORS: Record<StatusLabel, string> = {
-  ACTIVE: "#22C55E",
-  READY: "#38BDF8",
-  RFI: "#FACC15",
-  SOW: "#F97316"
-}
-
-const STATUS_COPY: Record<StatusLabel, string> = {
-  ACTIVE: "Activated",
-  READY: "Ready",
-  RFI: "RFI",
-  SOW: "SOW"
-}
-
-export default function NewSiteMapPage() {
-  const [filterValue, setFilterValue] = useState<FilterValue>(NEW_SITE_INITIAL_FILTER)
-  const [selectedKey, setSelectedKey] = useState<string | null>(null)
-
-  const filteredRows = useMemo(
-    () => filterNewSiteRows(NEW_SITE_DASHBOARD_ROWS, filterValue),
-    [filterValue]
-  )
-
-  useEffect(() => {
-    if (!filteredRows.length) {
-      if (selectedKey !== null) {
-        setSelectedKey(null)
-      }
-      return
-    }
-
-    const exists = filteredRows.some(row => row.system_key === selectedKey)
-    if (!exists) {
-      setSelectedKey(filteredRows[0].system_key)
-    }
-  }, [filteredRows, selectedKey])
-
-  const statusCounts = useMemo(() => {
-    return filteredRows.reduce<Record<StatusLabel, number>>(
-      (acc, row) => {
-        const status = deriveNewSiteStatus(row)
-        acc[status] += 1
-        return acc
-      },
-      { ACTIVE: 0, READY: 0, RFI: 0, SOW: 0 }
-    )
-  }, [filteredRows])
-
-  const mapPoints = useMemo(() => toHermesMapPoints(filteredRows), [filteredRows])
-
-  const selectedRow = useMemo(
-    () => filteredRows.find(row => row.system_key === selectedKey) ?? null,
-    [filteredRows, selectedKey]
-  )
-
-  const formattedDate = useMemo(
-    () =>
-      new Date().toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric"
-      }),
-    []
-  )
-
-  const handleFilterChange = (value: FilterValue) => {
-    setFilterValue(value)
-  }
-
-  const handleFilterReset = () => {
-    setFilterValue(NEW_SITE_INITIAL_FILTER)
-  }
-
-  return (
-    <div className="min-h-screen bg-[#050B1B] text-white">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-12 pt-6 lg:px-8">
-        <div className="space-y-4">
-          <ProgramHeader title="New Site Deployment Map" dateLabel={formattedDate} />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-white/60">
-              Track readiness and activation progress per city, then drill into city-level details for sequencing.
-            </p>
-            <Link
-              href="/new-site"
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-white/15"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back to Dashboard
-            </Link>
-          </div>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-          <section className="rounded-3xl border border-white/10 bg-[#0F1630]/75 p-4 shadow-2xl shadow-black/30">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-blue-500/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-100">
-                      <Map className="h-3 w-3" />
-                      Live Coverage
-                    </div>
-                    <h2 className="mt-2 text-xl font-semibold">Network Activation Map</h2>
-                    <p className="text-sm text-white/60">
-                      Apply filters to focus on a vendor, wave, or nano cluster, then inspect markers on the map.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {Object.entries(STATUS_COLORS).map(([status, color]) => (
-                      <div key={status} className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: color }}
-                        />
-                        {STATUS_COPY[status as StatusLabel]}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <FilterBar
-                  value={filterValue}
-                  onChange={handleFilterChange}
-                  onReset={handleFilterReset}
-                  variant="newSite"
-                  endpoint="/api/new-site/filters"
-                />
-              </div>
-
-              <div className="h-[520px] w-full overflow-hidden rounded-2xl border border-white/10 bg-[#050B1B]/40">
-                {mapPoints.length ? (
-                  <Hermes5GMap points={mapPoints} colors={STATUS_COLORS} />
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-white/60">
-                    <Crosshair className="h-6 w-6 text-white/20" />
-                    No sites match the current filters.
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-
-          <aside className="flex flex-col gap-4">
-            <div className="rounded-3xl border border-white/10 bg-[#0C132A]/90 p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold">Status Overview</h3>
-                <span className="text-xs uppercase tracking-[0.2em] text-white/50">
-                  {filteredRows.length} Sites
-                </span>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                {(Object.keys(STATUS_COLORS) as StatusLabel[]).map(status => (
-                  <div
-                    key={status}
-                    className="rounded-2xl border border-white/5 bg-white/5 p-3 text-white"
-                  >
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
-                      {STATUS_COPY[status]}
-                    </p>
-                    <p className="mt-2 text-2xl font-bold" style={{ color: STATUS_COLORS[status] }}>
-                      {statusCounts[status]}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-white/10 bg-[#0C132A]/90 p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold">City Focus</h3>
-                <span className="text-xs text-white/50">Click a city to inspect</span>
-              </div>
-              <div className="mt-4 flex max-h-[240px] flex-col gap-2 overflow-y-auto pr-1">
-                {filteredRows.map(row => {
-                  const status = deriveNewSiteStatus(row)
-                  const isSelected = row.system_key === selectedKey
-                  return (
-                    <button
-                      key={row.system_key}
-                      onClick={() => setSelectedKey(row.system_key)}
-                      className={`flex flex-col rounded-2xl border px-3 py-2 text-left transition ${
-                        isSelected
-                          ? "border-white/40 bg-white/10"
-                          : "border-white/5 bg-white/5 hover:border-white/20"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em]">
-                        <span>{row.imp_ttp ?? "Undefined"}</span>
-                        <span style={{ color: STATUS_COLORS[status] }}>{STATUS_COPY[status]}</span>
-                      </div>
-                      <p className="text-sm font-semibold">{row.vendor_name}</p>
-                      <p className="text-xs text-white/60">{row.program_report}</p>
-                    </button>
-                  )
-                })}
-                {!filteredRows.length && (
-                  <div className="rounded-2xl border border-dashed border-white/10 px-3 py-6 text-center text-sm text-white/50">
-                    No city available under the selected filter set.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-white/10 bg-[#0C132A]/90 p-4">
-              <div className="flex items-center gap-2">
-                <div className="rounded-full bg-blue-500/20 p-2">
-                  <Map className="h-4 w-4 text-blue-200" />
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold">City Deployment Detail</h3>
-                  <p className="text-xs text-white/50">Latest milestone snapshot for the selected city.</p>
-                </div>
-              </div>
-
-              {selectedRow ? (
-                <div className="mt-4 space-y-3 text-sm">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-white/50">System Key</p>
-                    <p className="text-lg font-semibold">{selectedRow.system_key}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <DetailItem label="Vendor" value={selectedRow.vendor_name} />
-                    <DetailItem label="Nano Cluster" value={selectedRow.nano_cluster} />
-                    <DetailItem label="CAF Approved" value={selectedRow.caf_approved} />
-                    <DetailItem label="MOS Actual" value={selectedRow.mos_af} />
-                    <DetailItem label="Integration Actual" value={selectedRow.imp_integ_af} />
-                    <DetailItem label="Activation Forecast" value={selectedRow.mocn_activation_forecast} />
-                  </div>
-                  <div className="rounded-2xl border border-dashed border-white/20 p-3 text-xs text-white/70">
-                    <p className="font-semibold uppercase tracking-[0.2em] text-white/60">Next Action</p>
-                    <p className="text-sm">
-                      {selectedRow.rfs_af
-                        ? "Activation completed and ready for performance handshake."
-                        : selectedRow.imp_integ_af
-                          ? "Awaiting commercial activation slot; align with MO team."
-                          : "Complete readiness gates before booking activation window."}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-6 rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-white/60">
-                  Select a city from the list to view milestone details.
-                </div>
-              )}
-            </div>
-          </aside>
-        </div>
+const Hermes5GMap = dynamic(() => import('@/components/maps/Hermes5GMap').then(mod => ({ default: mod.default })), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+        <p className="text-white/60">Loading map...</p>
       </div>
     </div>
   )
+})
+
+import type { HermesMapPoint, StatusLabel } from '@/components/maps/Hermes5GMap'
+import { FilterBar, FilterValue } from '@/components/filters/FilterBar'
+import { useDebounce } from '@/hooks/useDebounce'
+
+interface MapApiSuccess {
+  status: 'success'
+  data: {
+    points: HermesMapPoint[]
+    counts: Record<StatusLabel, number>
+    total: number
+    colors: Record<StatusLabel, string>
+    invalidCoordinates: number
+  }
+  timestamp: string
 }
 
-function DetailItem({ label, value }: { label: string; value?: string | null }) {
+interface MapApiError {
+  status: 'error'
+  message: string
+  error?: string
+}
+
+type MapApiResponse = MapApiSuccess | MapApiError
+
+const STATUS_ORDER: StatusLabel[] = ['ON_AIR', 'INSTALL', 'RFI', 'SOW']
+
+const DEFAULT_COUNTS: Record<StatusLabel, number> = {
+  ON_AIR: 0,
+  INSTALL: 0,
+  RFI: 0,
+  SOW: 0,
+  ACTIVE: 0,  // Keep for backward compatibility
+  READY: 0    // Keep for backward compatibility
+}
+
+const DEFAULT_COLORS: Record<StatusLabel, string> = {
+  ON_AIR: '#22C55E',   // Hijau untuk ON_AIR
+  INSTALL: '#38BDF8',  // Biru untuk INSTALL
+  RFI: '#FACC15',      // Kuning untuk RFI
+  SOW: '#F97316',      // Orange untuk SOW
+  ACTIVE: '#22C55E',   // Keep for backward compatibility
+  READY: '#38BDF8'     // Keep for backward compatibility
+}
+
+// Status label display mapping
+const STATUS_DISPLAY_LABELS: Record<StatusLabel, string> = {
+  ON_AIR: 'On-Air',
+  INSTALL: 'Install',
+  RFI: 'RFI',
+  SOW: 'SOW',
+  ACTIVE: 'On-Air',  // Map ACTIVE to On-Air for display
+  READY: 'Install'   // Map READY to Install for display
+}
+
+const INITIAL_FILTER: FilterValue = {
+  q: '',
+  vendor_name: [],
+  program_report: [],
+  imp_ttp: [],
+  nano_cluster: [],
+  status: [],
+  circle: []
+}
+
+function formatTimestamp(timestamp: string | null) {
+  if (!timestamp) {
+    return 'Not available'
+  }
+
+  try {
+    const date = new Date(timestamp)
+    return date.toLocaleString('id-ID', {
+      dateStyle: 'full',
+      timeStyle: 'short'
+    })
+  } catch (error) {
+    console.warn('Failed to format timestamp:', error)
+    return timestamp
+  }
+}
+
+export default function NewSiteMapPage() {
+  const [filterValue, setFilterValue] = useState<FilterValue>(INITIAL_FILTER)
+  const [points, setPoints] = useState<HermesMapPoint[]>([])
+  const [counts, setCounts] = useState<Record<StatusLabel, number>>(() => ({ ...DEFAULT_COUNTS }))
+  const [totalCounts, setTotalCounts] = useState<Record<StatusLabel, number>>(() => ({ ...DEFAULT_COUNTS }))
+  const [colors, setColors] = useState<Record<StatusLabel, string>>(() => ({ ...DEFAULT_COLORS }))
+  const [invalidCoordinates, setInvalidCoordinates] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+  const [showExcluded, setShowExcluded] = useState(true)
+
+  // Debounce filter untuk unified debouncing (300ms seperti Hermes 5G)
+  const debouncedFilterValue = useDebounce(filterValue, 300)
+
+  const visiblePoints = useMemo(
+    () => (showExcluded ? points : points.filter(point => !point.isExcluded)),
+    [points, showExcluded]
+  )
+
+  const totalSitesForSummary = useMemo(() => {
+    return Object.values(totalCounts).reduce((sum, count) => sum + count, 0)
+  }, [totalCounts])
+
+  // Handler untuk status click
+  const handleStatusClick = useCallback((status: StatusLabel) => {
+    const currentStatuses = filterValue.status || []
+    const isSelected = currentStatuses.includes(status)
+    
+    if (isSelected) {
+      // Remove status dari filter
+      const newStatuses = currentStatuses.filter(s => s !== status)
+      setFilterValue(prev => ({ ...prev, status: newStatuses }))
+    } else {
+      // Add status ke filter
+      const newStatuses = [...currentStatuses, status]
+      setFilterValue(prev => ({ ...prev, status: newStatuses }))
+    }
+  }, [filterValue.status])
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Build URL with current filter
+      const params = new URLSearchParams()
+      if (debouncedFilterValue.q) {
+        params.set('q', debouncedFilterValue.q)
+      }
+      debouncedFilterValue.vendor_name.forEach((value) => {
+        params.append('vendor_name', value)
+      })
+      debouncedFilterValue.program_report.forEach((value) => {
+        params.append('program_report', value)
+      })
+      debouncedFilterValue.circle.forEach((value) => {
+        params.append('region_circle', value)
+      })
+      debouncedFilterValue.status.forEach((value) => {
+        params.append('status', value)
+      })
+
+      const url = `/api/new-site/map-data?${params.toString()}`
+      console.log('Loading New Site map data with filter:', debouncedFilterValue)
+      console.log('Map API URL:', url)
+      const response = await fetch(url, { cache: 'no-store' })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const payload: MapApiResponse = await response.json()
+
+      if (payload.status !== 'success') {
+        throw new Error(payload.message || 'Failed to load map data')
+      }
+
+      setPoints(payload.data.points)
+      setCounts(payload.data.counts as Record<StatusLabel, number>)
+      setColors(payload.data.colors as Record<StatusLabel, string>)
+      setInvalidCoordinates(payload.data.invalidCoordinates || 0)
+      setLastUpdated(payload.timestamp)
+
+      // Load total counts for status summary (without status filter)
+      if (debouncedFilterValue.status.length > 0) {
+        try {
+          const totalParams = new URLSearchParams()
+          if (debouncedFilterValue.q) {
+            totalParams.set('q', debouncedFilterValue.q)
+          }
+          debouncedFilterValue.vendor_name.forEach((value) => {
+            totalParams.append('vendor_name', value)
+          })
+          debouncedFilterValue.program_report.forEach((value) => {
+            totalParams.append('program_report', value)
+          })
+          debouncedFilterValue.circle.forEach((value) => {
+            totalParams.append('region_circle', value)
+          })
+          // Don't include status filter for total counts
+
+          const totalUrl = `/api/new-site/map-data?${totalParams.toString()}`
+          const totalResponse = await fetch(totalUrl, { cache: 'no-store' })
+          
+          if (totalResponse.ok) {
+            const totalPayload: MapApiResponse = await totalResponse.json()
+            if (totalPayload.status === 'success') {
+              setTotalCounts(totalPayload.data.counts as Record<StatusLabel, number>)
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to load total counts for status summary:', err)
+          // Keep existing totalCounts if failed
+        }
+      } else {
+        // If no status filter, use the same counts
+        setTotalCounts(payload.data.counts as Record<StatusLabel, number>)
+      }
+    } catch (err) {
+      console.error('Failed to load New Site map data:', err)
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+      setPoints([])
+      setCounts({ ...DEFAULT_COUNTS })
+      setTotalCounts({ ...DEFAULT_COUNTS })
+      setColors({ ...DEFAULT_COLORS })
+      setInvalidCoordinates(0)
+    } finally {
+      setLoading(false)
+    }
+  }, [debouncedFilterValue])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
+
+  const headerTitle = 'New Site Progress Map'
+
+  // Handler untuk perubahan filter
+  const handleFilterChange = (newFilters: FilterValue) => {
+    console.log("Filter changed:", newFilters)
+    setFilterValue(newFilters)
+  }
+
+  // Handler untuk reset filter
+  const handleFilterReset = () => {
+    console.log("Filters reset")
+    setFilterValue(INITIAL_FILTER)
+  }
+
   return (
-    <div className="rounded-xl border border-white/5 bg-white/5 p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">{label}</p>
-      <p className="text-sm font-semibold text-white/90">{value ?? "—"}</p>
+    <div className="min-h-screen bg-gradient-to-b from-[#070F2B] via-[#050B1B] to-[#050B1B] text-white">
+      <header className="border-b border-white/10 bg-[#0B1533]/70 backdrop-blur">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-3 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => window.history.back()}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 transition hover:bg-white/20"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <img src="/logo-indosat-putih.png" alt="Indosat Ooredoo" className="h-9" />
+            <div className="hidden flex-col lg:flex">
+              <span className="text-[11px] uppercase tracking-[0.32em] text-white/60">New Site Dashboard</span>
+              <h1 className="text-xl font-semibold tracking-wide text-white">{headerTitle}</h1>
+            </div>
+          </div>
+
+          <div className="flex flex-1 items-center justify-center gap-2 text-xs uppercase tracking-[0.32em] text-white/60 lg:justify-center">
+            <Link
+              href="/new-site"
+              className="rounded-full border border-white/15 px-4 py-1.5 font-medium text-white/80 transition hover:bg-white/10"
+            >
+              Overview
+            </Link>
+            <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-4 py-1.5 font-semibold text-[#34D399]">
+              Map
+            </span>
+          </div>
+
+          <div className="flex flex-col items-end gap-2 text-right text-xs text-white/60">
+            <div>{formatTimestamp(lastUpdated)}</div>
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              className="flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-white/80 transition hover:bg-white/10"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto flex h-[calc(100vh-120px)] max-w-[1440px] flex-col gap-5 px-6 py-5 lg:h-[calc(100vh-140px)]">
+        {/* Filter Bar */}
+        <div className="rounded-2xl border border-white/10 bg-[#0B1533]/60 p-4">
+          <FilterBar
+            value={filterValue}
+            onChange={handleFilterChange}
+            onReset={handleFilterReset}
+            variant="newSite"
+            endpoint="/api/new-site/filters"
+          />
+        </div>
+
+        <div className="grid flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="relative min-h-[420px] overflow-hidden rounded-2xl border border-white/10 bg-[#0B1533]/60">
+            <Hermes5GMap points={visiblePoints} colors={colors} loading={loading} error={error} />
+          </div>
+
+          <aside className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#0B1533]/60 p-5">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-[0.28em] text-white/70">Status Summary</h2>
+              <p className="mt-1 text-2xl font-bold text-white">{totalSitesForSummary.toLocaleString('en-US')} Sites</p>
+              {invalidCoordinates > 0 && (
+                <div className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <svg className="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <span className="text-xs font-medium text-amber-200">
+                      {invalidCoordinates} sites with invalid coordinates
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3 text-sm">
+              {STATUS_ORDER.map((status) => {
+                const color = colors[status] ?? '#94A3B8'
+                const value = totalCounts[status] ?? 0
+                const percentage = totalSitesForSummary > 0 ? Math.round((value / totalSitesForSummary) * 100) : 0
+                const isSelected = (filterValue.status || []).includes(status)
+                const displayLabel = STATUS_DISPLAY_LABELS[status] || status
+
+                return (
+                  <div 
+                    key={status} 
+                    className={`flex items-center justify-between gap-3 rounded-lg p-2 transition-all duration-200 cursor-pointer hover:bg-white/5 ${
+                      isSelected ? 'bg-white/10 ring-1 ring-white/20' : ''
+                    }`}
+                    onClick={() => handleStatusClick(status)}
+                    title={`Click to ${isSelected ? 'remove' : 'add'} ${displayLabel} filter`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="inline-flex h-3.5 w-3.5 rounded-full"
+                        style={{ backgroundColor: color }}
+                        aria-hidden="true"
+                      />
+                      <span className={`text-xs font-medium tracking-[0.24em] ${
+                        isSelected ? 'text-white' : 'text-white/70'
+                      }`}>{displayLabel}</span>
+                    </div>
+                    <div className="flex items-baseline gap-2 font-semibold">
+                      <span className="text-base text-white">{value.toLocaleString('en-US')}</span>
+                      <span className="text-[11px] text-white/50">{percentage}%</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-[11px] leading-relaxed text-white/70">
+              <p className="font-semibold uppercase tracking-[0.26em] text-white/80">Status Legend</p>
+              <ul className="mt-3 space-y-2">
+                <li><span className="font-semibold text-white">On-Air</span> - Site is fully activated (rfs_af).</li>
+                <li><span className="font-semibold text-white">Install</span> - Site installation completed (ic_000040_af).</li>
+                <li><span className="font-semibold text-white">RFI</span> - RFI received (ic_000010_af).</li>
+                <li><span className="font-semibold text-white">SOW</span> - Total registered scope of work.</li>
+              </ul>
+              {invalidCoordinates > 0 && (
+                <div className="mt-3 pt-3 border-t border-white/10">
+                  <p className="text-amber-300 font-medium">
+                    ⚠️ {invalidCoordinates} sites excluded from map due to invalid coordinates
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {error && (
+              <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] font-medium text-rose-100">
+                Failed to load map data: {error}
+              </div>
+            )}
+          </aside>
+        </div>
+      </main>
     </div>
   )
 }

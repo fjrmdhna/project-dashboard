@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import L, { type Map as LeafletMap, type LayerGroup, type CircleMarker } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-export type StatusLabel = 'SOW' | 'RFI' | 'READY' | 'ACTIVE'
+export type StatusLabel = 'SOW' | 'RFI' | 'READY' | 'ACTIVE' | 'INSTALL' | 'ON_AIR'
 
 export interface HermesMapPoint {
   id: string

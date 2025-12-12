@@ -371,7 +371,7 @@ export default function NewSitePage() {
   const nanoClusterList = <NanoClusterListCard rows={rows} />
   const leaderboard = <VendorLeaderboardCard rows={rows} />
 
-  const header = <ProgramHeader title="Dashboard New Site 2025" dateLabel={formattedDate} />
+  const header = <ProgramHeader title="Dashboard New Site 2025" dateLabel={formattedDate} mapHref="/new-site/map" />
 
   const wallboardView = (
     <Wallboard1080

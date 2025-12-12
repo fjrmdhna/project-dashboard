@@ -109,6 +109,19 @@ export default async function Home() {
       mood: "primary",
       href: "/new-site",
     },
+    {
+      id: "tlp-new-site",
+      title: "TLP New Site",
+      category: "RAN",
+      date: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      progress: 0,
+      mood: "primary",
+      href: "/tlp-new-site",
+    },
     ...staticProjects,
   ]
 
