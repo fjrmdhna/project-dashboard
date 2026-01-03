@@ -94,8 +94,12 @@ function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = 
     .filter((value): value is Date => Boolean(value));
 
   // Set September as the minimum start month
-  const currentYear = anchor.getFullYear();
-  const septemberStart = new Date(currentYear, 8, 1); // September is month 8 (0-indexed)
+  // Use the minimum year from collected dates if available, otherwise use anchor year
+  // This ensures we don't force September of current year when data is from previous year
+  const minDataYear = collectedDates.length > 0
+    ? Math.min(...collectedDates.map((d) => d.getFullYear()))
+    : anchor.getFullYear();
+  const septemberStart = new Date(minDataYear, 8, 1); // September is month 8 (0-indexed)
   
   const monthsBefore = Math.floor(span / 2);
   const monthsAfter = span - monthsBefore - 1;
@@ -103,7 +107,7 @@ function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = 
   const baseRangeStart = toStart(addMonths(anchor, -monthsBefore));
   const baseRangeEnd = toEnd(addMonths(anchor, monthsAfter));
 
-  // Ensure we don't start before September
+  // Ensure we don't start before September of the minimum data year
   const adjustedBaseRangeStart = baseRangeStart < septemberStart ? septemberStart : baseRangeStart;
 
   const actualRangeStart = collectedDates.length
@@ -113,7 +117,7 @@ function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = 
     ? toEnd(new Date(Math.max(...collectedDates.map((d) => d.getTime()))))
     : baseRangeEnd;
 
-  // Ensure range start is not before September
+  // Ensure range start is not before September of the minimum data year
   const rangeStart = actualRangeStart < septemberStart ? septemberStart : actualRangeStart;
   const rangeEnd = actualRangeEnd > baseRangeEnd ? actualRangeEnd : baseRangeEnd;
 
