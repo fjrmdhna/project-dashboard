@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -88,6 +88,8 @@ export default function Hermes5GMapPage() {
   const [colors, setColors] = useState<Record<StatusLabel, string>>(() => ({ ...DEFAULT_COLORS }))
   const [invalidCoordinates, setInvalidCoordinates] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [isFilterLoading, setIsFilterLoading] = useState(false) // State khusus untuk filter loading (hanya saat filter berubah)
+  const [hasInitialLoad, setHasInitialLoad] = useState(false) // Track initial load completion
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [showExcluded, setShowExcluded] = useState(true)
@@ -99,8 +101,9 @@ export default function Hermes5GMapPage() {
     program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
     imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
     nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
+    region: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [],
     status: filterContext.statusFilters || []
-  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.statusFilters])
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.statusFilters])
 
   const visiblePoints = useMemo(
     () => (showExcluded ? points : points.filter(point => !point.isExcluded)),
@@ -130,6 +133,7 @@ export default function Hermes5GMapPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
+      setIsFilterLoading(true) // Set filter loading state
       setError(null)
 
       // Build URL with current filter
@@ -148,6 +152,9 @@ export default function Hermes5GMapPage() {
       })
       currentFilter.nano_cluster.forEach((value) => {
         params.append('nano_cluster', value)
+      })
+      currentFilter.region?.forEach((value) => {
+        params.append('region', value)
       })
       currentFilter.status.forEach((value) => {
         params.append('status', value)
@@ -173,6 +180,7 @@ export default function Hermes5GMapPage() {
       setColors(payload.data.colors as Record<StatusLabel, string>)
       setInvalidCoordinates(payload.data.invalidCoordinates || 0)
       setLastUpdated(payload.timestamp)
+      setHasInitialLoad(true) // Mark initial load as complete
 
       // Load total counts for status summary (without status filter)
       if (currentFilter.status.length > 0) {
@@ -192,6 +200,9 @@ export default function Hermes5GMapPage() {
           })
           currentFilter.nano_cluster.forEach((value) => {
             totalParams.append('nano_cluster', value)
+          })
+          currentFilter.region?.forEach((value) => {
+            totalParams.append('region', value)
           })
           // Don't include status filter for total counts
 
@@ -222,6 +233,7 @@ export default function Hermes5GMapPage() {
       setInvalidCoordinates(0)
     } finally {
       setLoading(false)
+      setIsFilterLoading(false) // Clear filter loading state
     }
   }, [currentFilter])
 
@@ -246,24 +258,54 @@ export default function Hermes5GMapPage() {
   // Handler untuk perubahan filter
   const handleFilterChange = (newFilters: FilterValue) => {
     console.log("Filter changed:", newFilters)
+    // Set filter loading state immediately untuk memberikan feedback visual yang cepat
+    setIsFilterLoading(true)
     // Update filter context - support multiselect by joining arrays
     filterContext.setSearchTerm(newFilters.q)
     filterContext.setVendorFilter(newFilters.vendor_name.length > 0 ? newFilters.vendor_name.join(',') : 'all')
     filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report.join(',') : 'all')
     filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp.join(',') : 'all')
     filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster.join(',') : 'all')
+    filterContext.setRegionFilter(newFilters.region && newFilters.region.length > 0 ? newFilters.region.join(',') : 'all')
     // ran_score filter removed - no longer used
+    // loadData akan dipanggil otomatis oleh useEffect ketika currentFilter berubah
   }
 
   // Handler untuk reset filter
   const handleFilterReset = () => {
     console.log("Filters reset")
+    // Set filter loading state untuk memberikan feedback visual
+    setIsFilterLoading(true)
     filterContext.resetFilters()
+    // loadData akan dipanggil otomatis oleh useEffect ketika currentFilter berubah
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#070F2B] via-[#050B1B] to-[#050B1B] text-white">
-      <header className="border-b border-white/10 bg-[#0B1533]/70 backdrop-blur">
+    <div className="min-h-screen bg-gradient-to-b from-[#070F2B] via-[#050B1B] to-[#050B1B] text-white relative">
+      {/* Loading Overlay dengan Blur Effect - hanya muncul saat filter loading (setelah initial load) */}
+      {isFilterLoading && hasInitialLoad && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-[#050B1B]/90 backdrop-blur-md transition-all duration-300 ease-in-out"
+          aria-live="polite"
+          aria-busy="true"
+          role="status"
+          style={{ pointerEvents: 'auto' }}
+        >
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative flex h-16 w-16 items-center justify-center">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full border border-emerald-400/30" />
+              <span className="absolute inline-flex h-[60px] w-[60px] rounded-full border border-white/10" />
+              <span className="h-12 w-12 animate-spin rounded-full border-2 border-transparent border-l-emerald-300 border-t-cyan-300" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-white">Loading map data...</p>
+              <p className="mt-1 text-xs text-white/60">Applying filters</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <header className={`border-b border-white/10 bg-[#0B1533]/70 backdrop-blur transition-opacity duration-300 ${isFilterLoading ? 'opacity-40' : ''}`}>
         <div className="mx-auto flex max-w-[1440px] flex-col gap-3 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -314,7 +356,7 @@ export default function Hermes5GMapPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex h-[calc(100vh-120px)] max-w-[1440px] flex-col gap-5 px-6 py-5 lg:h-[calc(100vh-140px)]">
+      <main className={`mx-auto flex h-[calc(100vh-120px)] max-w-[1440px] flex-col gap-5 px-6 py-5 lg:h-[calc(100vh-140px)] transition-opacity duration-300 ${isFilterLoading ? 'opacity-30' : ''}`} style={{ pointerEvents: isFilterLoading ? 'none' : 'auto' }}>
         {/* Filter Bar */}
         <div className="rounded-2xl border border-white/10 bg-[#0B1533]/60 p-4">
           <FilterBar

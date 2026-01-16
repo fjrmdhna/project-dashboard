@@ -85,6 +85,7 @@ export interface SiteData5GFilters {
   imp_ttp?: string[]
   nano_cluster?: string[]
   ran_score?: string[]
+  region?: string[]
   search?: string
   status?: string[] // New status filter
   limit?: number
@@ -176,6 +177,10 @@ export async function getSiteData5G(
 
   if (filters.nano_cluster && filters.nano_cluster.length > 0) {
     query = query.in('nano_cluster', filters.nano_cluster)
+  }
+
+  if (filters.region && filters.region.length > 0) {
+    query = query.in('region', filters.region)
   }
 
   if (filters.ran_score && filters.ran_score.length > 0) {

@@ -13,6 +13,7 @@ export interface FilterValue {
   imp_ttp: string[]
   nano_cluster: string[]
   status: string[] // New status filter array
+  region?: string[]
   circle?: string[]
 }
 
@@ -31,6 +32,7 @@ interface FilterOptions {
   programs: string[]
   cities: string[]
   nanoClusters: string[]
+  regions: string[]
   circles: string[]
 }
 
@@ -51,6 +53,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     programs: [],
     cities: [],
     nanoClusters: [],
+    regions: [],
     circles: []
   })
   
@@ -79,6 +82,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               programs: data.data.programs || [],
               cities: data.data.cities || [],
               nanoClusters: data.data.nanoClusters || [],
+              regions: data.data.regions || [],
               circles: data.data.circles || []
             })
           }
@@ -134,12 +138,18 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     console.log('Circle filter changed:', selected)
     onChange({ ...value, circle: selected })
   }, [onChange, value])
+
+  // Handler untuk region selection
+  const handleRegionChange = useCallback((selected: string[]) => {
+    console.log('Region filter changed:', selected)
+    onChange({ ...value, region: selected })
+  }, [onChange, value])
   
   // Handler untuk reset semua filter
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], circle: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], circle: [] })
   }
 
   // Handler untuk remove individual filter
@@ -162,14 +172,15 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.program_report?.length || 0) > 0 || 
     (value.imp_ttp?.length || 0) > 0 ||
     (value.nano_cluster?.length || 0) > 0 ||
+    (value.region?.length || 0) > 0 ||
     (value.circle?.length || 0) > 0 ||
     (value.status?.length || 0) > 0
 
-  // Grid layout berbeda untuk variant New Site (3 filter) vs default (5 filter)
+  // Grid layout berbeda untuk variant New Site (3 filter) vs default (6 filter dengan region)
   const gridClass =
     variant === "newSite"
       ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto] md:items-center md:gap-2"
-      : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2"
+      : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
   return (
     <div className="h-full flex flex-col min-w-0">
@@ -235,6 +246,16 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.nano_cluster}
               placeholder="Cluster"
               onChange={handleNanoClusterChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 md:col-span-1"
+            />
+
+            <MultiSelect
+              options={options.regions}
+              selected={value.region || []}
+              placeholder="Region"
+              onChange={handleRegionChange}
               disabled={isLoading}
               width="w-full"
               className="col-span-2 md:col-span-1"
@@ -352,6 +373,20 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               <X 
                 className="h-2 w-2 cursor-pointer" 
                 onClick={() => removeFilter('nano_cluster', cluster)} 
+              />
+            </div>
+          ))}
+
+          {value.region?.map(region => (
+            <div 
+              key={`region-${region}`} 
+              className="bg-pink-500/20 text-pink-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`Region: ${region}`}
+            >
+              <span>R: {truncateText(region, 10)}</span>
+              <X 
+                className="h-2 w-2 cursor-pointer" 
+                onClick={() => removeFilter('region', region)} 
               />
             </div>
           ))}

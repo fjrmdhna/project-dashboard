@@ -19,6 +19,7 @@ export async function GET() {
         programs: filterOptions.data.programs,
         cities: filterOptions.data.cities,
         nanoClusters: filterOptions.data.nanoClusters,
+        regions: filterOptions.data.regions,
         ranScores: filterOptions.data.ranScores,
       },
       timestamp: new Date().toISOString(),
