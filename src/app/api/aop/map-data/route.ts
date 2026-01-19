@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
     const vendorNames = searchParams.getAll('vendor_name') || []
     const programReports = searchParams.getAll('program_report') || []
     const circles = searchParams.getAll('region_circle') || []
+    const siteCategories = searchParams.getAll('site_category') || []
     const statusFilters = searchParams.getAll('status') || []
 
     // Select columns that exist in site_data_aop table
@@ -95,7 +96,8 @@ export async function GET(request: NextRequest) {
       'latitude',
       'longitude',
       'region',
-      'region_circle'
+      'region_circle',
+      'site_category'
     ].join(',')
 
     // Build base query
@@ -114,6 +116,10 @@ export async function GET(request: NextRequest) {
 
     if (circles.length > 0) {
       baseQuery = baseQuery.in('region_circle', circles)
+    }
+
+    if (siteCategories.length > 0) {
+      baseQuery = baseQuery.in('site_category', siteCategories)
     }
 
     if (q) {

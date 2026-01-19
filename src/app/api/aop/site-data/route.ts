@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const vendorNames = searchParams.getAll('vendor_name') || []
     const programReports = searchParams.getAll('program_report') || []
     const circles = searchParams.getAll('region_circle') || []
+    const siteCategories = searchParams.getAll('site_category') || []
     
     // Select columns that exist in site_data_aop table
     // Note: site_data_aop has different structure than site_data_5g
@@ -35,7 +36,8 @@ export async function GET(request: NextRequest) {
       'latitude',
       'longitude',
       'region',
-      'region_circle'
+      'region_circle',
+      'site_category'
     ].join(',')
     
     // Query site_data_aop table only
@@ -63,6 +65,10 @@ export async function GET(request: NextRequest) {
     
     if (circles.length > 0) {
       baseQuery = baseQuery.in('region_circle', circles)
+    }
+
+    if (siteCategories.length > 0) {
+      baseQuery = baseQuery.in('site_category', siteCategories)
     }
 
     if (q) {
@@ -181,7 +187,8 @@ export async function GET(request: NextRequest) {
       long: row.longitude || null,
       imp_ttp: row.region || null, // Use region as imp_ttp equivalent
       nano_cluster: row.region_circle || null, // Use region_circle as nano_cluster equivalent
-      region_circle: row.region_circle || null // Keep original region_circle for direct access
+      region_circle: row.region_circle || null, // Keep original region_circle for direct access
+      site_category: row.site_category || null // Site category
     }))
     
     return NextResponse.json({

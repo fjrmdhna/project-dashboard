@@ -15,6 +15,7 @@ export interface FilterValue {
   status: string[] // New status filter array
   region?: string[]
   circle?: string[]
+  site_category?: string[] // Site category filter for AOP
 }
 
 // Props untuk FilterBar
@@ -34,6 +35,7 @@ interface FilterOptions {
   nanoClusters: string[]
   regions: string[]
   circles: string[]
+  siteCategories?: string[] // Site categories for AOP
 }
 
 // Fungsi helper untuk memendekkan teks yang terlalu panjang
@@ -54,7 +56,8 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     cities: [],
     nanoClusters: [],
     regions: [],
-    circles: []
+    circles: [],
+    siteCategories: []
   })
   
   // State untuk loading
@@ -83,7 +86,8 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               cities: data.data.cities || [],
               nanoClusters: data.data.nanoClusters || [],
               regions: data.data.regions || [],
-              circles: data.data.circles || []
+              circles: data.data.circles || [],
+              siteCategories: data.data.siteCategories || []
             })
           }
         }
@@ -139,6 +143,12 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     onChange({ ...value, circle: selected })
   }, [onChange, value])
 
+  // Handler untuk site category selection
+  const handleSiteCategoryChange = useCallback((selected: string[]) => {
+    console.log('Site category filter changed:', selected)
+    onChange({ ...value, site_category: selected })
+  }, [onChange, value])
+
   // Handler untuk region selection
   const handleRegionChange = useCallback((selected: string[]) => {
     console.log('Region filter changed:', selected)
@@ -149,7 +159,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], circle: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], circle: [], site_category: [] })
   }
 
   // Handler untuk remove individual filter
@@ -174,12 +184,13 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.nano_cluster?.length || 0) > 0 ||
     (value.region?.length || 0) > 0 ||
     (value.circle?.length || 0) > 0 ||
-    (value.status?.length || 0) > 0
+    (value.status?.length || 0) > 0 ||
+    (value.site_category?.length || 0) > 0
 
-  // Grid layout berbeda untuk variant AOP (3 filter) vs default (6 filter dengan region)
+  // Grid layout berbeda untuk variant AOP (4 filter: vendor, program, circle, site_category) vs default (6 filter dengan region)
   const gridClass =
     variant === "aop"
-      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto] md:items-center md:gap-2"
+      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2"
       : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
   return (
@@ -265,6 +276,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
 
         {/* Circle Filter - AOP variant only */}
         {variant === "aop" && (
+          <>
             <MultiSelect
               options={options.circles}
               selected={value.circle ?? []}
@@ -272,8 +284,18 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               onChange={handleCircleChange}
               disabled={isLoading}
               width="w-full"
-            className="col-span-2 md:col-span-1"
+              className="col-span-2 md:col-span-1"
             />
+            <MultiSelect
+              options={options.siteCategories || []}
+              selected={value.site_category ?? []}
+              placeholder="Site Category"
+              onChange={handleSiteCategoryChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 md:col-span-1"
+            />
+          </>
         )}
 
         {/* Reset Button - Desktop */}
@@ -401,6 +423,20 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               <X
                 className="h-2 w-2 cursor-pointer"
                 onClick={() => removeFilter('circle', circle)}
+              />
+            </div>
+          ))}
+
+          {value.site_category?.map(category => (
+            <div
+              key={`site-category-${category}`}
+              className="bg-teal-500/20 text-teal-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`Site Category: ${category}`}
+            >
+              <span>Cat: {truncateText(category, 10)}</span>
+              <X
+                className="h-2 w-2 cursor-pointer"
+                onClick={() => removeFilter('site_category', category)}
               />
             </div>
           ))}

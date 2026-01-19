@@ -157,6 +157,9 @@ export default function AopMapPage() {
       debouncedFilterValue.circle?.forEach((value) => {
         params.append('region_circle', value)
       })
+      debouncedFilterValue.site_category?.forEach((value) => {
+        params.append('site_category', value)
+      })
       debouncedFilterValue.status.forEach((value) => {
         params.append('status', value)
       })
@@ -197,6 +200,9 @@ export default function AopMapPage() {
           })
           debouncedFilterValue.circle?.forEach((value) => {
             totalParams.append('region_circle', value)
+          })
+          debouncedFilterValue.site_category?.forEach((value) => {
+            totalParams.append('site_category', value)
           })
           // Don't include status filter for total counts
 

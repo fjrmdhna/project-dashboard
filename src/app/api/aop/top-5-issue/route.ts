@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const vendorNames = searchParams.getAll('vendor_name') || [];
     const programReports = searchParams.getAll('program_report') || [];
     const circles = searchParams.getAll('region_circle') || [];
+    const siteCategories = searchParams.getAll('site_category') || [];
     
     // Build Supabase query with filters - optimized: only select issue_category column
     let query = supabase
@@ -46,6 +47,9 @@ export async function GET(request: NextRequest) {
     }
     if (circles.length > 0) {
       query = query.in('region_circle', circles);
+    }
+    if (siteCategories.length > 0) {
+      query = query.in('site_category', siteCategories);
     }
     
     // Get data from Supabase

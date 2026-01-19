@@ -36,17 +36,18 @@ export interface UseAopDataOptions {
   vendorNames?: string[]
   programReports?: string[]
   circles?: string[]
+  siteCategories?: string[]
   search?: string
   autoFetch?: boolean
 }
 
 export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
-  const { vendorNames = [], programReports = [], circles = [], search = '' } = options
+  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], search = '' } = options
 
   // Generate cache key dari filter
   const cacheKey = useMemo(() => {
-    return `aop-site-data-${JSON.stringify({ vendorNames, programReports, circles, search })}`
-  }, [vendorNames, programReports, circles, search])
+    return `aop-site-data-${JSON.stringify({ vendorNames, programReports, circles, siteCategories, search })}`
+  }, [vendorNames, programReports, circles, siteCategories, search])
 
   // Fetch function untuk useApiCache dengan retry logic
   const fetchFn = useCallback(async () => {
@@ -55,9 +56,10 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
     vendorNames.forEach(v => params.append('vendor_name', v))
     programReports.forEach(p => params.append('program_report', p))
     circles.forEach(c => params.append('region_circle', c))
+    siteCategories.forEach(cat => params.append('site_category', cat))
 
     const url = `/api/aop/site-data?${params.toString()}`
-    console.log('Fetching AOP data with filter:', { vendorNames, programReports, circles, search })
+    console.log('Fetching AOP data with filter:', { vendorNames, programReports, circles, siteCategories, search })
     
     const response = await fetchWithRetry(url, {}, 3)
     const result = await response.json()
@@ -83,7 +85,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
     } else {
       throw new Error(result.message || 'Failed to fetch AOP data')
     }
-  }, [vendorNames, programReports, circles, search])
+  }, [vendorNames, programReports, circles, siteCategories, search])
 
   // Use useApiCache dengan validasi
   const { data, loading, error, refetch: cacheRefetch } = useApiCache<{ data: AopSiteData[], stats: AopDataStats }>(

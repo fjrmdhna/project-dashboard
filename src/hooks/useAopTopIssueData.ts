@@ -40,6 +40,7 @@ export function useAopTopIssueData(options: UseAopTopIssueDataOptions = {}): Use
     filter.vendor_name?.forEach(v => params.append('vendor_name', v))
     filter.program_report?.forEach(p => params.append('program_report', p))
     filter.circle?.forEach(c => params.append('region_circle', c))
+    filter.site_category?.forEach(cat => params.append('site_category', cat))
 
     const response = await fetchWithRetry(`/api/aop/top-5-issue?${params.toString()}`, {}, 3)
     

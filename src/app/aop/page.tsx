@@ -222,7 +222,8 @@ const INITIAL_FILTER: FilterValue = {
   imp_ttp: [],
   nano_cluster: [],
   status: [],
-  circle: []
+  circle: [],
+  site_category: []
 }
 
 export default function AopPage() {
@@ -239,6 +240,7 @@ export default function AopPage() {
     vendorNames: debouncedFilterValue.vendor_name || [],
     programReports: debouncedFilterValue.program_report || [],
     circles: debouncedFilterValue.circle || [],
+    siteCategories: debouncedFilterValue.site_category || [],
     search: debouncedFilterValue.q || ''
   })
 
@@ -296,7 +298,8 @@ export default function AopPage() {
     filterValue.program_report.length +
     filterValue.imp_ttp.length +
     filterValue.nano_cluster.length +
-    (filterValue.circle?.length ?? 0)
+    (filterValue.circle?.length ?? 0) +
+    (filterValue.site_category?.length ?? 0)
   )
   const hasActiveFilters = activeFilterCount > 0
 

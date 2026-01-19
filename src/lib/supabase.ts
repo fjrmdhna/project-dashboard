@@ -354,15 +354,17 @@ export async function getAopFilterOptions() {
       .sort((a, b) => a.localeCompare(b))
   }
 
-  const [vendors, programs, circles] = await Promise.all([
+  const [vendors, programs, circles, siteCategories] = await Promise.all([
     fetchDistinctValues('vendor_name'),
     fetchDistinctValues('program_report'),
-    fetchDistinctValues('region_circle')
+    fetchDistinctValues('region_circle'),
+    fetchDistinctValues('site_category')
   ])
 
   return {
     vendors,
     programs,
-    circles
+    circles,
+    siteCategories
   }
 }
