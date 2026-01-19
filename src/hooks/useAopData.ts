@@ -12,6 +12,7 @@ export interface AopSiteData extends MatrixRow {
   site_category?: string | null
   rfs_bf?: string | null
   rfs_ff?: string | null
+  year?: string | null
 }
 
 export interface AopDataStats {
@@ -63,6 +64,7 @@ export interface UseAopDataOptions {
   programReports?: string[]
   circles?: string[]
   siteCategories?: string[]
+  years?: string[]
   search?: string
   autoFetch?: boolean
 }
@@ -89,13 +91,15 @@ function filterDataClientSide(
   programReports: string[],
   circles: string[],
   siteCategories: string[],
+  years: string[],
   search: string
 ): AopSiteData[] {
   if (!data || data.length === 0) return []
   
   // If no filters, return all data
   const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
-                     circles.length > 0 || siteCategories.length > 0 || search.length > 0
+                     circles.length > 0 || siteCategories.length > 0 || 
+                     years.length > 0 || search.length > 0
   
   if (!hasFilters) return data
   
@@ -124,6 +128,11 @@ function filterDataClientSide(
       const rowCategory = (row.site_category || '').toLowerCase()
       const matchesCategory = siteCategories.some(sc => rowCategory.includes(sc.toLowerCase()))
       if (!matchesCategory) return false
+    }
+    
+    // Year filter
+    if (years.length > 0 && !years.includes(row.year || '')) {
+      return false
     }
     
     // Search filter
@@ -261,7 +270,7 @@ function calculateStatsFromFilteredData(data: AopSiteData[]): AopDataStats {
 }
 
 export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
-  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], search = '' } = options
+  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], years = [], search = '' } = options
 
   // OPTIMIZATION: Always fetch ALL data (no filter) and filter client-side
   // This makes filter changes instant instead of waiting 15-20s for API
@@ -319,14 +328,15 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
     }
     
     const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
-                       circles.length > 0 || siteCategories.length > 0 || search.length > 0
+                       circles.length > 0 || siteCategories.length > 0 || 
+                       years.length > 0 || search.length > 0
     
     // #region agent log
     const startFilter = performance.now();
     // #endregion
     // If no filters, use base data and calculate aggregation
     const dataToUse = hasFilters 
-      ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, search)
+      ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, years, search)
       : baseData.data
     // #region agent log
     const filterTime = performance.now() - startFilter;
@@ -360,7 +370,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       filteredStats: stats,
       aggregated: agg
     }
-  }, [baseData, vendorNames, programReports, circles, siteCategories, search])
+  }, [baseData, vendorNames, programReports, circles, siteCategories, years, search])
 
   // Refetch function
   const refetch = useCallback(async () => {

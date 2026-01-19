@@ -17,7 +17,7 @@ export type Row = {
 export type ProgressCurveProps = {
   rows: Row[];                // HASIL FILTER dari FilterBar
   anchorDate?: string;        // ISO; default today
-  monthsSpan?: 3 | 5;         // default 3 => prev, current, next
+  monthsSpan?: number;        // Number of months to display (default 5)
   className?: string;
 };
 
@@ -124,48 +124,19 @@ type ProgressCurveTooltipProps = {
   payload?: ProgressCurveTooltipItem[];
 };
 
-function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = []): Bucket[] {
+function buildHybridBuckets(anchorDate?: string, span: number = 5, rows: Row[] = []): Bucket[] {
   const anchor = toStart(anchorDate ? new Date(anchorDate) : new Date());
 
-  const collectedDates = rows
-    .flatMap((row) => [
-      safeDate(row.rfs_bf),  // Baseline
-      safeDate(row.rfs_ff),  // Forecast
-      safeDate(row.rfs_af),  // Actual
-      // Legacy fields for backward compatibility
-      safeDate(row.rfs_forecast_lock),
-      safeDate(row.imp_integ_af),
-      safeDate(row.mocn_activation_forecast),
-    ])
-    .filter((value): value is Date => Boolean(value));
-
-  // Set September as the minimum start month
-  // Use the minimum year from collected dates if available, otherwise use anchor year
-  // This ensures we don't force September of current year when data is from previous year
-  const minDataYear = collectedDates.length > 0
-    ? Math.min(...collectedDates.map((d) => d.getFullYear()))
-    : anchor.getFullYear();
-  const septemberStart = new Date(minDataYear, 8, 1); // September is month 8 (0-indexed)
-  
+  // For AOP, we want to show a fixed window around the anchor date
+  // span determines total months to display
+  // Current month is displayed as weeks, others as months
   const monthsBefore = Math.floor(span / 2);
   const monthsAfter = span - monthsBefore - 1;
 
-  const baseRangeStart = toStart(addMonths(anchor, -monthsBefore));
-  const baseRangeEnd = toEnd(addMonths(anchor, monthsAfter));
-
-  // Ensure we don't start before September of the minimum data year
-  const adjustedBaseRangeStart = baseRangeStart < septemberStart ? septemberStart : baseRangeStart;
-
-  const actualRangeStart = collectedDates.length
-    ? toStart(new Date(Math.min(...collectedDates.map((d) => d.getTime()))))
-    : adjustedBaseRangeStart;
-  const actualRangeEnd = collectedDates.length
-    ? toEnd(new Date(Math.max(...collectedDates.map((d) => d.getTime()))))
-    : baseRangeEnd;
-
-  // Ensure range start is not before September of the minimum data year
-  const rangeStart = actualRangeStart < septemberStart ? septemberStart : actualRangeStart;
-  const rangeEnd = actualRangeEnd > baseRangeEnd ? actualRangeEnd : baseRangeEnd;
+  // Calculate range based on span (NOT based on data range)
+  // This ensures consistent display regardless of how much historical data exists
+  const rangeStart = toStart(addMonths(anchor, -monthsBefore));
+  const rangeEnd = toEnd(addMonths(anchor, monthsAfter));
 
   const buckets: Bucket[] = [];
   let cursor = toStart(rangeStart);
@@ -210,42 +181,43 @@ function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = 
 function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, rangeEnd: Date): Bucket[] {
   const weeks: Bucket[] = [];
   
-  // Find the first Monday of the month or start from monthStart if it's already Monday
+  // Start from the first day of the month
   let cursor = new Date(monthStart);
-  const dayOfWeek = cursor.getDay();
-  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday = 0, Monday = 1
-  cursor.setDate(cursor.getDate() - daysToMonday);
+  let weekInMonth = 1; // Week counter within the month (W1, W2, W3, W4, W5)
 
-  while (cursor <= monthEnd) {
+  while (cursor <= monthEnd && weekInMonth <= 5) {
     const weekStart = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate(), 0, 0, 0, 0);
-    const weekEndWithinMonth = new Date(weekStart);
-    weekEndWithinMonth.setDate(weekEndWithinMonth.getDate() + 6);
-    weekEndWithinMonth.setHours(23, 59, 59, 999);
+    
+    // Calculate days until end of week (Sunday)
+    // JavaScript: Sunday = 0, Monday = 1, ..., Saturday = 6
+    const dayOfWeek = cursor.getDay(); // 0 = Sunday
+    const daysUntilSunday = dayOfWeek === 0 ? 0 : (7 - dayOfWeek); // If Sunday, stay; else go to next Sunday
+    
+    const weekEndDate = new Date(weekStart);
+    weekEndDate.setDate(weekEndDate.getDate() + daysUntilSunday);
+    weekEndDate.setHours(23, 59, 59, 999);
 
-    const monthLimitedEnd = weekEndWithinMonth.getTime() > monthEnd.getTime() ? monthEnd : weekEndWithinMonth;
+    // Limit to end of month
+    const monthLimitedEnd = weekEndDate.getTime() > monthEnd.getTime() ? monthEnd : weekEndDate;
     const { start, end } = clampRange(weekStart, monthLimitedEnd, rangeStart, rangeEnd);
 
     if (start <= end) {
-      const weekNumber = getWeekNumber(start);
-      // Hide W40 because it's already in September
-      if (weekNumber !== 40 && weekNumber > 0 && weekNumber <= 53) {
-        const weekLabel = `W${weekNumber}`;
-        // Ensure label is valid (not empty or "All")
-        if (weekLabel && weekLabel.trim() !== '' && weekLabel.toLowerCase() !== 'all') {
-        weeks.push({
-          key: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-w${String(weekNumber).padStart(2, '0')}`,
-            label: weekLabel,
-          start,
-          end,
-          kind: 'week',
-        });
-        }
-      }
+      const weekLabel = `W${weekInMonth}`;
+      weeks.push({
+        key: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-w${weekInMonth}`,
+        label: weekLabel,
+        start,
+        end,
+        kind: 'week',
+      });
     }
 
-    const nextStart = new Date(weekStart);
-    nextStart.setDate(nextStart.getDate() + 7);
+    // Move to next day after week end (Monday)
+    const nextStart = new Date(monthLimitedEnd);
+    nextStart.setDate(nextStart.getDate() + 1);
+    nextStart.setHours(0, 0, 0, 0);
     cursor = nextStart;
+    weekInMonth++;
   }
 
   return weeks;
@@ -427,21 +399,57 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
       }
     }
 
-    // Find the last index that has any data (baseline, forecast, or actual)
-    // This ensures the chart stops at the last data point, not at the end of monthsSpan
+    // For Actual: show data up to current date (today), not just until last change
+    // This is important because Actual represents what has happened so far
+    // Even if the value doesn't change, it should still be displayed up to today
+    const today = anchorDate ? new Date(anchorDate) : new Date();
+    const todayTime = today.getTime();
+    
+    // Find the bucket index that contains today's date
+    let currentBucketIndex = -1;
+    for (let i = 0; i < buckets.length; i++) {
+      if (buckets[i].end.getTime() >= todayTime && buckets[i].start.getTime() <= todayTime) {
+        currentBucketIndex = i;
+        break;
+      }
+      // If we've passed today, use the previous bucket
+      if (buckets[i].start.getTime() > todayTime) {
+        currentBucketIndex = Math.max(0, i - 1);
+        break;
+      }
+    }
+    // If today is after all buckets, use the last bucket
+    if (currentBucketIndex === -1 && buckets.length > 0) {
+      currentBucketIndex = buckets.length - 1;
+    }
+
+    // For Actual: show up to current bucket (today), not just last change
+    // For Baseline and Forecast: show up to their last data change (future projections)
+    const actualDisplayIndex = Math.max(lastActualIndex, currentBucketIndex);
+
+    // Find the last index that has any data (baseline, forecast, or actual up to today)
+    // This ensures the chart shows all relevant data including future projections
     const lastDataIndex = Math.max(
       lastBaselineIndex >= 0 ? lastBaselineIndex : -1,
       lastForecastIndex >= 0 ? lastForecastIndex : -1,
-      lastActualIndex >= 0 ? lastActualIndex : -1
+      actualDisplayIndex >= 0 ? actualDisplayIndex : -1
     );
 
-    // Map data points, but only include up to lastDataIndex
+    // Map data points with flags for label display
+    // All labels (Baseline, Forecast, Actual) should only show at the last Actual point
     const mappedData = cumulativeData.map((values, index) => ({
       key: buckets[index].key,
       label: buckets[index].label,
-      baseline: index <= lastBaselineIndex ? (index === lastBaselineIndex ? totalBaseline : Math.min(values.baseline, totalBaseline)) : null,
-      forecast: index <= lastForecastIndex ? (index === lastForecastIndex ? totalForecast : Math.min(values.forecast, totalForecast)) : null,
-      actual: index <= lastActualIndex ? (index === lastActualIndex ? totalActual : Math.min(values.actual, totalActual)) : null,
+      // Baseline: show up to lastBaselineIndex
+      baseline: index <= lastBaselineIndex ? Math.min(values.baseline, totalBaseline) : null,
+      // Forecast: show up to lastForecastIndex  
+      forecast: index <= lastForecastIndex ? Math.min(values.forecast, totalForecast) : null,
+      // Actual: show up to current bucket (today) - cumulative value stays the same if no new data
+      actual: index <= actualDisplayIndex ? Math.min(values.actual, totalActual) : null,
+      // All labels show at the last Actual point only (where rfs_af stops)
+      isLastBaseline: index === actualDisplayIndex,
+      isLastForecast: index === actualDisplayIndex,
+      isLastActual: index === actualDisplayIndex,
       ready: null,
       active: null,
       planReadiness: null,
@@ -717,10 +725,11 @@ const ProgressCurveTooltip = ({ active, payload, label }: ProgressCurveTooltipPr
   );
 };
 
-// Custom dot with label for Baseline (Blue) - Label above left of point
+// Custom dot with label for Baseline (Blue) - Label only at last point
 const BaselineDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.baseline;
+  const isLastPoint = payload?.isLastBaseline;
   
   // Don't render if value is null, 0, or empty
   if (value === null || !value || value === '0' || value === '') {
@@ -729,48 +738,54 @@ const BaselineDotWithLabel = (props: any) => {
   
   return (
     <g>
-      {/* Dot */}
+      {/* Dot - always show */}
       <circle cx={cx} cy={cy} r={3} fill="#2196F3" />
       
-      {/* Background rectangle with blue color - Above left of point */}
-      <rect
-        x={cx - 22}
-        y={cy - 16}
-        width={16}
-        height={12}
-        fill="rgba(33, 150, 243, 0.95)"
-        rx={3}
-        ry={3}
-        stroke="rgba(255, 255, 255, 0.5)"
-        strokeWidth={1}
-        style={{
-          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
-        }}
-      />
-      {/* Text label */}
-      <text
-        x={cx - 14}
-        y={cy - 10}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill="#FFFFFF"
-        fontSize={8}
-        fontWeight={600}
-        style={{
-          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
-          textShadow: '0px 0px 3px rgba(0,0,0,1)'
-        }}
-      >
-        {Number(value).toLocaleString()}
-      </text>
+      {/* Label - only show at last point */}
+      {isLastPoint && (
+        <>
+          {/* Background rectangle with blue color - Above left of point */}
+          <rect
+            x={cx - 22}
+            y={cy - 16}
+            width={16}
+            height={12}
+            fill="rgba(33, 150, 243, 0.95)"
+            rx={3}
+            ry={3}
+            stroke="rgba(255, 255, 255, 0.5)"
+            strokeWidth={1}
+            style={{
+              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
+            }}
+          />
+          {/* Text label */}
+          <text
+            x={cx - 14}
+            y={cy - 10}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#FFFFFF"
+            fontSize={8}
+            fontWeight={600}
+            style={{
+              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
+              textShadow: '0px 0px 3px rgba(0,0,0,1)'
+            }}
+          >
+            {Number(value).toLocaleString()}
+          </text>
+        </>
+      )}
     </g>
   );
 };
 
-// Custom dot with label for Forecast (Purple) - Label below left of point
+// Custom dot with label for Forecast (Purple) - Label only at last point
 const ForecastDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.forecast;
+  const isLastPoint = payload?.isLastForecast;
   
   // Don't render if value is null, 0, or empty
   if (value === null || !value || value === '0' || value === '') {
@@ -779,48 +794,54 @@ const ForecastDotWithLabel = (props: any) => {
   
   return (
     <g>
-      {/* Dot */}
+      {/* Dot - always show */}
       <circle cx={cx} cy={cy} r={3} fill="#8A5AA3" />
       
-      {/* Background rectangle with purple color - Below left of point */}
-      <rect
-        x={cx - 22}
-        y={cy + 4}
-        width={16}
-        height={12}
-        fill="rgba(138, 90, 163, 0.95)"
-        rx={3}
-        ry={3}
-        stroke="rgba(255, 255, 255, 0.5)"
-        strokeWidth={1}
-        style={{
-          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
-        }}
-      />
-      {/* Text label */}
-      <text
-        x={cx - 14}
-        y={cy + 10}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill="#FFFFFF"
-        fontSize={8}
-        fontWeight={600}
-        style={{
-          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
-          textShadow: '0px 0px 3px rgba(0,0,0,1)'
-        }}
-      >
-        {Number(value).toLocaleString()}
-      </text>
+      {/* Label - only show at last point */}
+      {isLastPoint && (
+        <>
+          {/* Background rectangle with purple color - Below left of point */}
+          <rect
+            x={cx - 22}
+            y={cy + 4}
+            width={16}
+            height={12}
+            fill="rgba(138, 90, 163, 0.95)"
+            rx={3}
+            ry={3}
+            stroke="rgba(255, 255, 255, 0.5)"
+            strokeWidth={1}
+            style={{
+              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
+            }}
+          />
+          {/* Text label */}
+          <text
+            x={cx - 14}
+            y={cy + 10}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#FFFFFF"
+            fontSize={8}
+            fontWeight={600}
+            style={{
+              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
+              textShadow: '0px 0px 3px rgba(0,0,0,1)'
+            }}
+          >
+            {Number(value).toLocaleString()}
+          </text>
+        </>
+      )}
     </g>
   );
 };
 
-// Custom dot with label for Actual (Green) - Label below right of point
+// Custom dot with label for Actual (Green) - Label only at last point
 const ActualDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.actual;
+  const isLastPoint = payload?.isLastActual;
   
   // Don't render if value is null, 0, or empty
   if (value === null || !value || value === '0' || value === '') {
@@ -829,40 +850,45 @@ const ActualDotWithLabel = (props: any) => {
   
   return (
     <g>
-      {/* Dot */}
+      {/* Dot - always show */}
       <circle cx={cx} cy={cy} r={3} fill="#7CB342" />
       
-      {/* Background rectangle with green color - Below right of point */}
-      <rect
-        x={cx + 6}
-        y={cy + 4}
-        width={16}
-        height={12}
-        fill="rgba(124, 179, 66, 0.95)"
-        rx={3}
-        ry={3}
-        stroke="rgba(255, 255, 255, 0.5)"
-        strokeWidth={1}
-        style={{
-          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
-        }}
-      />
-      {/* Text label */}
-      <text
-        x={cx + 14}
-        y={cy + 10}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill="#FFFFFF"
-        fontSize={8}
-        fontWeight={600}
-        style={{
-          filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
-          textShadow: '0px 0px 3px rgba(0,0,0,1)'
-        }}
-      >
-        {Number(value).toLocaleString()}
-      </text>
+      {/* Label - only show at last point */}
+      {isLastPoint && (
+        <>
+          {/* Background rectangle with green color - Below right of point */}
+          <rect
+            x={cx + 6}
+            y={cy + 4}
+            width={16}
+            height={12}
+            fill="rgba(124, 179, 66, 0.95)"
+            rx={3}
+            ry={3}
+            stroke="rgba(255, 255, 255, 0.5)"
+            strokeWidth={1}
+            style={{
+              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
+            }}
+          />
+          {/* Text label */}
+          <text
+            x={cx + 14}
+            y={cy + 10}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#FFFFFF"
+            fontSize={8}
+            fontWeight={600}
+            style={{
+              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
+              textShadow: '0px 0px 3px rgba(0,0,0,1)'
+            }}
+          >
+            {Number(value).toLocaleString()}
+          </text>
+        </>
+      )}
     </g>
   );
 };
@@ -1021,7 +1047,7 @@ const PlanReadinessDotWithLabel = (props: any) => {
 export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, className }: ProgressCurveProps) {
   // Memoize buckets and data to prevent unnecessary recalculations
   const buckets = useMemo(() => {
-    const builtBuckets = buildHybridBuckets(anchorDate, monthsSpan as 3|5, rows ?? []);
+    const builtBuckets = buildHybridBuckets(anchorDate, monthsSpan, rows ?? []);
     // Ensure buckets are sorted by start date (should already be sorted, but double-check)
     return builtBuckets.sort((a, b) => a.start.getTime() - b.start.getTime());
   }, [anchorDate, monthsSpan, rows]);

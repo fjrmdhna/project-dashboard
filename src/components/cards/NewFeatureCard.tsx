@@ -1,21 +1,21 @@
 "use client"
 
 import { useMemo } from "react"
-import { Hexagon, TrendingUp } from "lucide-react"
+import { MapPin, TrendingUp } from "lucide-react"
 
 // Tipe data untuk props komponen
-interface NanoClusterListCardProps {
+interface CircleListCardProps {
   rows?: Array<{ 
-    nano_cluster?: string | null
+    region_circle?: string | null
     imp_integ_af?: string | null
     rfs_af?: string | null
   }>
   className?: string
 }
 
-// Komponen item cluster individual
-interface ClusterItemProps {
-  clusterName: string
+// Komponen item circle individual
+interface CircleItemProps {
+  circleName: string
   readinessPct: number
   activatedPct: number
   totalSites: number
@@ -23,7 +23,7 @@ interface ClusterItemProps {
   activatedSites: number
 }
 
-function ClusterItem({ clusterName, readinessPct, activatedPct, totalSites, readySites, activatedSites }: ClusterItemProps) {
+function CircleItem({ circleName, readinessPct, activatedPct, totalSites, readySites, activatedSites }: CircleItemProps) {
   // Tentukan warna berdasarkan persentase readiness
   const getReadinessColor = (pct: number) => {
     if (pct < 50) return { bg: "bg-amber-500/20", text: "#F59E0B", border: "border-amber-500/30" }
@@ -47,11 +47,11 @@ function ClusterItem({ clusterName, readinessPct, activatedPct, totalSites, read
     <div className={`flex items-center justify-between rounded-md border ${readinessColor.border} p-1.5 transition-all hover:bg-white/5 min-w-0`}>
       <div className="flex items-center flex-1 min-w-0">
         <div className={`${readinessColor.bg} p-1 rounded-md mr-2 flex-shrink-0`}>
-          <Hexagon className="h-2.5 w-2.5" style={{ color: readinessColor.text }} />
+          <MapPin className="h-2.5 w-2.5" style={{ color: readinessColor.text }} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[8px] font-semibold text-white truncate">
-            {clusterName}
+            {circleName}
           </div>
           <div className="text-[7px] text-[#B0B7C3]">
             {readySites}/{totalSites} sites
@@ -70,33 +70,53 @@ function ClusterItem({ clusterName, readinessPct, activatedPct, totalSites, read
   )
 }
 
-export function NanoClusterListCard({ rows = [], className = "" }: NanoClusterListCardProps) {
-  // Hitung dan sort cluster berdasarkan persentase readiness
-  const sortedClusters = useMemo(() => {
-    const clusterMap = new Map<string, { total: number, ready: number, activated: number }>()
+// Normalize circle name - trim, lowercase for grouping key
+const normalizeCircleName = (name: string): string => {
+  return name.trim().toLowerCase()
+}
+
+// Format circle name with Title Case for display
+const formatCircleName = (name: string): string => {
+  return name
+    .trim()
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+export function CircleListCard({ rows = [], className = "" }: CircleListCardProps) {
+  // Hitung dan sort circle berdasarkan persentase readiness
+  const sortedCircles = useMemo(() => {
+    // Use normalized key for grouping to avoid duplicates from case/whitespace variations
+    const circleMap = new Map<string, { displayName: string, total: number, ready: number, activated: number }>()
     
-    // Agregasi data per cluster
+    // Agregasi data per circle (normalize key to merge variations)
     rows.forEach(row => {
-      const clusterName = row.nano_cluster
-      if (!clusterName) return
+      const rawCircleName = row.region_circle
+      if (!rawCircleName) return
       
-      const clusterData = clusterMap.get(clusterName) || { total: 0, ready: 0, activated: 0 }
-      clusterData.total++
+      const normalizedKey = normalizeCircleName(rawCircleName)
+      const displayName = formatCircleName(rawCircleName)
+      
+      const circleData = circleMap.get(normalizedKey) || { displayName, total: 0, ready: 0, activated: 0 }
+      circleData.total++
       
       if (row.imp_integ_af !== null && row.imp_integ_af !== undefined) {
-        clusterData.ready++
+        circleData.ready++
       }
       if (row.rfs_af !== null && row.rfs_af !== undefined) {
-        clusterData.activated++
+        circleData.activated++
       }
       
-      clusterMap.set(clusterName, clusterData)
+      circleMap.set(normalizedKey, circleData)
     })
     
     // Convert ke array dan sort berdasarkan readiness dan activated yang sudah 100%
-    return Array.from(clusterMap.entries())
-      .map(([clusterName, data]) => ({
-        clusterName,
+    return Array.from(circleMap.entries())
+      .map(([normalizedKey, data]) => ({
+        id: normalizedKey, // Unique key for React
+        circleName: data.displayName,
         totalSites: data.total,
         readySites: data.ready,
         activatedSites: data.activated,
@@ -139,27 +159,27 @@ export function NanoClusterListCard({ rows = [], className = "" }: NanoClusterLi
             <TrendingUp className="h-2.5 w-2.5 text-indigo-400" />
           </div>
           <div className="text-[8px] font-semibold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded-full">
-            CLUSTER LIST
+            CIRCLE LIST
           </div>
         </div>
         <div className="bg-indigo-500/10 px-1.5 py-0.5 rounded-sm flex items-center">
           <div className="text-[7px] text-indigo-300 mr-1">Total:</div>
-          <div className="text-xs font-bold text-white">{sortedClusters.length}</div>
+          <div className="text-xs font-bold text-white">{sortedCircles.length}</div>
         </div>
       </div>
       
-      {/* Scrollable list of clusters */}
+      {/* Scrollable list of circles */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
         <div className="space-y-1">
-          {sortedClusters.map((cluster, index) => (
-            <ClusterItem
-              key={cluster.clusterName}
-              clusterName={cluster.clusterName}
-              readinessPct={cluster.readinessPct}
-              activatedPct={cluster.activatedPct}
-              totalSites={cluster.totalSites}
-              readySites={cluster.readySites}
-              activatedSites={cluster.activatedSites}
+          {sortedCircles.map((circle) => (
+            <CircleItem
+              key={circle.id}
+              circleName={circle.circleName}
+              readinessPct={circle.readinessPct}
+              activatedPct={circle.activatedPct}
+              totalSites={circle.totalSites}
+              readySites={circle.readySites}
+              activatedSites={circle.activatedSites}
             />
           ))}
         </div>
@@ -167,3 +187,7 @@ export function NanoClusterListCard({ rows = [], className = "" }: NanoClusterLi
     </div>
   )
 }
+
+// Keep backward compatibility with old name (deprecated)
+/** @deprecated Use CircleListCard instead */
+export const NanoClusterListCard = CircleListCard

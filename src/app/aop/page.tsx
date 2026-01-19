@@ -13,8 +13,8 @@ import ProgressCurveLineChart from "@/components/charts/ProgressCurveLineChart"
 import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
 import { TopIssueCard } from "@/components/cards/TopIssueCard"
 import { GapStatusCard } from "@/components/cards/GapStatusCard"
-import { NanoClusterListCard } from "@/components/cards/NewFeatureCard"
-import { VendorLeaderboardCard } from "@/components/cards/VendorLeaderboardCard"
+import { CircleListCard } from "@/components/cards/NewFeatureCard"
+import { CircleAchievementCard } from "@/components/cards/CircleAchievementCard"
 import { Wallboard1080 } from "@/layouts/Wallboard1080"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
@@ -256,6 +256,7 @@ export default function AopPage() {
     programReports: debouncedFilterValue.program_report || [],
     circles: debouncedFilterValue.circle || [],
     siteCategories: debouncedFilterValue.site_category || [],
+    years: debouncedFilterValue.year || [],
     search: debouncedFilterValue.q || ''
   })
   
@@ -422,7 +423,7 @@ export default function AopPage() {
   />
   const gapStatusCard = <GapStatusCard rows={rows} aggregatedGaps={deferredAggregated?.gaps} />
   const progressCurve = (
-    <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} monthsSpan={3} />
+    <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} monthsSpan={5} />
   )
   const dailyRunrate = (
     <DailyRunrateCard 
@@ -438,8 +439,8 @@ export default function AopPage() {
       isLoading={topIssuesLoading}
     />
   )
-  const nanoClusterList = <NanoClusterListCard rows={rows} />
-  const leaderboard = <VendorLeaderboardCard rows={rows} aggregatedByVendor={deferredAggregated?.byVendor} />
+  const circleList = <CircleListCard rows={rows} />
+  const circleAchievement = <CircleAchievementCard rows={rows} isLoading={aopLoading} />
 
   const header = <ProgramHeader title="Dashboard AOP 2025" dateLabel={formattedDate} mapHref="/aop/map" />
 
@@ -454,8 +455,8 @@ export default function AopPage() {
       dailyRunrate={dailyRunrate}
       top5Issue={topIssueCard}
       nanoCluster={gapStatusCard}
-      newFeature={nanoClusterList}
-      leaderboard={leaderboard}
+      newFeature={circleList}
+      leaderboard={circleAchievement}
     />
   )
 
@@ -596,8 +597,8 @@ export default function AopPage() {
           </div>
 
           {renderMobileCard(gapStatusCard, 200)}
-          {renderMobileCard(nanoClusterList, 200)}
-          {renderMobileCard(leaderboard, 280)}
+          {renderMobileCard(circleList, 200)}
+          {renderMobileCard(circleAchievement, 280)}
         </section>
       </main>
     </div>

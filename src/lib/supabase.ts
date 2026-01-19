@@ -424,18 +424,20 @@ export async function getAopFilterOptions() {
 
   // OPTIMIZED: Fetch semua columns secara paralel dengan pagination per column
   // Setiap column akan di-fetch dengan pagination untuk memastikan semua data ter-fetch
-  const [vendors, programs, circles, siteCategories] = await Promise.all([
+  const [vendors, programs, circles, siteCategories, years] = await Promise.all([
     fetchDistinctValuesOptimized('vendor_name'),
     fetchDistinctValuesOptimized('program_report'),
     fetchDistinctValuesOptimized('region_circle'),
-    fetchDistinctValuesOptimized('site_category')
+    fetchDistinctValuesOptimized('site_category'),
+    fetchDistinctValuesOptimized('year')
   ])
 
   const result = {
     vendors,
     programs,
     circles,
-    siteCategories
+    siteCategories,
+    years: years.sort((a, b) => b.localeCompare(a)) // Sort years descending (newest first)
   }
 
   // Cache hasil

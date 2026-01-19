@@ -198,10 +198,10 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.status?.length || 0) > 0 ||
     (value.site_category?.length || 0) > 0
 
-  // Grid layout berbeda untuk variant AOP (4 filter: vendor, program, circle, site_category) vs default (7 filter dengan region dan year)
+  // Grid layout berbeda untuk variant AOP (5 filter: vendor, program, circle, site_category, year) vs default (7 filter dengan region dan year)
   const gridClass =
     variant === "aop"
-      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2"
+      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))_auto] md:items-center md:gap-2"
       : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(6,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
   return (
@@ -295,7 +295,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
           </>
         )}
 
-        {/* Circle Filter - AOP variant only */}
+        {/* Circle, Site Category, Year Filters - AOP variant only */}
         {variant === "aop" && (
           <>
             <MultiSelect
@@ -305,14 +305,24 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               onChange={handleCircleChange}
               disabled={isLoading}
               width="w-full"
-            className="col-span-2 md:col-span-1"
+              className="col-span-2 md:col-span-1"
             />
-            {/* Site Category Filter - AOP variant only */}
+            {/* Site Category Filter */}
             <MultiSelect
               options={options.siteCategories || []}
               selected={value.site_category ?? []}
               placeholder="Site Category"
               onChange={handleSiteCategoryChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 md:col-span-1"
+            />
+            {/* Year Filter */}
+            <MultiSelect
+              options={options.years || []}
+              selected={value.year ?? []}
+              placeholder="Year"
+              onChange={handleYearChange}
               disabled={isLoading}
               width="w-full"
               className="col-span-2 md:col-span-1"
