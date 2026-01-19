@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState, useEffect, type ReactNode, type CSSProperties } from "react"
+import { useMemo, useState, useEffect, useTransition, type ReactNode, type CSSProperties } from "react"
 import { ChevronDown, SlidersHorizontal } from "lucide-react"
 
 import { FilterBar, type FilterValue } from "@/components/filters/FilterBar"
@@ -231,6 +231,7 @@ export default function AopPage() {
   const [hasInitialDataLoaded, setHasInitialDataLoaded] = useState(false)
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   const isMobile = useIsMobile()
+  const [isPending, startTransition] = useTransition()
 
   // Debounce filter untuk unified debouncing (300ms seperti Hermes 5G)
   const debouncedFilterValue = useDebounce(filterValue, 300)
@@ -342,7 +343,10 @@ export default function AopPage() {
   const patpCount = aopStats?.pac || 0
 
   const handleFilterChange = (value: FilterValue) => {
-    setFilterValue(value)
+    // OPTIMIZED: Use startTransition untuk non-urgent state updates (mencegah UI freeze)
+    startTransition(() => {
+      setFilterValue(value)
+    })
   }
 
   const handleFilterReset = () => {

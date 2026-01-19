@@ -307,6 +307,17 @@ const formatCircleValue = (value: string) =>
     .toLowerCase()
     .replace(/\b\w/g, char => char.toUpperCase())
 
+// Format site_category dengan Title Case untuk konsistensi display
+// Handles variations like: "existing", "Existing", "Existing " -> "Existing"
+// Handles multi-word like: "new site", "New Site", "NEW SITE" -> "New Site"
+const formatSiteCategoryValue = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+
 // In-memory cache untuk filter options dengan TTL
 const filterOptionsCache = new Map<string, { data: any, timestamp: number }>()
 const FILTER_OPTIONS_CACHE_TTL = 10 * 60 * 1000 // 10 menit
@@ -369,8 +380,17 @@ export async function getAopFilterOptions() {
             if (trimmed) {
               const normalized = trimmed.toLowerCase()
               if (!values.has(normalized)) {
-                const formatted =
-                  column === 'region_circle' ? formatCircleValue(trimmed) : trimmed
+                // Format nilai berdasarkan kolom untuk konsistensi display
+                let formatted: string
+                if (column === 'region_circle') {
+                  formatted = formatCircleValue(trimmed)
+                } else if (column === 'site_category') {
+                  // Use Title Case untuk site_category agar konsisten
+                  // "existing", "Existing", "Existing " -> "Existing"
+                  formatted = formatSiteCategoryValue(trimmed)
+                } else {
+                  formatted = trimmed
+                }
                 values.set(normalized, formatted)
               }
             }

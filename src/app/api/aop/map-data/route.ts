@@ -114,12 +114,28 @@ export async function GET(request: NextRequest) {
       baseQuery = baseQuery.in('program_report', programReports)
     }
 
+    // Region circle filter - use case-insensitive matching to handle data variations
+    // Database may have: "JAKARTA RAYA", "Jakarta Raya", "JAKARTA RAYA " (with trailing space), etc.
     if (circles.length > 0) {
-      baseQuery = baseQuery.in('region_circle', circles)
+      const circleConditions = circles
+        .map(c => {
+          const normalized = c.trim().toLowerCase()
+          return `region_circle.ilike.${normalized}`
+        })
+        .join(',')
+      baseQuery = baseQuery.or(circleConditions)
     }
 
+    // Site category filter - use case-insensitive matching to handle data variations
+    // Database may have: "existing", "Existing", "Existing " (with trailing space), etc.
     if (siteCategories.length > 0) {
-      baseQuery = baseQuery.in('site_category', siteCategories)
+      const siteCategoryConditions = siteCategories
+        .map(sc => {
+          const normalized = sc.trim().toLowerCase()
+          return `site_category.ilike.${normalized}`
+        })
+        .join(',')
+      baseQuery = baseQuery.or(siteCategoryConditions)
     }
 
     if (q) {

@@ -62,24 +62,44 @@ export async function GET(request: NextRequest) {
     }
     
     // site_data_aop tidak memiliki imp_ttp/nano_cluster, gunakan region_circle untuk filtering
-    
+    // Region circle filter - use case-insensitive matching to handle data variations
+    // Database may have: "JAKARTA RAYA", "Jakarta Raya", "JAKARTA RAYA " (with trailing space), etc.
     if (circles.length > 0) {
-      baseQuery = baseQuery.in('region_circle', circles)
+      const circleConditions = circles
+        .map(c => {
+          const normalized = c.trim().toLowerCase()
+          return `region_circle.ilike.${normalized}`
+        })
+        .join(',')
+      baseQuery = baseQuery.or(circleConditions)
     }
 
+    // Site category filter - use case-insensitive matching to handle data variations
+    // Database may have: "existing", "Existing", "Existing " (with trailing space), etc.
     if (siteCategories.length > 0) {
-      baseQuery = baseQuery.in('site_category', siteCategories)
+      const siteCategoryConditions = siteCategories
+        .map(sc => {
+          const normalized = sc.trim().toLowerCase()
+          return `site_category.ilike.${normalized}`
+        })
+        .join(',')
+      baseQuery = baseQuery.or(siteCategoryConditions)
     }
 
     if (q) {
       baseQuery = baseQuery.or(`system_key.ilike.%${q}%,site_id.ilike.%${q}%,site_name.ilike.%${q}%,vendor_name.ilike.%${q}%`)
     }
     
-    // Fetch all data using pagination
+    // OPTIMIZED: Limit maksimum data yang dikirim ke client untuk mencegah UI freeze
+    // Dashboard tidak perlu menampilkan semua data sekaligus
+    const MAX_RECORDS = 5000 // Limit maksimum untuk response
+    const MAX_PAGES = Math.ceil(MAX_RECORDS / pageSize) // Calculate max pages needed
+    
+    // Fetch data using pagination dengan limit maksimum
     let totalCount = 0
     let error: any = null
     
-    while (hasMore) {
+    while (hasMore && page < MAX_PAGES) {
       const from = page * pageSize
       const to = from + pageSize - 1
       
@@ -96,19 +116,26 @@ export async function GET(request: NextRequest) {
       }
       
       if (pageData && pageData.length > 0) {
-        allData = [...allData, ...pageData]
-        hasMore = pageData.length === pageSize
+        // Stop jika sudah mencapai MAX_RECORDS
+        const remainingSpace = MAX_RECORDS - allData.length
+        if (remainingSpace <= 0) {
+          hasMore = false
+          break
+        }
+        
+        // Take only what we need
+        const dataToAdd = pageData.slice(0, remainingSpace)
+        allData = [...allData, ...dataToAdd]
+        
+        hasMore = pageData.length === pageSize && allData.length < MAX_RECORDS
         page++
       } else {
         hasMore = false
       }
-      
-      // Safety check to prevent infinite loop
-      if (page > 50) {
-        console.warn('Pagination limit reached, stopping at page', page)
-        break
-      }
     }
+    
+    // Check if data was truncated
+    const isTruncated = totalCount > 0 && allData.length < totalCount && allData.length >= MAX_RECORDS
     
     const data = allData
     const count = totalCount
@@ -287,6 +314,8 @@ export async function GET(request: NextRequest) {
       status: 'success',
       data: mappedData,
       count: mappedData.length,
+      totalCount: totalCount, // Total count dari database (bisa lebih besar dari count jika truncated)
+      isTruncated: isTruncated, // Flag untuk indicate jika data terpotong
       stats: stats,
       timestamp: new Date().toISOString()
     }, {

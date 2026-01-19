@@ -1,6 +1,7 @@
 -- Migration: AOP Stats Database Function
 -- Description: Membuat database function untuk menghitung stats AOP di database (lebih cepat daripada di memory)
 -- Created: 2025-01-XX
+-- Updated: 2025-01-19 - Added case-insensitive matching for site_category to handle data variations
 
 -- Function untuk menghitung stats AOP berdasarkan filter
 -- Function ini akan menghitung semua stats di database menggunakan aggregation
@@ -35,10 +36,14 @@ BEGIN
       (p_vendor_names IS NULL OR array_length(p_vendor_names, 1) IS NULL OR vendor_name = ANY(p_vendor_names))
       -- Filter by program_reports (array)
       AND (p_program_reports IS NULL OR array_length(p_program_reports, 1) IS NULL OR program_report = ANY(p_program_reports))
-      -- Filter by circles (array)
-      AND (p_circles IS NULL OR array_length(p_circles, 1) IS NULL OR region_circle = ANY(p_circles))
-      -- Filter by site_categories (array)
-      AND (p_site_categories IS NULL OR array_length(p_site_categories, 1) IS NULL OR site_category = ANY(p_site_categories))
+      -- Filter by circles (array) - CASE-INSENSITIVE matching with trimmed values
+      -- This handles variations like: "JAKARTA RAYA", "Jakarta Raya", "JAKARTA RAYA " (with trailing space)
+      AND (p_circles IS NULL OR array_length(p_circles, 1) IS NULL OR 
+           LOWER(TRIM(region_circle)) = ANY(SELECT LOWER(TRIM(unnest(p_circles)))))
+      -- Filter by site_categories (array) - CASE-INSENSITIVE matching with trimmed values
+      -- This handles variations like: "existing", "Existing", "Existing " (with trailing space)
+      AND (p_site_categories IS NULL OR array_length(p_site_categories, 1) IS NULL OR 
+           LOWER(TRIM(site_category)) = ANY(SELECT LOWER(TRIM(unnest(p_site_categories)))))
       -- Filter by search text (ILIKE untuk case-insensitive search)
       AND (p_search IS NULL OR p_search = '' OR
            system_key ILIKE '%' || p_search || '%' OR
@@ -63,4 +68,4 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Comment untuk dokumentasi
-COMMENT ON FUNCTION get_aop_stats IS 'Menghitung stats AOP berdasarkan filter. Menggunakan database aggregation untuk performa optimal.';
+COMMENT ON FUNCTION get_aop_stats IS 'Menghitung stats AOP berdasarkan filter. Menggunakan database aggregation untuk performa optimal. Site category filter is case-insensitive.';
