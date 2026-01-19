@@ -342,9 +342,6 @@ export default function AopPage() {
   const patpCount = aopStats?.pac || 0
 
   const handleFilterChange = (value: FilterValue) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:313',message:'Filter change triggered',data:{filterValue:value,activeFilters:Object.keys(value).filter(k=>Array.isArray(value[k as keyof FilterValue])?value[k as keyof FilterValue].length>0:value[k as keyof FilterValue]!==''&&value[k as keyof FilterValue]!==null)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     setFilterValue(value)
   }
 
