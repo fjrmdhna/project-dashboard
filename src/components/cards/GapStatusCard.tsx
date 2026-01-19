@@ -6,7 +6,7 @@ import { AlertCircle, Clock, CheckCircle } from "lucide-react"
 // Tipe data untuk row dari site_data_aop
 type Row = {
   system_key?: string | null
-  ic_000040_af?: string | null // Install equivalent (ic_000010_af di database)
+  ic_000040_af?: string | null // INSTALL milestone
   caf_approved?: string | null // RFI accepted equivalent (rfi_accepted di database)
   rfs_af?: string | null // Activated
 }

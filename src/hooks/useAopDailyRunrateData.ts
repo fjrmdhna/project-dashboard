@@ -6,41 +6,41 @@ import { format, subDays } from 'date-fns'
 import { useApiCache } from './useApiCache'
 import { fetchWithRetry } from '@/lib/api-utils'
 
-export interface NewSiteDailyRunrateItem {
+export interface AopDailyRunrateItem {
   date: string
   forecast: number
   actual: number
 }
 
-interface UseNewSiteDailyRunrateDataOptions {
+interface UseAopDailyRunrateDataOptions {
   filter?: FilterValue
 }
 
-interface UseNewSiteDailyRunrateDataReturn {
-  data: NewSiteDailyRunrateItem[]
+interface UseAopDailyRunrateDataReturn {
+  data: AopDailyRunrateItem[]
   loading: boolean
   error: Error | null
   refreshData: () => Promise<void>
 }
 
-export function useNewSiteDailyRunrateData(options: UseNewSiteDailyRunrateDataOptions = {}): UseNewSiteDailyRunrateDataReturn {
+export function useAopDailyRunrateData(options: UseAopDailyRunrateDataOptions = {}): UseAopDailyRunrateDataReturn {
   const filter = options.filter || { q: '', vendor_name: [], program_report: [], circle: [], status: [] }
 
   // Generate cache key dari filter
   const cacheKey = useMemo(() => {
-    return `new-site-daily-runrate-${JSON.stringify(filter)}`
+    return `aop-daily-runrate-${JSON.stringify(filter)}`
   }, [filter])
 
   // Fetch function untuk useApiCache dengan retry logic
   const fetchFn = useCallback(async () => {
-    // Build filter params untuk New Site
+    // Build filter params untuk AOP
     const params = new URLSearchParams()
     if (filter.q) params.append('q', filter.q)
     filter.vendor_name?.forEach(v => params.append('vendor_name', v))
     filter.program_report?.forEach(p => params.append('program_report', p))
     filter.circle?.forEach(c => params.append('region_circle', c))
 
-    const response = await fetchWithRetry(`/api/new-site/daily-runrate?${params.toString()}`, {}, 3)
+    const response = await fetchWithRetry(`/api/aop/daily-runrate?${params.toString()}`, {}, 3)
     
     const result = await response.json()
     
@@ -52,7 +52,7 @@ export function useNewSiteDailyRunrateData(options: UseNewSiteDailyRunrateDataOp
   }, [filter])
 
   // Use useApiCache dengan validasi
-  const { data: cachedData, loading, error, refetch: cacheRefetch } = useApiCache<NewSiteDailyRunrateItem[]>(
+  const { data: cachedData, loading, error, refetch: cacheRefetch } = useApiCache<AopDailyRunrateItem[]>(
     cacheKey,
     fetchFn,
     {
@@ -67,7 +67,7 @@ export function useNewSiteDailyRunrateData(options: UseNewSiteDailyRunrateDataOp
   )
 
   // Generate fallback data jika error (tidak di-cache)
-  const fallbackData: NewSiteDailyRunrateItem[] = useMemo(() => {
+  const fallbackData: AopDailyRunrateItem[] = useMemo(() => {
     const today = new Date()
     return Array.from({ length: 7 }, (_, i) => ({
       date: format(subDays(today, 6 - i), 'dd-MMM-yy'),

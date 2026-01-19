@@ -17,13 +17,14 @@ export async function GET(request: NextRequest) {
       'system_key',
       'vendor_name',
       'program_report',
-      'rfi_accepted', // CAF equivalent
+      'rfi_accepted', // CRFI
       'mos_af',
-      'ic_000010_af', // Install equivalent (not ic_000040_af)
+      'ic_000010_af', // RFI
+      'ic_000040_af', // INSTALL
       'imp_integ_af',
       'rfs_bf', // Baseline
       'rfs_ff', // Forecast
-      'rfs_af', // Actual (Activated)
+      'rfs_af', // Actual (Activated/RFS)
       'rfc_approved',
       'ran_score',
       'hotnews_af', // HN
@@ -135,11 +136,10 @@ export async function GET(request: NextRequest) {
     
     const filteredData = data || []
     
-    // Hitung jumlah untuk masing-masing metrik berdasarkan mapping kolom site_data_aop
-    // Mapping: caf_approved = rfi_accepted, ic_000040_af = ic_000010_af
+    // Hitung jumlah untuk masing-masing metrik berdasarkan kolom site_data_aop
     const cafCount = filteredData.filter(row => row.rfi_accepted).length
     const mosCount = filteredData.filter(row => row.mos_af).length
-    const installCount = filteredData.filter(row => row.ic_000010_af).length
+    const installCount = filteredData.filter(row => row.ic_000040_af).length // INSTALL menggunakan ic_000040_af
     const readinessCount = filteredData.filter(row => row.imp_integ_af).length
     const activatedCount = filteredData.filter(row => row.rfs_af).length
     const rfcCount = filteredData.filter(row => row.rfc_approved).length
@@ -163,13 +163,13 @@ export async function GET(request: NextRequest) {
       program_report: row.program_report,
       caf_approved: row.rfi_accepted || null, // Map rfi_accepted to caf_approved (for backward compatibility)
       mos_af: row.mos_af || null,
-      ic_000040_af: row.ic_000010_af || null, // Map ic_000010_af to ic_000040_af (for backward compatibility)
-      ic_000010_af: row.ic_000010_af || null, // RFI header for AOP
-      rfi_accepted: row.rfi_accepted || null, // CRFI for AOP
+      ic_000040_af: row.ic_000040_af || null, // INSTALL - langsung dari database
+      ic_000010_af: row.ic_000010_af || null, // RFI
+      rfi_accepted: row.rfi_accepted || null, // CRFI
       imp_integ_af: row.imp_integ_af || null,
       rfs_bf: row.rfs_bf || null, // Baseline
       rfs_ff: row.rfs_ff || null, // Forecast
-      rfs_af: row.rfs_af || null, // Actual (Activated)
+      rfs_af: row.rfs_af || null, // Actual (Activated/RFS)
       rfc_approved: row.rfc_approved || null,
       ran_score: row.ran_score || null,
       hotnews_af: row.hotnews_af || null,

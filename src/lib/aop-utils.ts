@@ -1,12 +1,12 @@
 import type { FilterValue } from "@/components/filters/FilterBar"
 import type { HermesMapPoint, StatusLabel } from "@/components/maps/Hermes5GMap"
-import type { NewSiteDashboardRow } from "@/data/aop-dashboard"
+import type { AopDashboardRow } from "@/data/aop-dashboard"
 
 /**
- * Derive New Site status from row data
+ * Derive AOP status from row data
  * Priority: ACTIVE > READY > RFI > SOW
  */
-export function deriveNewSiteStatus(row: NewSiteDashboardRow): StatusLabel {
+export function deriveAopStatus(row: AopDashboardRow): StatusLabel {
   // ACTIVE: rfs_af is filled
   if (row.rfs_af) {
     return 'ACTIVE'
@@ -27,9 +27,9 @@ export function deriveNewSiteStatus(row: NewSiteDashboardRow): StatusLabel {
 }
 
 /**
- * Filter New Site rows based on FilterValue
+ * Filter AOP rows based on FilterValue
  */
-export function filterNewSiteRows(rows: NewSiteDashboardRow[], filter: FilterValue): NewSiteDashboardRow[] {
+export function filterAopRows(rows: AopDashboardRow[], filter: FilterValue): AopDashboardRow[] {
   return rows.filter(row => {
     // Search filter
     if (filter.q) {
@@ -61,7 +61,7 @@ export function filterNewSiteRows(rows: NewSiteDashboardRow[], filter: FilterVal
       }
     }
 
-    // Circle filter (New Site uses circle instead of imp_ttp/nano_cluster)
+    // Circle filter (AOP uses circle instead of imp_ttp/nano_cluster)
     if (filter.circle && filter.circle.length > 0) {
       const rowCircle = row.region_circle || row.nano_cluster
       if (!rowCircle || !filter.circle.includes(rowCircle)) {
@@ -71,7 +71,7 @@ export function filterNewSiteRows(rows: NewSiteDashboardRow[], filter: FilterVal
 
     // Status filter
     if (filter.status && filter.status.length > 0) {
-      const rowStatus = deriveNewSiteStatus(row)
+      const rowStatus = deriveAopStatus(row)
       if (!filter.status.includes(rowStatus)) {
         return false
       }
@@ -82,9 +82,9 @@ export function filterNewSiteRows(rows: NewSiteDashboardRow[], filter: FilterVal
 }
 
 /**
- * Convert New Site rows to HermesMapPoint format
+ * Convert AOP rows to HermesMapPoint format
  */
-export function toHermesMapPoints(rows: NewSiteDashboardRow[]): HermesMapPoint[] {
+export function toHermesMapPoints(rows: AopDashboardRow[]): HermesMapPoint[] {
   return rows
     .filter(row => {
       // Only include rows with valid coordinates
@@ -95,7 +95,7 @@ export function toHermesMapPoints(rows: NewSiteDashboardRow[]): HermesMapPoint[]
     .map(row => {
       const lat = Number(row.lat)
       const long = Number(row.long)
-      const status = deriveNewSiteStatus(row)
+      const status = deriveAopStatus(row)
 
       return {
         id: row.system_key || '',

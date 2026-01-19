@@ -44,7 +44,7 @@ function parseCoordinate(value: unknown): number | null {
 }
 
 /**
- * Resolve status for New Site data
+ * Resolve status for AOP data
  * Priority: ON_AIR (rfs_af) > INSTALL (ic_000040_af or imp_integ_af) > RFI (ic_000010_af) > SOW
  */
 function resolveStatus(row: any): StatusLabel {
@@ -236,12 +236,12 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
-    console.error('Error fetching New Site map data:', error)
+    console.error('Error fetching AOP map data:', error)
 
     return NextResponse.json(
       {
         status: 'error',
-        message: 'Failed to fetch New Site map data',
+        message: 'Failed to fetch AOP map data',
         error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
       },

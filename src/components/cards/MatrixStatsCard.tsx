@@ -27,7 +27,7 @@ export interface Row {
 export interface MatrixStatsCardProps {
   rows: Row[]
   patpCount?: number
-  variant?: "default" | "newSite"
+  variant?: "default" | "aop"
 }
 
 // Default metric configuration (Hermes 5G)
@@ -44,8 +44,8 @@ const DEFAULT_METRIC_CONFIG = [
   { key: "pac", label: "PAC" }
 ] as const
 
-// New Site metric configuration
-const NEW_SITE_METRIC_CONFIG = [
+// AOP metric configuration
+const AOP_METRIC_CONFIG = [
   { key: "rfi", label: "RFI" },
   { key: "crfi", label: "CRFI" },
   { key: "mos", label: "MOS" },
@@ -58,7 +58,7 @@ const NEW_SITE_METRIC_CONFIG = [
   { key: "pac", label: "PAC" }
 ] as const
 
-type MetricKey = (typeof DEFAULT_METRIC_CONFIG)[number]["key"] | (typeof NEW_SITE_METRIC_CONFIG)[number]["key"]
+type MetricKey = (typeof DEFAULT_METRIC_CONFIG)[number]["key"] | (typeof AOP_METRIC_CONFIG)[number]["key"]
 
 type MetricMap = Partial<Record<MetricKey, number>>
 
@@ -85,8 +85,8 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default" }: Ma
   const stats = useMemo(() => {
     const totalSites = rows.length
     
-    if (variant === "newSite") {
-      // New Site variant metrics
+    if (variant === "aop") {
+      // AOP variant metrics
       const rfi = rows.filter(row => row.ic_000010_af).length
       const crfi = rows.filter(row => row.rfi_accepted).length
       const mos = rows.filter(row => row.mos_af).length
@@ -140,9 +140,9 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default" }: Ma
     }
   }, [rows, patpCount, variant])
 
-  const metricConfig = variant === "newSite" ? NEW_SITE_METRIC_CONFIG : DEFAULT_METRIC_CONFIG
+  const metricConfig = variant === "aop" ? AOP_METRIC_CONFIG : DEFAULT_METRIC_CONFIG
 
-  const metrics: MetricMap = variant === "newSite" 
+  const metrics: MetricMap = variant === "aop" 
     ? {
         rfi: stats.rfi!,
         crfi: stats.crfi!,

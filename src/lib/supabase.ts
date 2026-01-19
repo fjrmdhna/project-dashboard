@@ -302,7 +302,7 @@ const formatCircleValue = (value: string) =>
     .toLowerCase()
     .replace(/\b\w/g, char => char.toUpperCase())
 
-export async function getNewSiteFilterOptions() {
+export async function getAopFilterOptions() {
   const fetchDistinctValues = async (column: string) => {
     const values = new Map<string, string>()
     const pageSize = 5000

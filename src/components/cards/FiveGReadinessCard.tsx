@@ -28,7 +28,7 @@ type Props = {
   rows: Row[]
   maxCities?: number
   variant?: 'city' | 'circle' // Variant untuk menentukan apakah menggunakan city atau circle
-  dataVariant?: 'default' | 'newSite' // Data variant untuk menentukan field yang digunakan
+  dataVariant?: 'default' | 'aop' // Data variant untuk menentukan field yang digunakan
 }
 
 // Tipe data untuk item chart
@@ -157,7 +157,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
     const locationMap = new Map<string, { ny: number; rdy: number }>()
     
     // Tentukan field yang digunakan berdasarkan dataVariant
-    const readinessField = dataVariant === 'newSite' ? 'ic_000010_af' : 'imp_integ_af'
+    const readinessField = dataVariant === 'aop' ? 'ic_000010_af' : 'imp_integ_af'
     
     // Iterasi setiap row untuk agregasi
     rows.forEach(row => {
@@ -167,7 +167,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
         : normalizeCity(row.imp_ttp)
       
       // Tentukan status readiness berdasarkan dataVariant
-      const isReady = dataVariant === 'newSite' 
+      const isReady = dataVariant === 'aop' 
         ? !!row.ic_000010_af 
         : !!row.imp_integ_af
       
@@ -220,7 +220,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
 
   // Determine display label based on variant and dataVariant
   const displayLabel = useMemo(() => {
-    if (dataVariant === 'newSite' && variant === 'circle') {
+    if (dataVariant === 'aop' && variant === 'circle') {
       return 'RFI by Circle'
     }
     if (variant === 'circle') {
@@ -232,8 +232,8 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
   const dataKey = variant === 'circle' ? 'circle' : 'city'
   
   // Determine legend labels based on dataVariant
-  const nyLegendLabel = dataVariant === 'newSite' ? 'NY RFI' : 'NY Readiness'
-  const rdyLegendLabel = dataVariant === 'newSite' ? 'RFI' : 'Readiness'
+  const nyLegendLabel = dataVariant === 'aop' ? 'NY RFI' : 'NY Readiness'
+  const rdyLegendLabel = dataVariant === 'aop' ? 'RFI' : 'Readiness'
 
   return (
     <div className="readiness-card rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'calc(var(--wb-card-padding) - 4px)' }}>

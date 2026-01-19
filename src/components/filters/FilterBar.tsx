@@ -22,7 +22,7 @@ export interface FilterBarProps {
   value: FilterValue
   onChange: (value: FilterValue) => void
   onReset?: () => void
-  variant?: "default" | "newSite"
+  variant?: "default" | "aop"
   endpoint?: string
 }
 
@@ -176,9 +176,9 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.circle?.length || 0) > 0 ||
     (value.status?.length || 0) > 0
 
-  // Grid layout berbeda untuk variant New Site (3 filter) vs default (6 filter dengan region)
+  // Grid layout berbeda untuk variant AOP (3 filter) vs default (6 filter dengan region)
   const gridClass =
-    variant === "newSite"
+    variant === "aop"
       ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto] md:items-center md:gap-2"
       : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
@@ -229,7 +229,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
         />
 
         {/* City & Cluster Filters - Default variant only */}
-        {variant !== "newSite" && (
+        {variant !== "aop" && (
           <>
             <MultiSelect
               options={options.cities}
@@ -264,7 +264,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
         )}
 
         {/* Circle Filter - AOP variant only */}
-        {variant === "newSite" && (
+        {variant === "aop" && (
             <MultiSelect
               options={options.circles}
               selected={value.circle ?? []}

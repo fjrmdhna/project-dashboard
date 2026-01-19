@@ -28,12 +28,58 @@ const clampRange = (s: Date, e: Date, min: Date, max: Date) => ({
   start: new Date(Math.max(+s, +min)),
   end: new Date(Math.min(+e, +max)),
 });
-const fmtMonth = (d: Date) => d.toLocaleString('en', { month: 'short' });
+const fmtMonth = (d: Date) => {
+  // Validate date first
+  if (!d || isNaN(d.getTime())) {
+    return '';
+  }
+  
+  const month = d.toLocaleString('en', { month: 'short' });
+  // Ensure we never return "All" or empty string
+  if (!month || month.trim() === '' || month.toLowerCase() === 'all') {
+    // Fallback: return month with year
+    const fallback = d.toLocaleString('en', { month: 'short', year: '2-digit' });
+    return fallback && fallback.trim() !== '' ? fallback : `${d.getMonth() + 1}/${d.getFullYear().toString().slice(-2)}`;
+  }
+  return month;
+};
 const addMonths = (d: Date, amount: number) => new Date(d.getFullYear(), d.getMonth() + amount, 1, 0, 0, 0, 0);
 const safeDate = (v?: string | null) => {
   if (!v) return undefined;
-  const d = new Date(v);
-  return isNaN(+d) ? undefined : d;
+  
+  // Handle both ISO string and timestamp formats
+  let d: Date;
+  if (typeof v === 'string') {
+    // Try parsing as ISO string first
+    d = new Date(v);
+    // If invalid, try parsing as date string with different formats
+    if (isNaN(+d)) {
+      // Try parsing as YYYY-MM-DD format
+      const parts = v.split(/[-/]/);
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+        const day = parseInt(parts[2], 10);
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          d = new Date(year, month, day);
+        }
+      }
+    }
+  } else {
+    d = new Date(v);
+  }
+  
+  // Check if date is valid and not too far in the past/future (reasonable range: 2000-2100)
+  if (isNaN(+d)) return undefined;
+  const year = d.getFullYear();
+  if (year < 2000 || year > 2100) return undefined;
+  
+  // Additional validation: check if date components are reasonable
+  const month = d.getMonth();
+  const day = d.getDate();
+  if (month < 0 || month > 11 || day < 1 || day > 31) return undefined;
+  
+  return d;
 };
 
 // Function to get the actual week number in the year
@@ -138,21 +184,27 @@ function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = 
       monthStart.getFullYear() === anchor.getFullYear() && monthStart.getMonth() === anchor.getMonth();
 
     if (isAnchorMonth) {
-      buckets.push(...buildWeekBuckets(start, end, rangeStart, rangeEnd));
+      const weekBuckets = buildWeekBuckets(start, end, rangeStart, rangeEnd);
+      buckets.push(...weekBuckets);
     } else {
-      buckets.push({
-        key: `${monthStart.getFullYear()}-${monthStart.getMonth() + 1}`,
-        label: fmtMonth(monthStart),
-        start,
-        end,
-        kind: 'month',
-      });
+      const monthLabel = fmtMonth(monthStart);
+      // Only add bucket if label is valid (not empty or "All")
+      if (monthLabel && monthLabel.trim() !== '' && monthLabel.toLowerCase() !== 'all') {
+        buckets.push({
+          key: `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`,
+          label: monthLabel,
+          start,
+          end,
+          kind: 'month',
+        });
+      }
     }
 
     cursor = addMonths(cursor, 1);
   }
 
-  return buckets;
+  // Sort buckets by start date to ensure chronological order
+  return buckets.sort((a, b) => a.start.getTime() - b.start.getTime());
 }
 
 function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, rangeEnd: Date): Bucket[] {
@@ -176,14 +228,18 @@ function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, ra
     if (start <= end) {
       const weekNumber = getWeekNumber(start);
       // Hide W40 because it's already in September
-      if (weekNumber !== 40) {
-        weeks.push({
-          key: `${start.getFullYear()}-${start.getMonth() + 1}-w${weekNumber}`,
-          label: `W${weekNumber}`,
-          start,
-          end,
-          kind: 'week',
-        });
+      if (weekNumber !== 40 && weekNumber > 0 && weekNumber <= 53) {
+        const weekLabel = `W${weekNumber}`;
+        // Ensure label is valid (not empty or "All")
+        if (weekLabel && weekLabel.trim() !== '' && weekLabel.toLowerCase() !== 'all') {
+          weeks.push({
+            key: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-w${String(weekNumber).padStart(2, '0')}`,
+            label: weekLabel,
+            start,
+            end,
+            kind: 'week',
+          });
+        }
       }
     }
 
@@ -352,13 +408,14 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
 
     // For AOP format, only return data up to the last index that has any data
     // This prevents showing empty buckets after the last data point
+    let result = mappedData;
     if (lastDataIndex >= 0 && lastDataIndex < mappedData.length) {
-      return mappedData.slice(0, lastDataIndex + 1);
+      result = mappedData.slice(0, lastDataIndex + 1);
     }
 
     // If no data found but we have buckets, return at least one empty data point (edge case)
     if (mappedData.length > 0 && lastDataIndex === -1) {
-      return mappedData.slice(0, 1).map(point => ({
+      result = mappedData.slice(0, 1).map(point => ({
         ...point,
         baseline: null,
         forecast: null,
@@ -366,7 +423,32 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
       }));
     }
 
-    return mappedData;
+    // Ensure data is sorted by key (chronological order)
+    // Sort by parsing the key to ensure proper chronological order
+    return result.sort((a, b) => {
+      // Parse keys which are in format "YYYY-MM" or "YYYY-MM-wW"
+      const parseKey = (key: string) => {
+        const parts = key.split('-');
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10);
+        const week = parts[2] ? parseInt(parts[2].replace('w', ''), 10) : 0;
+        return { year, month, week };
+      };
+      
+      const aParsed = parseKey(a.key);
+      const bParsed = parseKey(b.key);
+      
+      // Compare year first
+      if (aParsed.year !== bParsed.year) {
+        return aParsed.year - bParsed.year;
+      }
+      // Then month
+      if (aParsed.month !== bParsed.month) {
+        return aParsed.month - bParsed.month;
+      }
+      // Then week (if applicable)
+      return aParsed.week - bParsed.week;
+    });
   }
 
   // Hermes 5G Format: ready, active, forecast, planReadiness (original logic)
@@ -897,8 +979,43 @@ const PlanReadinessDotWithLabel = (props: any) => {
 // Main component
 export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, className }: ProgressCurveProps) {
   // Memoize buckets and data to prevent unnecessary recalculations
-  const buckets = useMemo(() => buildHybridBuckets(anchorDate, monthsSpan as 3|5, rows ?? []), [anchorDate, monthsSpan, rows]);
-  const data = useMemo(() => aggregate(rows ?? [], buckets, anchorDate), [rows, buckets, anchorDate]);
+  const buckets = useMemo(() => {
+    const builtBuckets = buildHybridBuckets(anchorDate, monthsSpan as 3|5, rows ?? []);
+    // Ensure buckets are sorted by start date (should already be sorted, but double-check)
+    return builtBuckets.sort((a, b) => a.start.getTime() - b.start.getTime());
+  }, [anchorDate, monthsSpan, rows]);
+  
+  const data = useMemo(() => {
+    const aggregated = aggregate(rows ?? [], buckets, anchorDate);
+    // Ensure data is sorted by key (chronological order) - parse keys for proper sorting
+    return aggregated.sort((a, b) => {
+      // Parse keys which are in format "YYYY-MM" or "YYYY-MM-wW"
+      const parseKey = (key: string) => {
+        const parts = key.split('-');
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10);
+        const week = parts[2] ? parseInt(parts[2].replace('w', ''), 10) : 0;
+        return { year, month, week };
+      };
+      
+      const aParsed = parseKey(a.key);
+      const bParsed = parseKey(b.key);
+      
+      // Compare year first
+      if (aParsed.year !== bParsed.year) {
+        return aParsed.year - bParsed.year;
+      }
+      // Then month
+      if (aParsed.month !== bParsed.month) {
+        return aParsed.month - bParsed.month;
+      }
+      // Then week (if applicable)
+      return aParsed.week - bParsed.week;
+    }).filter(point => {
+      // Filter out any points with invalid labels (like "All")
+      return point.label && point.label.trim() !== '' && point.label.toLowerCase() !== 'all';
+    });
+  }, [rows, buckets, anchorDate]);
   
   // Detect format from aggregated data
   const isAopFormat = useMemo(() => {
@@ -925,8 +1042,14 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
             <XAxis 
               dataKey="label" 
               tick={{ fill:'#B0B7C3', fontSize:6 }}
-              height={15}
+              height={40}
               tickMargin={2}
+              allowDuplicatedCategory={false}
+              interval="preserveStartEnd"
+              angle={-45}
+              textAnchor="end"
+              dx={-5}
+              dy={10}
             />
             <YAxis 
               tick={{ fill:'#B0B7C3', fontSize:6 }} 

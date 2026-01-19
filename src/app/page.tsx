@@ -70,18 +70,18 @@ export default async function Home() {
     // Fallback ke 0 jika error
   }
 
-  // Fetch progress real untuk New Site dari site_data_aop
-  // Mengambil semua data New Site tanpa filter spesifik
-  let newSiteProgress = 0
+  // Fetch progress real untuk AOP dari site_data_aop
+  // Mengambil semua data AOP tanpa filter spesifik
+  let aopProgress = 0
   try {
-    const newSiteProgressData = await getProjectProgress("site_data_aop")
-    newSiteProgress = newSiteProgressData.progress
+    const aopProgressData = await getProjectProgress("site_data_aop")
+    aopProgress = aopProgressData.progress
   } catch (error) {
-    console.error("Error fetching New Site progress:", error)
+    console.error("Error fetching AOP progress:", error)
     // Fallback ke 0 jika error
   }
 
-  // Build projects array dengan data real untuk Hermes 5G dan New Site
+  // Build projects array dengan data real untuk Hermes 5G dan AOP
   const projects: ProjectCardData[] = [
     {
       id: "hermes",
@@ -97,17 +97,17 @@ export default async function Home() {
       href: "/hermes-5g",
     },
     {
-      id: "new-site",
-      title: "New Site",
+      id: "aop",
+      title: "AOP",
       category: "RAN",
       date: new Date().toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",
       }),
-      progress: newSiteProgress,
+      progress: aopProgress,
       mood: "primary",
-      href: "/new-site",
+      href: "/aop",
     },
     {
       id: "tlp-new-site",

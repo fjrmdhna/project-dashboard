@@ -98,7 +98,7 @@ function formatTimestamp(timestamp: string | null) {
   }
 }
 
-export default function NewSiteMapPage() {
+export default function AopMapPage() {
   const [filterValue, setFilterValue] = useState<FilterValue>(INITIAL_FILTER)
   const [points, setPoints] = useState<HermesMapPoint[]>([])
   const [counts, setCounts] = useState<Record<StatusLabel, number>>(() => ({ ...DEFAULT_COUNTS }))
@@ -161,8 +161,8 @@ export default function NewSiteMapPage() {
         params.append('status', value)
       })
 
-      const url = `/api/new-site/map-data?${params.toString()}`
-      console.log('Loading New Site map data with filter:', debouncedFilterValue)
+      const url = `/api/aop/map-data?${params.toString()}`
+      console.log('Loading AOP map data with filter:', debouncedFilterValue)
       console.log('Map API URL:', url)
       const response = await fetch(url, { cache: 'no-store' })
 
@@ -200,7 +200,7 @@ export default function NewSiteMapPage() {
           })
           // Don't include status filter for total counts
 
-          const totalUrl = `/api/new-site/map-data?${totalParams.toString()}`
+          const totalUrl = `/api/aop/map-data?${totalParams.toString()}`
           const totalResponse = await fetch(totalUrl, { cache: 'no-store' })
           
           if (totalResponse.ok) {
@@ -218,7 +218,7 @@ export default function NewSiteMapPage() {
         setTotalCounts(payload.data.counts as Record<StatusLabel, number>)
       }
     } catch (err) {
-      console.error('Failed to load New Site map data:', err)
+      console.error('Failed to load AOP map data:', err)
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
       setPoints([])
       setCounts({ ...DEFAULT_COUNTS })
@@ -234,7 +234,7 @@ export default function NewSiteMapPage() {
     void loadData()
   }, [loadData])
 
-  const headerTitle = 'New Site Progress Map'
+  const headerTitle = 'AOP Progress Map'
 
   // Handler untuk perubahan filter
   const handleFilterChange = (newFilters: FilterValue) => {
@@ -270,14 +270,14 @@ export default function NewSiteMapPage() {
             </button>
             <img src="/logo-indosat-putih.png" alt="Indosat Ooredoo" className="h-9" />
             <div className="hidden flex-col lg:flex">
-              <span className="text-[11px] uppercase tracking-[0.32em] text-white/60">New Site Dashboard</span>
+              <span className="text-[11px] uppercase tracking-[0.32em] text-white/60">AOP Dashboard</span>
               <h1 className="text-xl font-semibold tracking-wide text-white">{headerTitle}</h1>
             </div>
           </div>
 
           <div className="flex flex-1 items-center justify-center gap-2 text-xs uppercase tracking-[0.32em] text-white/60 lg:justify-center">
             <Link
-              href="/new-site"
+              href="/aop"
               className="rounded-full border border-white/15 px-4 py-1.5 font-medium text-white/80 transition hover:bg-white/10"
             >
               Overview
@@ -308,8 +308,8 @@ export default function NewSiteMapPage() {
             value={filterValue}
             onChange={handleFilterChange}
             onReset={handleFilterReset}
-            variant="newSite"
-            endpoint="/api/new-site/filters"
+            variant="aop"
+            endpoint="/api/aop/filters"
           />
         </div>
 

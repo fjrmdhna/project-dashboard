@@ -27,7 +27,7 @@ type Props = {
   rows: Row[]
   maxCities?: number
   variant?: 'city' | 'circle' // Variant untuk menentukan apakah menggunakan city atau circle
-  dataVariant?: 'default' | 'newSite' // Data variant untuk menentukan label dan title
+  dataVariant?: 'default' | 'aop' // Data variant untuk menentukan label dan title
 }
 
 // Tipe data untuk item chart
@@ -212,7 +212,7 @@ export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city', dat
 
   // Determine display label based on variant and dataVariant
   const displayLabel = useMemo(() => {
-    if (dataVariant === 'newSite' && variant === 'circle') {
+    if (dataVariant === 'aop' && variant === 'circle') {
       return 'On Air by Circle'
     }
     if (variant === 'circle') {
@@ -225,8 +225,8 @@ export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city', dat
   
   // Determine legend labels based on dataVariant
   // NY always comes first (left) in legend
-  const nyLegendLabel = dataVariant === 'newSite' ? 'NY On Air' : 'NY Active'
-  const actLegendLabel = dataVariant === 'newSite' ? 'On Air' : 'Activated'
+  const nyLegendLabel = dataVariant === 'aop' ? 'NY On Air' : 'NY Active'
+  const actLegendLabel = dataVariant === 'aop' ? 'On Air' : 'Activated'
 
   return (
     <div className="activated-card rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'calc(var(--wb-card-padding) - 4px)' }}>
