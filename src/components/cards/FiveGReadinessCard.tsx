@@ -158,10 +158,6 @@ const ReadyLabel = (props: any) => {
 export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default', aggregatedByCircle }: Props) {
   // Agregasi data untuk chart - OPTIMIZED: Use pre-aggregated data if available
   const chartData = useMemo(() => {
-    // #region agent log
-    const startTime = performance.now();
-    // #endregion
-    
     // OPTIMIZATION: If pre-aggregated data is available, use it (O(1) instead of O(n))
     if (aggregatedByCircle && variant === 'circle') {
       const result: ChartItem[] = Array.from(aggregatedByCircle.entries()).map(([circle, data]) => {
@@ -180,10 +176,6 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
       const sortedResult = result.sort((a, b) => 
         (b.rdy || 0) + (b.ny || 0) - ((a.rdy || 0) + (a.ny || 0))
       )
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FiveGReadinessCard.tsx:USE_AGGREGATED',message:'USED PRE-AGGREGATED DATA',data:{circleCount:aggregatedByCircle.size,computeTimeMs:(performance.now()-startTime).toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run4',hypothesisId:'OPT'})}).catch(()=>{});
-      // #endregion
       
       return sortedResult.slice(0, maxCities)
     }
@@ -223,12 +215,6 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
       (b.rdy || 0) + (b.ny || 0) - ((a.rdy || 0) + (a.ny || 0))
     )
     
-    // #region agent log
-    const endTime = performance.now();
-    if (rows.length > 100) {
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FiveGReadinessCard.tsx:200',message:'READINESS CARD useMemo (FALLBACK)',data:{rowCount:rows.length,computeTimeMs:(endTime-startTime).toFixed(2),uniqueLocations:locationMap.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
-    }
-    // #endregion
     return sortedResult.slice(0, maxCities)
   }, [rows, maxCities, variant, dataVariant, aggregatedByCircle])
 

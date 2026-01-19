@@ -69,8 +69,8 @@ const MINIMAL_COLUMNS = [
   'ic_000010_af',      // RFI - ReadinessCard
   'imp_integ_af',      // Readiness - VendorLeaderboard
   'rfs_bf',            // Baseline - ProgressCurve
-  'rfs_ff',            // Forecast - ProgressCurve, VendorLeaderboard
-  'rfs_af',            // Actual - ProgressCurve, ActivatedCard, VendorLeaderboard
+  'rfs_ff',            // Forecast - ProgressCurve, VendorLeaderboard, DailyRunrate
+  'rfs_af',            // Actual - ProgressCurve, ActivatedCard, VendorLeaderboard, DailyRunrate
   'rfi_accepted',      // CAF stats
   'mos_af',            // MOS stats
   'ic_000040_af',      // Install stats
@@ -78,6 +78,7 @@ const MINIMAL_COLUMNS = [
   'hotnews_af',        // Hotnews stats
   'endorse_af',        // Endorse stats
   'pac_accepted_af',   // PAC stats
+  'issue_category',    // TopIssue - client-side calculation
 ]
 
 // Get columns based on mode
@@ -109,6 +110,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       hotnews_af: row.hotnews_af || null,
       endorse_af: row.endorse_af || null,
       pac_accepted_af: row.pac_accepted_af || null,
+      issue_category: row.issue_category || null,
     }))
   }
   

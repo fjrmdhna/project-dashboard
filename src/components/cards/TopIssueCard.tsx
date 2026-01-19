@@ -30,12 +30,6 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
       }
     }
     
-    // Debug logging
-    console.log('TopIssueCard Debug:', {
-      totalIssues: issues.length,
-      originalIssues: issues.map(i => ({ category: i.category, count: i.count }))
-    })
-    
     // Data sudah disorting dari API, jadi kita bisa langsung gunakan semua data
     const allIssuesTotal = issues.reduce((sum, issue) => sum + issue.count, 0)
     
@@ -113,6 +107,42 @@ export function TopIssueCard({ issues, totalIssues, topIssuesTotal, isLoading = 
         </div>
         <div className="flex-1 flex items-center justify-center text-white/50 text-xs">
           Loading...
+        </div>
+      </div>
+    )
+  }
+
+  // Empty state - when no issues found for current filter
+  if (chartData.length === 0) {
+    return (
+      <div className="rounded-xl bg-[#0F1630]/80 border border-white/5 p-1.5 w-full h-full flex flex-col min-w-0">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1">
+            <div className="bg-red-500/20 p-0.5 rounded-sm">
+              <AlertTriangle className="h-2.5 w-2.5 text-red-400" />
+            </div>
+            <div className="text-[10px] font-semibold bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded-full">
+              5 Top Issue
+            </div>
+          </div>
+          
+          <div className="flex items-end gap-1.5">
+            <div className="text-right">
+              <div className="text-sm font-bold text-white">0</div>
+              <div className="text-[8px] text-[#B0B7C3]">5 Top Issue</div>
+            </div>
+            
+            <div className="text-right">
+              <div className="text-sm font-bold text-white">0</div>
+              <div className="text-[8px] text-[#B0B7C3]">Total Issue</div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Empty state message */}
+        <div className="flex-1 flex items-center justify-center text-white/50 text-xs">
+          No issues found for current filter
         </div>
       </div>
     )

@@ -4,6 +4,7 @@ import { useMemo, useCallback, useRef } from 'react'
 import type { Row as MatrixRow } from '@/components/cards/MatrixStatsCard'
 import { useApiCache } from './useApiCache'
 import { fetchWithRetry } from '@/lib/api-utils'
+import { format, subDays } from 'date-fns'
 
 export interface AopSiteData extends MatrixRow {
   rfc_approved?: string | null
@@ -13,6 +14,7 @@ export interface AopSiteData extends MatrixRow {
   rfs_bf?: string | null
   rfs_ff?: string | null
   year?: string | null
+  issue_category?: string | null
 }
 
 export interface AopDataStats {
@@ -27,6 +29,20 @@ export interface AopDataStats {
   endorse: number
   pac: number
   nanoClusters: number
+}
+
+// Daily runrate item for chart
+export interface DailyRunrateItem {
+  date: string
+  forecast: number
+  actual: number
+}
+
+// Top issue item for chart
+export interface TopIssueItem {
+  category: string
+  count: number
+  color: string
 }
 
 // Pre-aggregated data for charts (prevents 41k iterations in each component)
@@ -47,6 +63,14 @@ export interface AopAggregatedData {
     sowToRfi: number
     rfiToCrfi: number
     crfiToOa: number
+  }
+  // For DailyRunrateCard (client-side calculated)
+  dailyRunrate: DailyRunrateItem[]
+  // For TopIssueCard (client-side calculated)
+  topIssues: {
+    issues: TopIssueItem[]
+    top5Count: number
+    totalCount: number
   }
 }
 
@@ -151,6 +175,17 @@ function filterDataClientSide(
   })
 }
 
+// Issue colors for top 5 issues
+const ISSUE_COLORS = ['#FF6B6B', '#F7B267', '#4ECDC4', '#5DA3FA', '#C792EA']
+
+// Excluded issue categories
+const EXCLUDED_ISSUES = [
+  'no issue',
+  'caf ny submit', 
+  '20. 5g activation done',
+  '18c. 5g integration done'
+]
+
 // OPTIMIZATION: Single-pass aggregation for ALL chart components
 // This prevents multiple O(n) iterations in each component
 function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
@@ -160,6 +195,23 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
   
   let totalBaseline = 0, totalForecast = 0, totalActual = 0
   let sowToRfi = 0, rfiToCrfi = 0, crfiToOa = 0
+  
+  // Daily runrate maps (last 7 days)
+  const today = new Date()
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const date = subDays(today, 6 - i)
+    return {
+      dateKey: format(date, 'yyyy-MM-dd'),
+      formatted: format(date, 'dd-MMM-yy')
+    }
+  })
+  const dateSet = new Set(last7Days.map(d => d.dateKey))
+  const forecastByDate = new Map<string, number>()
+  const actualByDate = new Map<string, number>()
+  
+  // Issue category count
+  const issueCount = new Map<string, number>()
+  let totalIssueCount = 0
   
   // Single pass through all data
   for (const row of data) {
@@ -195,6 +247,14 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
       const monthData = byMonth.get(month) || { baseline: 0, forecast: 0, actual: 0 }
       monthData.forecast++
       byMonth.set(month, monthData)
+      
+      // Daily runrate - forecast
+      try {
+        const dateKey = row.rfs_ff.substring(0, 10) // YYYY-MM-DD
+        if (dateSet.has(dateKey)) {
+          forecastByDate.set(dateKey, (forecastByDate.get(dateKey) || 0) + 1)
+        }
+      } catch { /* skip invalid dates */ }
     }
     if (row.rfs_af) {
       totalActual++
@@ -202,6 +262,14 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
       const monthData = byMonth.get(month) || { baseline: 0, forecast: 0, actual: 0 }
       monthData.actual++
       byMonth.set(month, monthData)
+      
+      // Daily runrate - actual
+      try {
+        const dateKey = row.rfs_af.substring(0, 10) // YYYY-MM-DD
+        if (dateSet.has(dateKey)) {
+          actualByDate.set(dateKey, (actualByDate.get(dateKey) || 0) + 1)
+        }
+      } catch { /* skip invalid dates */ }
     }
     
     // === Gap status aggregation ===
@@ -213,7 +281,37 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
     if (hasSystemKey && !hasInstall) sowToRfi++
     if (hasInstall && !hasCaf) rfiToCrfi++
     if (hasCaf && !hasActivated) crfiToOa++
+    
+    // === Issue category aggregation ===
+    if (row.issue_category) {
+      const category = row.issue_category.trim()
+      const categoryLower = category.toLowerCase()
+      // Skip excluded categories
+      if (category && !EXCLUDED_ISSUES.some(ex => categoryLower.includes(ex))) {
+        issueCount.set(category, (issueCount.get(category) || 0) + 1)
+        totalIssueCount++
+      }
+    }
   }
+  
+  // Build daily runrate array
+  const dailyRunrate: DailyRunrateItem[] = last7Days.map(({ dateKey, formatted }) => ({
+    date: formatted,
+    forecast: forecastByDate.get(dateKey) || 0,
+    actual: actualByDate.get(dateKey) || 0
+  }))
+  
+  // Build top 5 issues
+  const sortedIssues = Array.from(issueCount.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([category, count], index) => ({
+      category,
+      count,
+      color: ISSUE_COLORS[index % ISSUE_COLORS.length]
+    }))
+  
+  const top5Count = sortedIssues.reduce((sum, item) => sum + item.count, 0)
   
   return {
     byCircle,
@@ -228,6 +326,12 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
       sowToRfi,
       rfiToCrfi,
       crfiToOa
+    },
+    dailyRunrate,
+    topIssues: {
+      issues: sortedIssues,
+      top5Count,
+      totalCount: totalIssueCount
     }
   }
 }
@@ -320,9 +424,6 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
 
   // CLIENT-SIDE FILTERING + AGGREGATION - All done in single pass!
   const { filteredData, filteredStats, aggregated } = useMemo(() => {
-    // #region agent log
-    const startTotal = performance.now();
-    // #endregion
     if (!baseData?.data || baseData.data.length === 0) {
       return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
     }
@@ -331,39 +432,19 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
                        circles.length > 0 || siteCategories.length > 0 || 
                        years.length > 0 || search.length > 0
     
-    // #region agent log
-    const startFilter = performance.now();
-    // #endregion
     // If no filters, use base data and calculate aggregation
     const dataToUse = hasFilters 
       ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, years, search)
       : baseData.data
-    // #region agent log
-    const filterTime = performance.now() - startFilter;
-    // #endregion
     
-    // #region agent log
-    const startStats = performance.now();
-    // #endregion
     // Calculate stats (single pass)
     const stats = hasFilters 
       ? calculateStatsFromFilteredData(dataToUse) 
       : baseData.stats
-    // #region agent log
-    const statsTime = performance.now() - startStats;
-    // #endregion
     
-    // #region agent log
-    const startAgg = performance.now();
-    // #endregion
     // Pre-aggregate data for all chart components (single pass)
     // This prevents each component from iterating 41k rows
     const agg = aggregateDataSinglePass(dataToUse)
-    // #region agent log
-    const aggTime = performance.now() - startAgg;
-    const totalTime = performance.now() - startTotal;
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useAopData.ts:useMemo',message:'HOOK PROCESSING TIME',data:{baseDataLen:baseData.data.length,filteredLen:dataToUse.length,hasFilters,filterTimeMs:filterTime.toFixed(2),statsTimeMs:statsTime.toFixed(2),aggTimeMs:aggTime.toFixed(2),totalTimeMs:totalTime.toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run5',hypothesisId:'HOOK'})}).catch(()=>{});
-    // #endregion
     
     return { 
       filteredData: dataToUse, 

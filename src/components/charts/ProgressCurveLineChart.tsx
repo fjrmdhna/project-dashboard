@@ -1053,9 +1053,6 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
   }, [anchorDate, monthsSpan, rows]);
   
   const data = useMemo(() => {
-    // #region agent log
-    const startTime = performance.now();
-    // #endregion
     const aggregated = aggregate(rows ?? [], buckets, anchorDate);
     // Ensure data is sorted by key (chronological order) - parse keys for proper sorting
     const result = aggregated.sort((a, b) => {
@@ -1085,12 +1082,6 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
       // Filter out any points with invalid labels (like "All")
       return point.label && point.label.trim() !== '' && point.label.toLowerCase() !== 'all';
     });
-    // #region agent log
-    const endTime = performance.now();
-    if (rows && rows.length > 100) {
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProgressCurveLineChart.tsx:data',message:'PROGRESS CURVE useMemo',data:{rowCount:rows.length,bucketCount:buckets.length,resultCount:result.length,computeTimeMs:(endTime-startTime).toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run5',hypothesisId:'PROGRESS'})}).catch(()=>{});
-    }
-    // #endregion
     return result;
   }, [rows, buckets, anchorDate]);
   

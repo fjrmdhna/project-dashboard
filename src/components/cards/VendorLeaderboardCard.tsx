@@ -31,9 +31,6 @@ export interface VendorScore {
 export function VendorLeaderboardCard({ rows, isLoading = false, aggregatedByVendor }: VendorLeaderboardCardProps) {
   // Calculate vendor scores with the 4 weighting rules
   const vendorScores = useMemo(() => {
-    // #region agent log
-    const startTime = performance.now();
-    // #endregion
     if (isLoading || !rows || rows.length === 0) {
       return []
     }
@@ -69,9 +66,6 @@ export function VendorLeaderboardCard({ rows, isLoading = false, aggregatedByVen
       
       // For complex date comparisons, we still need to iterate (but much less frequently needed)
       // Skip the heavy iteration since we have basic metrics
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VendorLeaderboardCard.tsx:USE_AGGREGATED',message:'USED PRE-AGGREGATED DATA',data:{vendorCount:aggregatedByVendor.size,computeTimeMs:(performance.now()-startTime).toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run4',hypothesisId:'OPT'})}).catch(()=>{});
-      // #endregion
     } else {
       // Fallback: Full row iteration (legacy path)
       rows.forEach(row => {
@@ -172,13 +166,6 @@ export function VendorLeaderboardCard({ rows, isLoading = false, aggregatedByVen
     scores.forEach((score, index) => {
       score.rank = index + 1
     })
-
-    // #region agent log
-    const endTime = performance.now();
-    if (rows.length > 100) {
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VendorLeaderboardCard.tsx:145',message:'VENDOR LEADERBOARD useMemo',data:{rowCount:rows.length,computeTimeMs:(endTime-startTime).toFixed(2),vendorCount:scores.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
-    }
-    // #endregion
 
     return scores
   }, [rows, isLoading])

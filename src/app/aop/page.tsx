@@ -18,9 +18,7 @@ import { CircleAchievementCard } from "@/components/cards/CircleAchievementCard"
 import { Wallboard1080 } from "@/layouts/Wallboard1080"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
-import { useAopTopIssueData } from "@/hooks/useAopTopIssueData"
 import { useAopData } from "@/hooks/useAopData"
-import { useAopDailyRunrateData } from "@/hooks/useAopDailyRunrateData"
 
 const AopLoadingScreen = ({ message }: { message: string }) => (
   <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#030a1f] text-white">
@@ -233,49 +231,42 @@ export default function AopPage() {
   const isMobile = useIsMobile()
   const [isPending, startTransition] = useTransition()
 
-  // #region agent log
-  // Hypothesis A & D: Track filter changes and debounce
-  useEffect(() => {
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:230',message:'FILTER VALUE CHANGED (immediate)',data:{filterValue,timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'A'})}).catch(()=>{});
-  }, [filterValue]);
-  // #endregion
-
   // Debounce filter untuk unified debouncing (300ms seperti Hermes 5G)
   const debouncedFilterValue = useDebounce(filterValue, 300)
-  
-  // #region agent log
-  // Hypothesis D: Track debounced filter
-  useEffect(() => {
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:237',message:'DEBOUNCED FILTER CHANGED',data:{debouncedFilterValue,timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'D'})}).catch(()=>{});
-  }, [debouncedFilterValue]);
-  // #endregion
 
-  // Fetch data from API menggunakan debounced filter
-  const { data: aopData, stats: aopStatsImmediate, aggregated: aopAggregated, loading: aopLoading, error: aopError } = useAopData({
-    vendorNames: debouncedFilterValue.vendor_name || [],
-    programReports: debouncedFilterValue.program_report || [],
-    circles: debouncedFilterValue.circle || [],
-    siteCategories: debouncedFilterValue.site_category || [],
-    years: debouncedFilterValue.year || [],
-    search: debouncedFilterValue.q || ''
+  // OPTIMIZATION: Stabilize filter arrays to prevent unnecessary re-renders
+  // Empty arrays are memoized to avoid creating new references on each render
+  const stableVendorNames = useMemo(() => debouncedFilterValue.vendor_name || [], [debouncedFilterValue.vendor_name])
+  const stableProgramReports = useMemo(() => debouncedFilterValue.program_report || [], [debouncedFilterValue.program_report])
+  const stableCircles = useMemo(() => debouncedFilterValue.circle || [], [debouncedFilterValue.circle])
+  const stableSiteCategories = useMemo(() => debouncedFilterValue.site_category || [], [debouncedFilterValue.site_category])
+  const stableYears = useMemo(() => debouncedFilterValue.year || [], [debouncedFilterValue.year])
+  const stableSearch = debouncedFilterValue.q || ''
+
+  // Fetch data from API menggunakan debounced filter with stable references
+  const { data: aopData, stats: aopStats, aggregated: aopAggregated, loading: aopLoading, error: aopError } = useAopData({
+    vendorNames: stableVendorNames,
+    programReports: stableProgramReports,
+    circles: stableCircles,
+    siteCategories: stableSiteCategories,
+    years: stableYears,
+    search: stableSearch
   })
   
-  // OPTIMIZATION: Defer stats and aggregated update to match deferred rows
-  const aopStats = useDeferredValue(aopStatsImmediate)
+  // Use deferred value for rows only (heavy visual component)
+  // Stats and aggregated are used directly without deferring
   const deferredAggregated = useDeferredValue(aopAggregated)
 
-  // Fetch top issues data from API menggunakan debounced filter
-  const { data: topIssues, loading: topIssuesLoading, topIssuesTotal, totalIssues } = useAopTopIssueData({
-    filter: debouncedFilterValue
-  })
+  // OPTIMIZATION: Get top issues and daily runrate from aggregated data (client-side)
+  // This eliminates 2 separate API calls per filter change
+  // Use aopAggregated (not deferred) to ensure data is in sync with current filter
+  const topIssues = aopAggregated?.topIssues?.issues || []
+  const topIssuesTotal = aopAggregated?.topIssues?.top5Count || 0
+  const totalIssues = aopAggregated?.topIssues?.totalCount || 0
+  const dailyRunrateData = aopAggregated?.dailyRunrate || []
 
-  // Fetch daily runrate data from API menggunakan debounced filter
-  const { data: dailyRunrateData, loading: dailyRunrateLoading } = useAopDailyRunrateData({
-    filter: debouncedFilterValue
-  })
-
-  // Combine loading states untuk menentukan isAnyDataLoading (seperti Hermes 5G)
-  const isAnyDataLoading = aopLoading || topIssuesLoading || dailyRunrateLoading
+  // Loading state now only depends on main aopLoading (no separate API calls)
+  const isAnyDataLoading = aopLoading
 
   // Track when initial data has been loaded
   useEffect(() => {
@@ -304,12 +295,6 @@ export default function AopPage() {
   // This allows React to render with stale data first, then update in background
   const rows = useDeferredValue(immediateRows)
   const isStaleData = rows !== immediateRows // True when showing stale data during transition
-  
-  // #region agent log
-  useEffect(() => {
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:300',message:'ROWS UPDATE',data:{rowCount:rows.length,isStaleData,immediateRowCount:immediateRows.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run4',hypothesisId:'DEFERRED'})}).catch(()=>{});
-  }, [rows, immediateRows, isStaleData]);
-  // #endregion
 
   const formattedDate = useMemo(
     () =>
@@ -428,7 +413,7 @@ export default function AopPage() {
   const dailyRunrate = (
     <DailyRunrateCard 
       data={dailyRunrateData} 
-      isLoading={dailyRunrateLoading} 
+      isLoading={aopLoading} 
     />
   )
   const topIssueCard = (
@@ -436,7 +421,7 @@ export default function AopPage() {
       issues={topIssues}
       totalIssues={totalIssues}
       topIssuesTotal={topIssuesTotal}
-      isLoading={topIssuesLoading}
+      isLoading={aopLoading}
     />
   )
   const circleList = <CircleListCard rows={rows} />
