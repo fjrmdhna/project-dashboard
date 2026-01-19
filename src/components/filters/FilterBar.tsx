@@ -143,16 +143,16 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     onChange({ ...value, circle: selected })
   }, [onChange, value])
 
-  // Handler untuk site category selection
-  const handleSiteCategoryChange = useCallback((selected: string[]) => {
-    console.log('Site category filter changed:', selected)
-    onChange({ ...value, site_category: selected })
-  }, [onChange, value])
-
   // Handler untuk region selection
   const handleRegionChange = useCallback((selected: string[]) => {
     console.log('Region filter changed:', selected)
     onChange({ ...value, region: selected })
+  }, [onChange, value])
+
+  // Handler untuk site category selection (AOP variant)
+  const handleSiteCategoryChange = useCallback((selected: string[]) => {
+    console.log('Site category filter changed:', selected)
+    onChange({ ...value, site_category: selected })
   }, [onChange, value])
   
   // Handler untuk reset semua filter
@@ -286,6 +286,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
+            {/* Site Category Filter - AOP variant only */}
             <MultiSelect
               options={options.siteCategories || []}
               selected={value.site_category ?? []}
@@ -430,10 +431,10 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
           {value.site_category?.map(category => (
             <div
               key={`site-category-${category}`}
-              className="bg-teal-500/20 text-teal-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              className="bg-amber-500/20 text-amber-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
               title={`Site Category: ${category}`}
             >
-              <span>Cat: {truncateText(category, 10)}</span>
+              <span>SC: {truncateText(category, 10)}</span>
               <X
                 className="h-2 w-2 cursor-pointer"
                 onClick={() => removeFilter('site_category', category)}

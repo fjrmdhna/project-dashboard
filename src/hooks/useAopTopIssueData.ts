@@ -25,7 +25,16 @@ interface UseAopTopIssueDataReturn {
 }
 
 export function useAopTopIssueData(options: UseAopTopIssueDataOptions = {}): UseAopTopIssueDataReturn {
-  const filter = options.filter || { q: '', vendor_name: [], program_report: [], circle: [], status: [] }
+  const filter: FilterValue = options.filter || { 
+    q: '', 
+    vendor_name: [], 
+    program_report: [], 
+    imp_ttp: [],
+    nano_cluster: [],
+    status: [],
+    circle: [], 
+    site_category: []
+  }
 
   // Generate cache key dari filter
   const cacheKey = useMemo(() => {
@@ -40,7 +49,7 @@ export function useAopTopIssueData(options: UseAopTopIssueDataOptions = {}): Use
     filter.vendor_name?.forEach(v => params.append('vendor_name', v))
     filter.program_report?.forEach(p => params.append('program_report', p))
     filter.circle?.forEach(c => params.append('region_circle', c))
-    filter.site_category?.forEach(cat => params.append('site_category', cat))
+    filter.site_category?.forEach(sc => params.append('site_category', sc))
 
     const response = await fetchWithRetry(`/api/aop/top-5-issue?${params.toString()}`, {}, 3)
     

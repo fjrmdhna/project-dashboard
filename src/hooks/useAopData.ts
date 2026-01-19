@@ -56,7 +56,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
     vendorNames.forEach(v => params.append('vendor_name', v))
     programReports.forEach(p => params.append('program_report', p))
     circles.forEach(c => params.append('region_circle', c))
-    siteCategories.forEach(cat => params.append('site_category', cat))
+    siteCategories.forEach(sc => params.append('site_category', sc))
 
     const url = `/api/aop/site-data?${params.toString()}`
     console.log('Fetching AOP data with filter:', { vendorNames, programReports, circles, siteCategories, search })
