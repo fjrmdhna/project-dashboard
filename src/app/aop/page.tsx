@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState, useEffect, useTransition, type ReactNode, type CSSProperties } from "react"
+import { useMemo, useState, useEffect, useTransition, useDeferredValue, type ReactNode, type CSSProperties } from "react"
 import { ChevronDown, SlidersHorizontal } from "lucide-react"
 
 import { FilterBar, type FilterValue } from "@/components/filters/FilterBar"
@@ -233,23 +233,35 @@ export default function AopPage() {
   const isMobile = useIsMobile()
   const [isPending, startTransition] = useTransition()
 
+  // #region agent log
+  // Hypothesis A & D: Track filter changes and debounce
+  useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:230',message:'FILTER VALUE CHANGED (immediate)',data:{filterValue,timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'A'})}).catch(()=>{});
+  }, [filterValue]);
+  // #endregion
+
   // Debounce filter untuk unified debouncing (300ms seperti Hermes 5G)
   const debouncedFilterValue = useDebounce(filterValue, 300)
-
+  
   // #region agent log
+  // Hypothesis D: Track debounced filter
   useEffect(() => {
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:236',message:'Debounced filter changed',data:{debouncedFilter:debouncedFilterValue},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:237',message:'DEBOUNCED FILTER CHANGED',data:{debouncedFilterValue,timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'D'})}).catch(()=>{});
   }, [debouncedFilterValue]);
   // #endregion
 
   // Fetch data from API menggunakan debounced filter
-  const { data: aopData, stats: aopStats, loading: aopLoading, error: aopError } = useAopData({
+  const { data: aopData, stats: aopStatsImmediate, aggregated: aopAggregated, loading: aopLoading, error: aopError } = useAopData({
     vendorNames: debouncedFilterValue.vendor_name || [],
     programReports: debouncedFilterValue.program_report || [],
     circles: debouncedFilterValue.circle || [],
     siteCategories: debouncedFilterValue.site_category || [],
     search: debouncedFilterValue.q || ''
   })
+  
+  // OPTIMIZATION: Defer stats and aggregated update to match deferred rows
+  const aopStats = useDeferredValue(aopStatsImmediate)
+  const deferredAggregated = useDeferredValue(aopAggregated)
 
   // Fetch top issues data from API menggunakan debounced filter
   const { data: topIssues, loading: topIssuesLoading, topIssuesTotal, totalIssues } = useAopTopIssueData({
@@ -260,14 +272,6 @@ export default function AopPage() {
   const { data: dailyRunrateData, loading: dailyRunrateLoading } = useAopDailyRunrateData({
     filter: debouncedFilterValue
   })
-
-  // #region agent log
-  useEffect(() => {
-    const loadingStates = { aopLoading, topIssuesLoading, dailyRunrateLoading };
-    const concurrentLoads = Object.values(loadingStates).filter(Boolean).length;
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:258',message:'Loading states changed',data:{...loadingStates,concurrentLoads},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  }, [aopLoading, topIssuesLoading, dailyRunrateLoading]);
-  // #endregion
 
   // Combine loading states untuk menentukan isAnyDataLoading (seperti Hermes 5G)
   const isAnyDataLoading = aopLoading || topIssuesLoading || dailyRunrateLoading
@@ -280,21 +284,13 @@ export default function AopPage() {
   }, [isAnyDataLoading, aopData, aopError])
 
   // Use API data only - don't show placeholder data while loading
-  const rows = useMemo(() => {
-    // #region agent log
-    const startTime = performance.now();
-    // #endregion
+  const immediateRows = useMemo(() => {
     // Don't show data while initial loading
     if (isAnyDataLoading && !hasInitialDataLoaded) {
       return [] // Return empty array while loading
     }
     if (aopData && aopData.length > 0) {
-      const result = aopData as MatrixRow[];
-      // #region agent log
-      const endTime = performance.now();
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:268',message:'Rows processing completed',data:{rowCount:result.length,processingTime:endTime-startTime,dataSize:JSON.stringify(aopData).length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-      return result;
+      return aopData as MatrixRow[];
     }
     // Only show placeholder if there's an error and no data (after initial load)
     if (hasInitialDataLoaded && aopError && (!aopData || aopData.length === 0)) {
@@ -302,6 +298,17 @@ export default function AopPage() {
     }
     return []
   }, [aopData, isAnyDataLoading, aopError, hasInitialDataLoaded])
+
+  // OPTIMIZATION: Use deferred value to prevent UI freeze during filter changes
+  // This allows React to render with stale data first, then update in background
+  const rows = useDeferredValue(immediateRows)
+  const isStaleData = rows !== immediateRows // True when showing stale data during transition
+  
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:300',message:'ROWS UPDATE',data:{rowCount:rows.length,isStaleData,immediateRowCount:immediateRows.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run4',hypothesisId:'DEFERRED'})}).catch(()=>{});
+  }, [rows, immediateRows, isStaleData]);
+  // #endregion
 
   const formattedDate = useMemo(
     () =>
@@ -326,18 +333,10 @@ export default function AopPage() {
   )
   const hasActiveFilters = activeFilterCount > 0
 
-  const totalSites = rows.length
-  // #region agent log
-  const filterStartTime = performance.now();
-  // #endregion
-  const readinessCount = rows.filter(row => row.imp_integ_af).length
-  const activatedCount = rows.filter(row => row.rfs_af).length
-  // #region agent log
-  const filterEndTime = performance.now();
-  useEffect(() => {
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:306',message:'Client-side filtering completed',data:{totalSites,readinessCount,activatedCount,filterTime:filterEndTime-filterStartTime,rowCount:rows.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  }, [totalSites, readinessCount, activatedCount, rows.length]);
-  // #endregion
+  // OPTIMIZED: Use stats from API instead of calculating from rows (prevents 41k+ iterations)
+  const totalSites = aopStats?.totalSites || rows.length
+  const readinessCount = aopStats?.readiness || 0
+  const activatedCount = aopStats?.activated || 0
   
   // Calculate PATP count (using stats from API if available)
   const patpCount = aopStats?.pac || 0
@@ -362,9 +361,10 @@ export default function AopPage() {
         variant="aop"
         endpoint="/api/aop/filters"
       />
-      {aopLoading && (
-        <p className="text-[10px] text-white/50">
-          Loading AOP data...
+      {(aopLoading || isStaleData) && (
+        <p className="text-[10px] text-white/50 flex items-center gap-1">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400/50 animate-pulse" />
+          {aopLoading ? 'Loading AOP data...' : 'Updating...'}
         </p>
       )}
       {aopError && (
@@ -405,9 +405,22 @@ export default function AopPage() {
       pac: aopStats.pac
     } : undefined}
   />
-  const readinessCard = <FiveGReadinessCard rows={rows} maxCities={8} variant="circle" dataVariant="aop" />
-  const activatedCard = <FiveGActivatedCard rows={rows} maxCities={8} variant="circle" dataVariant="aop" />
-  const gapStatusCard = <GapStatusCard rows={rows} />
+  // OPTIMIZATION: Pass pre-aggregated data to avoid 41k row iterations in each component
+  const readinessCard = <FiveGReadinessCard 
+    rows={rows} 
+    maxCities={8} 
+    variant="circle" 
+    dataVariant="aop" 
+    aggregatedByCircle={deferredAggregated?.byCircle}
+  />
+  const activatedCard = <FiveGActivatedCard 
+    rows={rows} 
+    maxCities={8} 
+    variant="circle" 
+    dataVariant="aop" 
+    aggregatedByCircle={deferredAggregated?.byCircle}
+  />
+  const gapStatusCard = <GapStatusCard rows={rows} aggregatedGaps={deferredAggregated?.gaps} />
   const progressCurve = (
     <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} monthsSpan={3} />
   )
@@ -426,7 +439,7 @@ export default function AopPage() {
     />
   )
   const nanoClusterList = <NanoClusterListCard rows={rows} />
-  const leaderboard = <VendorLeaderboardCard rows={rows} />
+  const leaderboard = <VendorLeaderboardCard rows={rows} aggregatedByVendor={deferredAggregated?.byVendor} />
 
   const header = <ProgramHeader title="Dashboard AOP 2025" dateLabel={formattedDate} mapHref="/aop/map" />
 

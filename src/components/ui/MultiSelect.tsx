@@ -39,10 +39,6 @@ export function MultiSelect({
     const viewportWidth = window.innerWidth
     const spaceOnRight = viewportWidth - rect.left - desiredWidth
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiSelect.tsx:41',message:'updateMenuPosition',data:{placeholder,rect:{top:Math.round(rect.top),left:Math.round(rect.left),width:Math.round(rect.width),height:Math.round(rect.height)},desiredWidth,viewportWidth,spaceOnRight},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-
     setMenuPosition({
       top: rect.bottom + window.scrollY + 4,
       left: spaceOnRight >= 0 ? rect.left + window.scrollX : rect.right + window.scrollX - desiredWidth,
@@ -55,9 +51,6 @@ export function MultiSelect({
   const handleToggle = () => {
     if (!disabled) {
       if (!open) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiSelect.tsx:55',message:'toggle open->true',data:{placeholder,optionsCount:options.length,selectedCount:selected.length,searchLen:searchTerm.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
         updateMenuPosition()
       }
       setOpen(!open)
@@ -110,22 +103,11 @@ export function MultiSelect({
 
   // Filter options based on search term
   const filteredOptions = useMemo(() => {
-    const t0 = performance.now()
     const term = searchTerm.trim().toLowerCase()
-    const result = term
+    return term
       ? options.filter(opt => opt.toLowerCase().includes(term))
       : options
-    const t1 = performance.now()
-
-    // Log only when dropdown is open and option set is potentially heavy
-    if (open && options.length >= 300) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiSelect.tsx:116',message:'filteredOptions computed',data:{placeholder,optionsCount:options.length,filteredCount:result.length,computeMs:Math.round((t1-t0)*1000)/1000,termLen:term.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-    }
-
-    return result
-  }, [open, options, placeholder, searchTerm])
+  }, [options, searchTerm])
 
   // Display label
   const label = selected.length === 0 
@@ -216,15 +198,6 @@ export function MultiSelect({
     </div>
   )
 
-  useEffect(() => {
-    if (!open) return
-    // after paint: estimate menu render cost (rough)
-    requestAnimationFrame(() => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiSelect.tsx:215',message:'menu painted',data:{placeholder,optionsCount:options.length,filteredCount:filteredOptions.length,selectedCount:selected.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-    })
-  }, [filteredOptions.length, open, options.length, placeholder, selected.length])
 
   return (
     <div ref={containerRef} className={`relative min-w-0 ${className}`}>

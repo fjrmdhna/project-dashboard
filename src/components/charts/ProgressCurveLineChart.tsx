@@ -265,6 +265,7 @@ type Point = {
 };
 
 // Function to aggregate data into buckets with cumulative values
+// OPTIMIZED: Single-pass aggregation instead of O(buckets * rows) nested loops
 function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[] {
   if (!buckets.length) return [];
 
@@ -273,7 +274,7 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
     return !!(d && s && e && d >= s && d <= e);
   };
 
-  // Helper function to check if date is <= end date (for cumulative calculation)
+  // Helper function to check if date is <= end date (for Hermes format cumulative calculation)
   const isOnOrBefore = (val?: string | null, endDate?: Date) => {
     const d = safeDate(val);
     return !!(d && endDate && d <= endDate);
@@ -285,20 +286,60 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
 
   // AOP Format: baseline, forecast, actual
   if (isAopFormat) {
-    const totalBaseline = rows.filter(row => row.rfs_bf).length;
-    const totalForecast = rows.filter(row => row.rfs_ff).length;
-    const totalActual = rows.filter(row => row.rfs_af).length;
+    // OPTIMIZATION: Single pass through rows to count per bucket
+    // Instead of O(buckets * rows), we do O(rows + buckets)
+    
+    // Step 1: Extract and parse all dates ONCE (O(rows))
+    const baselineDates: number[] = [];
+    const forecastDates: number[] = [];
+    const actualDates: number[] = [];
+    
+    for (const row of rows) {
+      const baselineDate = safeDate(row.rfs_bf);
+      const forecastDate = safeDate(row.rfs_ff);
+      const actualDate = safeDate(row.rfs_af);
+      
+      if (baselineDate) baselineDates.push(baselineDate.getTime());
+      if (forecastDate) forecastDates.push(forecastDate.getTime());
+      if (actualDate) actualDates.push(actualDate.getTime());
+    }
+    
+    // Step 2: Sort dates (O(n log n))
+    baselineDates.sort((a, b) => a - b);
+    forecastDates.sort((a, b) => a - b);
+    actualDates.sort((a, b) => a - b);
+    
+    const totalBaseline = baselineDates.length;
+    const totalForecast = forecastDates.length;
+    const totalActual = actualDates.length;
+
+    // Step 3: Binary search to find count <= bucket end (O(buckets * log(rows)))
+    const countLessOrEqual = (sortedDates: number[], endTime: number): number => {
+      if (sortedDates.length === 0) return 0;
+      let left = 0;
+      let right = sortedDates.length;
+      while (left < right) {
+        const mid = (left + right) >>> 1;
+        if (sortedDates[mid] <= endTime) {
+          left = mid + 1;
+        } else {
+          right = mid;
+        }
+      }
+      return left;
+    };
 
     let lastBaselineIndex = -1;
     let lastForecastIndex = -1;
     let lastActualIndex = -1;
 
+    // Step 4: Calculate cumulative data using binary search (O(buckets * log(rows)))
     const cumulativeData = buckets.map((bucket) => {
-      const bucketEnd = bucket.end;
+      const bucketEndTime = bucket.end.getTime();
       return {
-        baseline: rows.reduce((total, row) => total + (isOnOrBefore(row.rfs_bf, bucketEnd) ? 1 : 0), 0),
-        forecast: rows.reduce((total, row) => total + (isOnOrBefore(row.rfs_ff, bucketEnd) ? 1 : 0), 0),
-        actual: rows.reduce((total, row) => total + (isOnOrBefore(row.rfs_af, bucketEnd) ? 1 : 0), 0),
+        baseline: countLessOrEqual(baselineDates, bucketEndTime),
+        forecast: countLessOrEqual(forecastDates, bucketEndTime),
+        actual: countLessOrEqual(actualDates, bucketEndTime),
       };
     });
 
@@ -986,9 +1027,12 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
   }, [anchorDate, monthsSpan, rows]);
   
   const data = useMemo(() => {
+    // #region agent log
+    const startTime = performance.now();
+    // #endregion
     const aggregated = aggregate(rows ?? [], buckets, anchorDate);
     // Ensure data is sorted by key (chronological order) - parse keys for proper sorting
-    return aggregated.sort((a, b) => {
+    const result = aggregated.sort((a, b) => {
       // Parse keys which are in format "YYYY-MM" or "YYYY-MM-wW"
       const parseKey = (key: string) => {
         const parts = key.split('-');
@@ -1015,6 +1059,13 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
       // Filter out any points with invalid labels (like "All")
       return point.label && point.label.trim() !== '' && point.label.toLowerCase() !== 'all';
     });
+    // #region agent log
+    const endTime = performance.now();
+    if (rows && rows.length > 100) {
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ProgressCurveLineChart.tsx:data',message:'PROGRESS CURVE useMemo',data:{rowCount:rows.length,bucketCount:buckets.length,resultCount:result.length,computeTimeMs:(endTime-startTime).toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run5',hypothesisId:'PROGRESS'})}).catch(()=>{});
+    }
+    // #endregion
+    return result;
   }, [rows, buckets, anchorDate]);
   
   // Detect format from aggregated data

@@ -23,12 +23,17 @@ type Row = {
   ic_000010_af?: string | null // RFI header for AOP
 }
 
+// Pre-aggregated data from useAopData hook (OPTIMIZATION)
+type AggregatedByCircle = Map<string, { total: number; ready: number; activated: number; rfi: number }>
+
 // Tipe data untuk props komponen
 type Props = {
   rows: Row[]
   maxCities?: number
   variant?: 'city' | 'circle' // Variant untuk menentukan apakah menggunakan city atau circle
   dataVariant?: 'default' | 'aop' // Data variant untuk menentukan field yang digunakan
+  // OPTIMIZATION: Pre-aggregated data to avoid 41k row iteration
+  aggregatedByCircle?: AggregatedByCircle
 }
 
 // Tipe data untuk item chart
@@ -150,59 +155,82 @@ const ReadyLabel = (props: any) => {
   )
 }
 
-export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default' }: Props) {
-  // Agregasi data untuk chart
+export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default', aggregatedByCircle }: Props) {
+  // Agregasi data untuk chart - OPTIMIZED: Use pre-aggregated data if available
   const chartData = useMemo(() => {
-    // Buat map untuk menghitung jumlah NY dan Ready per kota/circle
+    // #region agent log
+    const startTime = performance.now();
+    // #endregion
+    
+    // OPTIMIZATION: If pre-aggregated data is available, use it (O(1) instead of O(n))
+    if (aggregatedByCircle && variant === 'circle') {
+      const result: ChartItem[] = Array.from(aggregatedByCircle.entries()).map(([circle, data]) => {
+        // For AOP, use rfi field; for default, use ready field
+        const rdyCount = dataVariant === 'aop' ? data.rfi : data.ready
+        const nyCount = data.total - rdyCount
+        return {
+          city: '',
+          circle: normalizeCircle(circle),
+          ny: Math.abs(nyCount),
+          rdy: rdyCount > 0 ? Math.abs(rdyCount) : null,
+          total: data.total
+        }
+      })
+      
+      const sortedResult = result.sort((a, b) => 
+        (b.rdy || 0) + (b.ny || 0) - ((a.rdy || 0) + (a.ny || 0))
+      )
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FiveGReadinessCard.tsx:USE_AGGREGATED',message:'USED PRE-AGGREGATED DATA',data:{circleCount:aggregatedByCircle.size,computeTimeMs:(performance.now()-startTime).toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run4',hypothesisId:'OPT'})}).catch(()=>{});
+      // #endregion
+      
+      return sortedResult.slice(0, maxCities)
+    }
+    
+    // Fallback: Aggregate from rows (legacy path)
     const locationMap = new Map<string, { ny: number; rdy: number }>()
     
-    // Tentukan field yang digunakan berdasarkan dataVariant
-    const readinessField = dataVariant === 'aop' ? 'ic_000010_af' : 'imp_integ_af'
-    
-    // Iterasi setiap row untuk agregasi
     rows.forEach(row => {
-      // Tentukan lokasi berdasarkan variant
       const location = variant === 'circle' 
         ? normalizeCircle(row.nano_cluster || row.region_circle)
         : normalizeCity(row.imp_ttp)
       
-      // Tentukan status readiness berdasarkan dataVariant
       const isReady = dataVariant === 'aop' 
         ? !!row.ic_000010_af 
         : !!row.imp_integ_af
       
-      // Ambil atau inisialisasi data lokasi
       const locationData = locationMap.get(location) || { ny: 0, rdy: 0 }
       
-      // Update counter sesuai status
       if (isReady) {
         locationData.rdy++
       } else {
         locationData.ny++
       }
       
-      // Simpan kembali ke map
       locationMap.set(location, locationData)
     })
     
-    // Konversi map ke array untuk sorting
     const result: ChartItem[] = Array.from(locationMap.entries()).map(([location, data]) => ({
-      city: variant === 'circle' ? '' : location, // Untuk backward compatibility
-      circle: variant === 'circle' ? location : '', // Untuk circle variant
-      ny: Math.abs(data.ny || 0), // Nilai POSITIF untuk NY Readiness
-      rdy: data.rdy > 0 ? Math.abs(data.rdy) : null, // Nilai POSITIF untuk Readiness
-      total: data.ny + data.rdy // Total absolut
+      city: variant === 'circle' ? '' : location,
+      circle: variant === 'circle' ? location : '',
+      ny: Math.abs(data.ny || 0),
+      rdy: data.rdy > 0 ? Math.abs(data.rdy) : null,
+      total: data.ny + data.rdy
     }))
     
-    // Sort by total (descending)
     const sortedResult = result.sort((a, b) => 
       (b.rdy || 0) + (b.ny || 0) - ((a.rdy || 0) + (a.ny || 0))
     )
     
-    // Untuk variant circle, tidak ada logika khusus seperti Surabaya
-    // Langsung return top maxCities
+    // #region agent log
+    const endTime = performance.now();
+    if (rows.length > 100) {
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FiveGReadinessCard.tsx:200',message:'READINESS CARD useMemo (FALLBACK)',data:{rowCount:rows.length,computeTimeMs:(endTime-startTime).toFixed(2),uniqueLocations:locationMap.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
+    }
+    // #endregion
     return sortedResult.slice(0, maxCities)
-  }, [rows, maxCities, variant])
+  }, [rows, maxCities, variant, dataVariant, aggregatedByCircle])
 
   // Hitung nilai maksimum untuk domain
   const maxValue = useMemo(() => {

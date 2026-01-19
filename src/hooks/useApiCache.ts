@@ -200,7 +200,12 @@ export function useApiCache<T>(
     let fetchSucceeded = false
     
     try {
-      const result = await fetchFn()
+      // Add timeout to prevent infinite loading (60 seconds max)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout after 60 seconds')), 60000)
+      })
+      
+      const result = await Promise.race([fetchFn(), timeoutPromise])
       
       // Check if request was aborted or cacheKey changed
       if (controller.signal.aborted || lastCacheKeyRef.current !== cacheKey) {
@@ -231,17 +236,16 @@ export function useApiCache<T>(
       // Don't set data to null on error - keep previous data if available
       console.error(`API Cache Error for ${cacheKey}:`, err)
     } finally {
+      // Always clean up fetchingRef
+      fetchingRef.current.delete(cacheKey)
+      
       // Only update loading if this is still the current request
       if (abortControllerRef.current === controller && lastCacheKeyRef.current === cacheKey) {
-        fetchingRef.current.delete(cacheKey)
-        // Only set loading to false if we didn't already set it (error case)
-        // Dan hanya jika bukan background fetch
-        if (!fetchSucceeded && !background) {
+        // Always set loading to false in finally block to prevent stuck loading state
+        // This handles error cases and ensures loading never gets stuck
+        if (!background) {
           setLoading(false)
         }
-      } else {
-        // Request was cancelled or cacheKey changed
-        fetchingRef.current.delete(cacheKey)
       }
     }
   }, [cacheKey, fetchFn, getCachedData, isStale, setCachedData])

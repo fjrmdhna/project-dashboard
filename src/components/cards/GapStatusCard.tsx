@@ -11,8 +11,17 @@ type Row = {
   rfs_af?: string | null // Activated
 }
 
+// Pre-aggregated gaps from useAopData hook (OPTIMIZATION)
+type AggregatedGaps = {
+  sowToRfi: number
+  rfiToCrfi: number
+  crfiToOa: number
+}
+
 type GapStatusCardProps = {
   rows: Row[]
+  // OPTIMIZATION: Pre-aggregated data to avoid 41k row iteration
+  aggregatedGaps?: AggregatedGaps
 }
 
 // Komponen metrik individual untuk gap status
@@ -57,19 +66,27 @@ function GapMetricItem({
   )
 }
 
-export function GapStatusCard({ rows }: GapStatusCardProps) {
-  // Hitung gap metrics dari rows
+export function GapStatusCard({ rows, aggregatedGaps }: GapStatusCardProps) {
+  // Hitung gap metrics dari rows - OPTIMIZED: Use pre-aggregated data if available
   const gapMetrics = useMemo(() => {
-    let sowToRfi = 0 // system_key ada tapi ic_000040_af kosong
-    let rfiToCrfi = 0 // ic_000040_af terisi tapi caf_approved kosong
-    let crfiToOa = 0 // caf_approved terisi tapi rfs_af kosong
+    // OPTIMIZATION: If pre-aggregated data is available, use it (O(1) instead of O(n))
+    if (aggregatedGaps) {
+      return {
+        sowToRfi: aggregatedGaps.sowToRfi,
+        rfiToCrfi: aggregatedGaps.rfiToCrfi,
+        crfiToOa: aggregatedGaps.crfiToOa,
+        total: rows.length
+      }
+    }
+    
+    // Fallback: Aggregate from rows (legacy path)
+    let sowToRfi = 0
+    let rfiToCrfi = 0
+    let crfiToOa = 0
     
     rows.forEach(row => {
-      // Validasi: row harus punya system_key untuk dihitung
       if (!row.system_key) return
       
-      // Gap 1: SOW - RFI
-      // Kondisi: system_key ada tapi ic_000040_af kosong/null
       const hasSystemKey = !!(row.system_key && String(row.system_key).trim() !== '')
       const hasIc000040Af = !!(row.ic_000040_af && String(row.ic_000040_af).trim() !== '')
       
@@ -77,16 +94,12 @@ export function GapStatusCard({ rows }: GapStatusCardProps) {
         sowToRfi++
       }
       
-      // Gap 2: RFI - CRFI
-      // Kondisi: ic_000040_af terisi tapi caf_approved kosong/null
       const hasCafApproved = !!(row.caf_approved && String(row.caf_approved).trim() !== '')
       
       if (hasIc000040Af && !hasCafApproved) {
         rfiToCrfi++
       }
       
-      // Gap 3: CRFI - OA
-      // Kondisi: caf_approved terisi tapi rfs_af kosong/null
       const hasRfsAf = !!(row.rfs_af && String(row.rfs_af).trim() !== '')
       
       if (hasCafApproved && !hasRfsAf) {
@@ -100,7 +113,7 @@ export function GapStatusCard({ rows }: GapStatusCardProps) {
       crfiToOa,
       total: rows.filter(row => !!(row.system_key && String(row.system_key).trim() !== '')).length
     }
-  }, [rows])
+  }, [rows, aggregatedGaps])
   
   return (
     <div className="rounded-lg bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col text-white min-w-0 p-1 overflow-hidden">

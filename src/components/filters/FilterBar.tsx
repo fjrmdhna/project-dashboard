@@ -76,10 +76,6 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     async function fetchOptions() {
       try {
         setIsLoading(true)
-        // #region agent log
-        const t0 = performance.now()
-        fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:78',message:'fetchOptions start',data:{endpoint,variant},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         const response = await fetch(endpoint)
         
         if (!isMounted) return
@@ -87,16 +83,6 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
         if (response.ok) {
           const data = await response.json()
           if (data.status === 'success') {
-            // #region agent log
-            const t1 = performance.now()
-            const sizes = {
-              vendors: (data.data.vendors || []).length,
-              programs: (data.data.programs || []).length,
-              circles: (data.data.circles || []).length,
-              siteCategories: (data.data.siteCategories || []).length
-            }
-            fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:92',message:'fetchOptions success',data:{endpoint,variant,fetchMs:Math.round((t1-t0)*1000)/1000,sizes},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
             setOptions({
               vendors: data.data.vendors || [],
               programs: data.data.programs || [],
@@ -111,9 +97,6 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
         }
       } catch (error) {
         console.error('Error fetching filter options:', error)
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:107',message:'fetchOptions error',data:{endpoint,variant,error:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
       } finally {
         if (isMounted) {
           setIsLoading(false)

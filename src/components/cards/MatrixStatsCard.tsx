@@ -96,9 +96,6 @@ function MetricItem({
 
 export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stats: providedStats }: MatrixStatsCardProps) {
   const stats = useMemo(() => {
-    // #region agent log
-    const calcStartTime = performance.now();
-    // #endregion
     // OPTIMIZED: Gunakan stats dari API jika tersedia (sudah dihitung di database)
     // Fallback ke calculation dari rows jika stats tidak tersedia
     if (variant === "aop" && providedStats) {
@@ -172,10 +169,6 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
       pac
     }
     }
-    // #region agent log
-    const calcEndTime = performance.now();
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MatrixStatsCard.tsx:175',message:'Stats calculation completed',data:{calculationTime:calcEndTime-calcStartTime,rowCount:rows.length,variant,hasProvidedStats:!!providedStats},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
   }, [rows, patpCount, variant, providedStats])
 
   const metricConfig = variant === "aop" ? AOP_METRIC_CONFIG : DEFAULT_METRIC_CONFIG

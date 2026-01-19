@@ -22,12 +22,17 @@ type Row = {
   rfs_af?: string | null
 }
 
+// Pre-aggregated data from useAopData hook (OPTIMIZATION)
+type AggregatedByCircle = Map<string, { total: number; ready: number; activated: number; rfi: number }>
+
 // Tipe data untuk props komponen
 type Props = {
   rows: Row[]
   maxCities?: number
   variant?: 'city' | 'circle' // Variant untuk menentukan apakah menggunakan city atau circle
   dataVariant?: 'default' | 'aop' // Data variant untuk menentukan label dan title
+  // OPTIMIZATION: Pre-aggregated data to avoid 41k row iteration
+  aggregatedByCircle?: AggregatedByCircle
 }
 
 // Tipe data untuk item chart
@@ -149,52 +154,64 @@ const ActivatedLabel = (props: any) => {
   )
 }
 
-export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default' }: Props) {
-  // Agregasi data untuk chart
+export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default', aggregatedByCircle }: Props) {
+  // Agregasi data untuk chart - OPTIMIZED: Use pre-aggregated data if available
   const chartData = useMemo(() => {
-    // Buat map untuk menghitung jumlah NY dan Activated per kota/circle
+    // OPTIMIZATION: If pre-aggregated data is available, use it (O(1) instead of O(n))
+    if (aggregatedByCircle && variant === 'circle') {
+      const result: ChartItem[] = Array.from(aggregatedByCircle.entries()).map(([circle, data]) => {
+        const actCount = data.activated
+        const nyCount = data.total - actCount
+        return {
+          city: '',
+          circle: normalizeCircle(circle),
+          ny: Math.abs(nyCount),
+          act: actCount > 0 ? Math.abs(actCount) : null,
+          total: data.total
+        }
+      })
+      
+      const sortedResult = result.sort((a, b) => 
+        (b.act || 0) + (b.ny || 0) - ((a.act || 0) + (a.ny || 0))
+      )
+      
+      return sortedResult.slice(0, maxCities)
+    }
+    
+    // Fallback: Aggregate from rows (legacy path)
     const locationMap = new Map<string, { ny: number; act: number }>()
     
-    // Iterasi setiap row untuk agregasi
     rows.forEach(row => {
-      // Tentukan lokasi berdasarkan variant
       const location = variant === 'circle' 
         ? normalizeCircle(row.nano_cluster || row.region_circle)
         : normalizeCity(row.imp_ttp)
       const isActivated = !!row.rfs_af
       
-      // Ambil atau inisialisasi data lokasi
       const locationData = locationMap.get(location) || { ny: 0, act: 0 }
       
-      // Update counter sesuai status
       if (isActivated) {
         locationData.act++
       } else {
         locationData.ny++
       }
       
-      // Simpan kembali ke map
       locationMap.set(location, locationData)
     })
     
-    // Konversi map ke array untuk sorting
     const result: ChartItem[] = Array.from(locationMap.entries()).map(([location, data]) => ({
-      city: variant === 'circle' ? '' : location, // Untuk backward compatibility
-      circle: variant === 'circle' ? location : '', // Untuk circle variant
-      ny: Math.abs(data.ny || 0), // Nilai POSITIF untuk NY Activated
-      act: data.act > 0 ? Math.abs(data.act) : null, // Nilai POSITIF untuk Activated
-      total: data.ny + data.act // Total absolut
+      city: variant === 'circle' ? '' : location,
+      circle: variant === 'circle' ? location : '',
+      ny: Math.abs(data.ny || 0),
+      act: data.act > 0 ? Math.abs(data.act) : null,
+      total: data.ny + data.act
     }))
     
-    // Sort by total (descending)
     const sortedResult = result.sort((a, b) => 
       (b.act || 0) + (b.ny || 0) - ((a.act || 0) + (a.ny || 0))
     )
     
-    // Untuk variant circle, tidak ada logika khusus seperti Surabaya
-    // Langsung return top maxCities
     return sortedResult.slice(0, maxCities)
-  }, [rows, maxCities, variant])
+  }, [rows, maxCities, variant, aggregatedByCircle])
 
   // Hitung nilai maksimum untuk domain
   const maxValue = useMemo(() => {

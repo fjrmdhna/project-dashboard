@@ -1,5 +1,26 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Environment Variables
+
+Create a `.env.local` file in the root directory with the following variables:
+
+```bash
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Redis Configuration (for caching - optional but recommended)
+# Option 1: Upstash Redis (https://console.upstash.com/)
+UPSTASH_REDIS_REST_URL=your_upstash_redis_rest_url
+UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
+
+# Option 2: Vercel KV (automatically set when you add KV to your Vercel project)
+# KV_REST_API_URL=your_vercel_kv_url
+# KV_REST_API_TOKEN=your_vercel_kv_token
+```
+
+**Note:** Redis caching is optional but recommended. Supports both Upstash Redis and Vercel KV. If not configured, the app will work normally but without server-side caching (may be slower for large datasets).
+
 ## Getting Started
 
 First, run the development server:
