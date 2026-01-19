@@ -235,6 +235,12 @@ export default function AopPage() {
   // Debounce filter untuk unified debouncing (300ms seperti Hermes 5G)
   const debouncedFilterValue = useDebounce(filterValue, 300)
 
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:236',message:'Debounced filter changed',data:{debouncedFilter:debouncedFilterValue},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  }, [debouncedFilterValue]);
+  // #endregion
+
   // Fetch data from API menggunakan debounced filter
   const { data: aopData, stats: aopStats, loading: aopLoading, error: aopError } = useAopData({
     vendorNames: debouncedFilterValue.vendor_name || [],
@@ -254,6 +260,14 @@ export default function AopPage() {
     filter: debouncedFilterValue
   })
 
+  // #region agent log
+  useEffect(() => {
+    const loadingStates = { aopLoading, topIssuesLoading, dailyRunrateLoading };
+    const concurrentLoads = Object.values(loadingStates).filter(Boolean).length;
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:258',message:'Loading states changed',data:{...loadingStates,concurrentLoads},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  }, [aopLoading, topIssuesLoading, dailyRunrateLoading]);
+  // #endregion
+
   // Combine loading states untuk menentukan isAnyDataLoading (seperti Hermes 5G)
   const isAnyDataLoading = aopLoading || topIssuesLoading || dailyRunrateLoading
 
@@ -266,12 +280,20 @@ export default function AopPage() {
 
   // Use API data only - don't show placeholder data while loading
   const rows = useMemo(() => {
+    // #region agent log
+    const startTime = performance.now();
+    // #endregion
     // Don't show data while initial loading
     if (isAnyDataLoading && !hasInitialDataLoaded) {
       return [] // Return empty array while loading
     }
     if (aopData && aopData.length > 0) {
-      return aopData as MatrixRow[]
+      const result = aopData as MatrixRow[];
+      // #region agent log
+      const endTime = performance.now();
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:268',message:'Rows processing completed',data:{rowCount:result.length,processingTime:endTime-startTime,dataSize:JSON.stringify(aopData).length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      return result;
     }
     // Only show placeholder if there's an error and no data (after initial load)
     if (hasInitialDataLoaded && aopError && (!aopData || aopData.length === 0)) {
@@ -304,13 +326,25 @@ export default function AopPage() {
   const hasActiveFilters = activeFilterCount > 0
 
   const totalSites = rows.length
+  // #region agent log
+  const filterStartTime = performance.now();
+  // #endregion
   const readinessCount = rows.filter(row => row.imp_integ_af).length
   const activatedCount = rows.filter(row => row.rfs_af).length
+  // #region agent log
+  const filterEndTime = performance.now();
+  useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:306',message:'Client-side filtering completed',data:{totalSites,readinessCount,activatedCount,filterTime:filterEndTime-filterStartTime,rowCount:rows.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  }, [totalSites, readinessCount, activatedCount, rows.length]);
+  // #endregion
   
   // Calculate PATP count (using stats from API if available)
   const patpCount = aopStats?.pac || 0
 
   const handleFilterChange = (value: FilterValue) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/page.tsx:313',message:'Filter change triggered',data:{filterValue:value,activeFilters:Object.keys(value).filter(k=>Array.isArray(value[k as keyof FilterValue])?value[k as keyof FilterValue].length>0:value[k as keyof FilterValue]!==''&&value[k as keyof FilterValue]!==null)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     setFilterValue(value)
   }
 
@@ -350,7 +384,26 @@ export default function AopPage() {
     </div>
   )
 
-  const matrixStats = <MatrixStatsCard rows={rows} patpCount={patpCount} variant="aop" />
+  // OPTIMIZED: Pass stats dari API ke MatrixStatsCard untuk menghindari redundant calculation
+  // Stats dari API sudah dihitung di database, lebih cepat daripada calculate di frontend
+  const matrixStats = <MatrixStatsCard 
+    rows={rows} 
+    patpCount={patpCount} 
+    variant="aop"
+    stats={aopStats ? {
+      totalSites: aopStats.totalSites,
+      // RFI tidak ada di stats API, calculate dari rows sebagai fallback
+      rfi: undefined, // Will be calculated from rows in MatrixStatsCard
+      crfi: aopStats.caf, // CRFI = caf (rfi_accepted)
+      mos: aopStats.mos,
+      install: aopStats.install,
+      rfs: aopStats.activated, // RFS = activated (rfs_af)
+      rfc: aopStats.rfc,
+      hotnews: aopStats.hotnews,
+      endorse: aopStats.endorse,
+      pac: aopStats.pac
+    } : undefined}
+  />
   const readinessCard = <FiveGReadinessCard rows={rows} maxCities={8} variant="circle" dataVariant="aop" />
   const activatedCard = <FiveGActivatedCard rows={rows} maxCities={8} variant="circle" dataVariant="aop" />
   const gapStatusCard = <GapStatusCard rows={rows} />

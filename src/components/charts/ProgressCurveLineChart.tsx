@@ -190,13 +190,13 @@ function buildHybridBuckets(anchorDate?: string, span: 3 | 5 = 3, rows: Row[] = 
       const monthLabel = fmtMonth(monthStart);
       // Only add bucket if label is valid (not empty or "All")
       if (monthLabel && monthLabel.trim() !== '' && monthLabel.toLowerCase() !== 'all') {
-        buckets.push({
-          key: `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`,
+      buckets.push({
+        key: `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`,
           label: monthLabel,
-          start,
-          end,
-          kind: 'month',
-        });
+        start,
+        end,
+        kind: 'month',
+      });
       }
     }
 
@@ -232,13 +232,13 @@ function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, ra
         const weekLabel = `W${weekNumber}`;
         // Ensure label is valid (not empty or "All")
         if (weekLabel && weekLabel.trim() !== '' && weekLabel.toLowerCase() !== 'all') {
-          weeks.push({
-            key: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-w${String(weekNumber).padStart(2, '0')}`,
+        weeks.push({
+          key: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-w${String(weekNumber).padStart(2, '0')}`,
             label: weekLabel,
-            start,
-            end,
-            kind: 'week',
-          });
+          start,
+          end,
+          kind: 'week',
+        });
         }
       }
     }

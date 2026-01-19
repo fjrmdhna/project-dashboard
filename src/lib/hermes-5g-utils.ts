@@ -176,6 +176,7 @@ export interface FilterOptionsData {
   cities: string[]
   nanoClusters: string[]
   regions: string[]
+  years: string[]
   ranScores: string[]
 }
 
@@ -375,6 +376,13 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
       .not('region', 'is', null)
       .neq('region', '');
     
+    // Get unique years from year
+    const { data: yearsData, error: yearsError } = await supabase
+      .from('site_data_5g')
+      .select('year')
+      .not('year', 'is', null)
+      .neq('year', '');
+    
     // Get unique RAN scores
     const { data: ranScoresData, error: ranScoresError } = await supabase
       .from('site_data_5g')
@@ -382,9 +390,9 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
       .not('ran_score', 'is', null)
       .neq('ran_score', '');
     
-    if (vendorsError || programsError || citiesError || nanoClustersError || regionsError || ranScoresError) {
-      console.error('Supabase Error:', vendorsError || programsError || citiesError || nanoClustersError || regionsError || ranScoresError);
-      throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message || nanoClustersError?.message || regionsError?.message || ranScoresError?.message}`);
+    if (vendorsError || programsError || citiesError || nanoClustersError || regionsError || yearsError || ranScoresError) {
+      console.error('Supabase Error:', vendorsError || programsError || citiesError || nanoClustersError || regionsError || yearsError || ranScoresError);
+      throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message || nanoClustersError?.message || regionsError?.message || yearsError?.message || ranScoresError?.message}`);
     }
     
     const data: FilterOptionsData = {
@@ -393,6 +401,7 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
       cities: [...new Set(citiesData?.map(row => row.imp_ttp) || [])].sort(),
       nanoClusters: [...new Set(nanoClustersData?.map(row => row.nano_cluster) || [])].sort(),
       regions: [...new Set(regionsData?.map(row => row.region) || [])].sort(),
+      years: [...new Set(yearsData?.map(row => row.year) || [])].sort((a, b) => b.localeCompare(a)), // Sort descending (newest first)
       ranScores: [
         ...new Set(
           (ranScoresData || [])
@@ -419,6 +428,7 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
         cities: [],
         nanoClusters: [],
         regions: [],
+        years: [],
         ranScores: []
       },
       timestamp: new Date().toISOString()

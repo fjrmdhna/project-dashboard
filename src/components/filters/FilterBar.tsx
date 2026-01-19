@@ -14,6 +14,7 @@ export interface FilterValue {
   nano_cluster: string[]
   status: string[] // New status filter array
   region?: string[]
+  year?: string[] // Year filter
   circle?: string[]
   site_category?: string[] // Site category filter for AOP
 }
@@ -34,6 +35,7 @@ interface FilterOptions {
   cities: string[]
   nanoClusters: string[]
   regions: string[]
+  years: string[] // Years for Hermes 5G
   circles: string[]
   siteCategories?: string[] // Site categories for AOP
 }
@@ -56,6 +58,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     cities: [],
     nanoClusters: [],
     regions: [],
+    years: [],
     circles: [],
     siteCategories: []
   })
@@ -73,6 +76,10 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     async function fetchOptions() {
       try {
         setIsLoading(true)
+        // #region agent log
+        const t0 = performance.now()
+        fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:78',message:'fetchOptions start',data:{endpoint,variant},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         const response = await fetch(endpoint)
         
         if (!isMounted) return
@@ -80,12 +87,23 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
         if (response.ok) {
           const data = await response.json()
           if (data.status === 'success') {
+            // #region agent log
+            const t1 = performance.now()
+            const sizes = {
+              vendors: (data.data.vendors || []).length,
+              programs: (data.data.programs || []).length,
+              circles: (data.data.circles || []).length,
+              siteCategories: (data.data.siteCategories || []).length
+            }
+            fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:92',message:'fetchOptions success',data:{endpoint,variant,fetchMs:Math.round((t1-t0)*1000)/1000,sizes},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
             setOptions({
               vendors: data.data.vendors || [],
               programs: data.data.programs || [],
               cities: data.data.cities || [],
               nanoClusters: data.data.nanoClusters || [],
               regions: data.data.regions || [],
+              years: data.data.years || [],
               circles: data.data.circles || [],
               siteCategories: data.data.siteCategories || []
             })
@@ -93,6 +111,9 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
         }
       } catch (error) {
         console.error('Error fetching filter options:', error)
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:107',message:'fetchOptions error',data:{endpoint,variant,error:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
       } finally {
         if (isMounted) {
           setIsLoading(false)
@@ -149,6 +170,12 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     onChange({ ...value, region: selected })
   }, [onChange, value])
 
+  // Handler untuk year selection
+  const handleYearChange = useCallback((selected: string[]) => {
+    console.log('Year filter changed:', selected)
+    onChange({ ...value, year: selected })
+  }, [onChange, value])
+
   // Handler untuk site category selection (AOP variant)
   const handleSiteCategoryChange = useCallback((selected: string[]) => {
     console.log('Site category filter changed:', selected)
@@ -159,7 +186,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], circle: [], site_category: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [] })
   }
 
   // Handler untuk remove individual filter
@@ -183,15 +210,16 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.imp_ttp?.length || 0) > 0 ||
     (value.nano_cluster?.length || 0) > 0 ||
     (value.region?.length || 0) > 0 ||
+    (value.year?.length || 0) > 0 ||
     (value.circle?.length || 0) > 0 ||
     (value.status?.length || 0) > 0 ||
     (value.site_category?.length || 0) > 0
 
-  // Grid layout berbeda untuk variant AOP (4 filter: vendor, program, circle, site_category) vs default (6 filter dengan region)
+  // Grid layout berbeda untuk variant AOP (4 filter: vendor, program, circle, site_category) vs default (7 filter dengan region dan year)
   const gridClass =
     variant === "aop"
       ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] md:items-center md:gap-2"
-      : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))_auto] md:items-center md:gap-2"
+      : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(6,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
   return (
     <div className="h-full flex flex-col min-w-0">
@@ -271,6 +299,16 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
+
+            <MultiSelect
+              options={options.years}
+              selected={value.year || []}
+              placeholder="Year"
+              onChange={handleYearChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 md:col-span-1"
+            />
           </>
         )}
 
@@ -284,7 +322,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               onChange={handleCircleChange}
               disabled={isLoading}
               width="w-full"
-              className="col-span-2 md:col-span-1"
+            className="col-span-2 md:col-span-1"
             />
             {/* Site Category Filter - AOP variant only */}
             <MultiSelect
@@ -410,6 +448,20 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               <X 
                 className="h-2 w-2 cursor-pointer" 
                 onClick={() => removeFilter('region', region)} 
+              />
+            </div>
+          ))}
+
+          {value.year?.map(year => (
+            <div 
+              key={`year-${year}`} 
+              className="bg-teal-500/20 text-teal-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`Year: ${year}`}
+            >
+              <span>Y: {year}</span>
+              <X 
+                className="h-2 w-2 cursor-pointer" 
+                onClick={() => removeFilter('year', year)} 
               />
             </div>
           ))}

@@ -86,6 +86,7 @@ export interface SiteData5GFilters {
   nano_cluster?: string[]
   ran_score?: string[]
   region?: string[]
+  year?: string[]
   search?: string
   status?: string[] // New status filter
   limit?: number
@@ -181,6 +182,10 @@ export async function getSiteData5G(
 
   if (filters.region && filters.region.length > 0) {
     query = query.in('region', filters.region)
+  }
+
+  if (filters.year && filters.year.length > 0) {
+    query = query.in('year', filters.year)
   }
 
   if (filters.ran_score && filters.ran_score.length > 0) {
@@ -302,69 +307,128 @@ const formatCircleValue = (value: string) =>
     .toLowerCase()
     .replace(/\b\w/g, char => char.toUpperCase())
 
+// In-memory cache untuk filter options dengan TTL
+const filterOptionsCache = new Map<string, { data: any, timestamp: number }>()
+const FILTER_OPTIONS_CACHE_TTL = 10 * 60 * 1000 // 10 menit
+
 export async function getAopFilterOptions() {
-  const fetchDistinctValues = async (column: string) => {
+  // Check cache first
+  const cacheKey = 'aop_filter_options'
+  const cached = filterOptionsCache.get(cacheKey)
+  const now = Date.now()
+  
+  if (cached && (now - cached.timestamp) < FILTER_OPTIONS_CACHE_TTL) {
+    console.log(`[AOP Filters] Using cached data (age: ${Math.round((now - cached.timestamp) / 1000)}s)`)
+    return cached.data
+  }
+  
+  console.log(`[AOP Filters] Fetching fresh data from database...`)
+
+  // OPTIMIZED: Fetch distinct values dengan pagination yang efisien
+  // Menggunakan pagination untuk memastikan semua data ter-fetch
+  const fetchDistinctValuesOptimized = async (column: string) => {
     const values = new Map<string, string>()
-    const pageSize = 5000
-    let page = 0
-    let hasMore = true
+    
+    try {
+      // OPTIMIZED: Fetch dengan pagination untuk memastikan semua data ter-fetch
+      // Distinct values biasanya tidak banyak, tapi kita perlu memastikan semua data ter-fetch
+      const pageSize = 1000 // Supabase recommended page size
+      let page = 0
+      let hasMore = true
+      const maxPages = 100 // Safety limit untuk mencegah infinite loop
+      
+      while (hasMore && page < maxPages) {
+        const from = page * pageSize
+        const to = from + pageSize - 1
 
-    while (hasMore) {
-      const from = page * pageSize
-      const to = from + pageSize - 1
+        // Fetch data dengan pagination, filter null/empty di query level
+        const { data, error } = await supabase
+          .from('site_data_aop')
+          .select(column)
+          .not(column, 'is', null)
+          .neq(column, '')
+          .range(from, to)
+          .order(column, { ascending: true }) // Order untuk konsistensi
 
-      const { data, error } = await supabase
-        .from('site_data_aop')
-        .select(column)
-        .not(column, 'is', null)
-        .neq(column, '')
-        .range(from, to)
+        if (error) {
+          throw error
+        }
 
-      if (error) {
-        throw error
-      }
+        const rows = (data as unknown) as Record<string, string | null>[] | null
+        
+        if (!rows || rows.length === 0) {
+          hasMore = false
+          break
+        }
 
-      const rows = (data as unknown) as Record<string, string | null>[] | null
-      rows?.forEach(row => {
-        const value = row[column]
-        if (typeof value === 'string') {
-          const trimmed = value.trim()
-          if (trimmed) {
-            const normalized = trimmed.toLowerCase()
-            if (!values.has(normalized)) {
-              const formatted =
-                column === 'region_circle' ? formatCircleValue(trimmed) : trimmed
-              values.set(normalized, formatted)
+        // Process rows untuk extract distinct values
+        rows.forEach(row => {
+          const value = row[column]
+          if (typeof value === 'string') {
+            const trimmed = value.trim()
+            if (trimmed) {
+              const normalized = trimmed.toLowerCase()
+              if (!values.has(normalized)) {
+                const formatted =
+                  column === 'region_circle' ? formatCircleValue(trimmed) : trimmed
+                values.set(normalized, formatted)
+              }
             }
           }
-        }
-      })
+        })
 
-      hasMore = !!rows && rows.length === pageSize
-      page += 1
-
-      if (page > 50) {
-        console.warn(`Pagination limit reached while fetching ${column}`)
-        break
+        // Continue pagination jika masih ada data
+        hasMore = rows.length === pageSize
+        page += 1
       }
+
+      if (page >= maxPages) {
+        console.warn(`[AOP Filters] Pagination limit reached for ${column}, found ${values.size} distinct values`)
+      } else {
+        console.log(`[AOP Filters] Fetched ${values.size} distinct values for ${column} (${page} pages)`)
+      }
+    } catch (error) {
+      console.error(`[AOP Filters] Error fetching distinct values for ${column}:`, error)
+      // Return empty array on error instead of throwing
+      return []
     }
 
-    return Array.from(values.values())
+    const result = Array.from(values.values())
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b))
+    
+    console.log(`[AOP Filters] Returning ${result.length} distinct ${column} values:`, result.slice(0, 10).join(', '), result.length > 10 ? '...' : '')
+    
+    return result
   }
 
+  // OPTIMIZED: Fetch semua columns secara paralel dengan pagination per column
+  // Setiap column akan di-fetch dengan pagination untuk memastikan semua data ter-fetch
   const [vendors, programs, circles, siteCategories] = await Promise.all([
-    fetchDistinctValues('vendor_name'),
-    fetchDistinctValues('program_report'),
-    fetchDistinctValues('region_circle'),
-    fetchDistinctValues('site_category')
+    fetchDistinctValuesOptimized('vendor_name'),
+    fetchDistinctValuesOptimized('program_report'),
+    fetchDistinctValuesOptimized('region_circle'),
+    fetchDistinctValuesOptimized('site_category')
   ])
 
-  return {
+  const result = {
     vendors,
     programs,
     circles,
     siteCategories
   }
+
+  // Cache hasil
+  filterOptionsCache.set(cacheKey, { data: result, timestamp: now })
+  
+  // Cleanup cache yang expired (simple cleanup)
+  if (filterOptionsCache.size > 10) {
+    for (const [key, value] of filterOptionsCache.entries()) {
+      if ((now - value.timestamp) >= FILTER_OPTIONS_CACHE_TTL) {
+        filterOptionsCache.delete(key)
+      }
+    }
+  }
+
+  return result
 }

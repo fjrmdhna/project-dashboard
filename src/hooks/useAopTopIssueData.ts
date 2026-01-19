@@ -67,12 +67,13 @@ export function useAopTopIssueData(options: UseAopTopIssueDataOptions = {}): Use
   }, [filter])
 
   // Use useApiCache dengan validasi
+  // OPTIMIZED: Increase cache time untuk data yang jarang berubah
   const { data: cachedData, loading, error, refetch: cacheRefetch } = useApiCache<{ data: TopIssue[], topIssuesTotal: number, totalIssues: number }>(
     cacheKey,
     fetchFn,
     {
-      staleTime: 2 * 60 * 1000, // 2 menit
-      cacheTime: 5 * 60 * 1000, // 5 menit
+      staleTime: 3 * 60 * 1000, // 3 menit (increased from 2)
+      cacheTime: 10 * 60 * 1000, // 10 menit (increased from 5)
       refetchOnMount: true,
       validateFn: (data) => {
         // Validasi struktur data - cache semua valid data (termasuk empty) untuk mencegah infinite refetch

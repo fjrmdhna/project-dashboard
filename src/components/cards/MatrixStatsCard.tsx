@@ -28,6 +28,19 @@ export interface MatrixStatsCardProps {
   rows: Row[]
   patpCount?: number
   variant?: "default" | "aop"
+  stats?: {
+    totalSites?: number
+    rfi?: number
+    crfi?: number
+    mos?: number
+    install?: number
+    rfs?: number
+    activated?: number
+    rfc?: number
+    hotnews?: number
+    endorse?: number
+    pac?: number
+  }
 }
 
 // Default metric configuration (Hermes 5G)
@@ -81,12 +94,33 @@ function MetricItem({
   )
 }
 
-export function MatrixStatsCard({ rows, patpCount = 0, variant = "default" }: MatrixStatsCardProps) {
+export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stats: providedStats }: MatrixStatsCardProps) {
   const stats = useMemo(() => {
+    // #region agent log
+    const calcStartTime = performance.now();
+    // #endregion
+    // OPTIMIZED: Gunakan stats dari API jika tersedia (sudah dihitung di database)
+    // Fallback ke calculation dari rows jika stats tidak tersedia
+    if (variant === "aop" && providedStats) {
+      return {
+        totalSites: providedStats.totalSites ?? rows.length,
+        rfi: providedStats.rfi ?? rows.filter(row => row.ic_000010_af).length,
+        crfi: providedStats.crfi ?? rows.filter(row => row.rfi_accepted).length,
+        mos: providedStats.mos ?? rows.filter(row => row.mos_af).length,
+        install: providedStats.install ?? rows.filter(row => row.ic_000040_af).length,
+        rfs: providedStats.rfs ?? providedStats.activated ?? rows.filter(row => row.rfs_af).length,
+        rfc: providedStats.rfc ?? rows.filter(row => row.rfc_approved).length,
+        patp: patpCount,
+        hotnews: providedStats.hotnews ?? rows.filter(row => row.hotnews_af).length,
+        endorse: providedStats.endorse ?? rows.filter(row => row.endorse_af).length,
+        pac: providedStats.pac ?? rows.filter(row => row.pac_accepted_af).length
+      }
+    }
+    
     const totalSites = rows.length
     
     if (variant === "aop") {
-      // AOP variant metrics
+      // AOP variant metrics (fallback calculation jika stats tidak tersedia)
       const rfi = rows.filter(row => row.ic_000010_af).length
       const crfi = rows.filter(row => row.rfi_accepted).length
       const mos = rows.filter(row => row.mos_af).length
@@ -138,7 +172,11 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default" }: Ma
       pac
     }
     }
-  }, [rows, patpCount, variant])
+    // #region agent log
+    const calcEndTime = performance.now();
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MatrixStatsCard.tsx:175',message:'Stats calculation completed',data:{calculationTime:calcEndTime-calcStartTime,rowCount:rows.length,variant,hasProvidedStats:!!providedStats},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+  }, [rows, patpCount, variant, providedStats])
 
   const metricConfig = variant === "aop" ? AOP_METRIC_CONFIG : DEFAULT_METRIC_CONFIG
 

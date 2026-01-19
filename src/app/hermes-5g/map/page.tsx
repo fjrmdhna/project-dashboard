@@ -102,8 +102,9 @@ export default function Hermes5GMapPage() {
     imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
     nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
     region: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [],
+    year: filterContext.yearFilter !== 'all' ? filterContext.yearFilter.split(',').filter(Boolean) : [],
     status: filterContext.statusFilters || []
-  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.statusFilters])
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.statusFilters])
 
   const visiblePoints = useMemo(
     () => (showExcluded ? points : points.filter(point => !point.isExcluded)),
@@ -156,6 +157,9 @@ export default function Hermes5GMapPage() {
       currentFilter.region?.forEach((value) => {
         params.append('region', value)
       })
+      currentFilter.year?.forEach((value) => {
+        params.append('year', value)
+      })
       currentFilter.status.forEach((value) => {
         params.append('status', value)
       })
@@ -203,6 +207,9 @@ export default function Hermes5GMapPage() {
           })
           currentFilter.region?.forEach((value) => {
             totalParams.append('region', value)
+          })
+          currentFilter.year?.forEach((value) => {
+            totalParams.append('year', value)
           })
           // Don't include status filter for total counts
 
@@ -267,6 +274,7 @@ export default function Hermes5GMapPage() {
     filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp.join(',') : 'all')
     filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster.join(',') : 'all')
     filterContext.setRegionFilter(newFilters.region && newFilters.region.length > 0 ? newFilters.region.join(',') : 'all')
+    filterContext.setYearFilter(newFilters.year && newFilters.year.length > 0 ? newFilters.year.join(',') : 'all')
     // ran_score filter removed - no longer used
     // loadData akan dipanggil otomatis oleh useEffect ketika currentFilter berubah
   }

@@ -142,25 +142,117 @@ export async function GET(request: NextRequest) {
     
     const filteredData = data || []
     
-    // Hitung jumlah untuk masing-masing metrik berdasarkan kolom site_data_aop
+    // OPTIMIZED: Gunakan database function untuk menghitung stats (lebih cepat daripada di memory)
+    // Convert empty arrays to null for database function
+    const vendorNamesParam = vendorNames.length > 0 ? vendorNames : null
+    const programReportsParam = programReports.length > 0 ? programReports : null
+    const circlesParam = circles.length > 0 ? circles : null
+    const siteCategoriesParam = siteCategories.length > 0 ? siteCategories : null
+    const searchParam = q || null
+    
+    // Call database function untuk stats calculation
+    let stats = {
+      totalSites: 0,
+      caf: 0,
+      mos: 0,
+      install: 0,
+      readiness: 0,
+      activated: 0,
+      rfc: 0,
+      hotnews: 0,
+      endorse: 0,
+      pac: 0,
+      nanoClusters: 0
+    }
+    
+    try {
+      const { data: statsData, error: statsError } = await supabase.rpc('get_aop_stats', {
+        p_vendor_names: vendorNamesParam,
+        p_program_reports: programReportsParam,
+        p_circles: circlesParam,
+        p_site_categories: siteCategoriesParam,
+        p_search: searchParam
+      })
+      
+      if (!statsError && statsData && statsData.length > 0) {
+        const statsRow = statsData[0]
+        stats = {
+          totalSites: Number(statsRow.total_sites) || 0,
+          caf: Number(statsRow.caf_count) || 0,
+          mos: Number(statsRow.mos_count) || 0,
+          install: Number(statsRow.install_count) || 0,
+          readiness: Number(statsRow.readiness_count) || 0,
+          activated: Number(statsRow.activated_count) || 0,
+          rfc: Number(statsRow.rfc_count) || 0,
+          hotnews: Number(statsRow.hotnews_count) || 0,
+          endorse: Number(statsRow.endorse_count) || 0,
+          pac: Number(statsRow.pac_count) || 0,
+          nanoClusters: Number(statsRow.cluster_count) || 0
+        }
+      } else if (statsError) {
+        // Fallback to memory calculation if function fails
+        console.warn('Database function get_aop_stats failed, using memory calculation:', statsError)
+        const cafCount = filteredData.filter(row => row.rfi_accepted).length
+        const mosCount = filteredData.filter(row => row.mos_af).length
+        const installCount = filteredData.filter(row => row.ic_000040_af).length
+        const readinessCount = filteredData.filter(row => row.imp_integ_af).length
+        const activatedCount = filteredData.filter(row => row.rfs_af).length
+        const rfcCount = filteredData.filter(row => row.rfc_approved).length
+        const hotnewsCount = filteredData.filter(row => row.hotnews_af).length
+        const endorseCount = filteredData.filter(row => row.endorse_af).length
+        const pacCount = filteredData.filter(row => row.pac_accepted_af).length
+        const uniqueClusters = new Set()
+        filteredData.forEach(row => {
+          if (row.region_circle) {
+            uniqueClusters.add(row.region_circle)
+          }
+        })
+        stats = {
+          totalSites: filteredData.length,
+          caf: cafCount,
+          mos: mosCount,
+          install: installCount,
+          readiness: readinessCount,
+          activated: activatedCount,
+          rfc: rfcCount,
+          hotnews: hotnewsCount,
+          endorse: endorseCount,
+          pac: pacCount,
+          nanoClusters: uniqueClusters.size
+        }
+      }
+    } catch (statsErr) {
+      // Fallback to memory calculation if function call fails
+      console.warn('Error calling get_aop_stats function, using memory calculation:', statsErr)
     const cafCount = filteredData.filter(row => row.rfi_accepted).length
     const mosCount = filteredData.filter(row => row.mos_af).length
-    const installCount = filteredData.filter(row => row.ic_000040_af).length // INSTALL menggunakan ic_000040_af
+      const installCount = filteredData.filter(row => row.ic_000040_af).length
     const readinessCount = filteredData.filter(row => row.imp_integ_af).length
     const activatedCount = filteredData.filter(row => row.rfs_af).length
     const rfcCount = filteredData.filter(row => row.rfc_approved).length
     const hotnewsCount = filteredData.filter(row => row.hotnews_af).length
     const endorseCount = filteredData.filter(row => row.endorse_af).length
     const pacCount = filteredData.filter(row => row.pac_accepted_af).length
-    
-    // Hitung jumlah region_circle sebagai pengganti nano_cluster
     const uniqueClusters = new Set()
     filteredData.forEach(row => {
       if (row.region_circle) {
         uniqueClusters.add(row.region_circle)
       }
     })
-    const clusterCount = uniqueClusters.size
+      stats = {
+        totalSites: filteredData.length,
+        caf: cafCount,
+        mos: mosCount,
+        install: installCount,
+        readiness: readinessCount,
+        activated: activatedCount,
+        rfc: rfcCount,
+        hotnews: hotnewsCount,
+        endorse: endorseCount,
+        pac: pacCount,
+        nanoClusters: uniqueClusters.size
+      }
+    }
     
     // Map data to expected format for frontend
     const mappedData = filteredData.map(row => ({
@@ -195,20 +287,12 @@ export async function GET(request: NextRequest) {
       status: 'success',
       data: mappedData,
       count: mappedData.length,
-      stats: {
-        totalSites: mappedData.length,
-        caf: cafCount,
-        mos: mosCount,
-        install: installCount,
-        readiness: readinessCount,
-        activated: activatedCount,
-        rfc: rfcCount,
-        hotnews: hotnewsCount,
-        endorse: endorseCount,
-        pac: pacCount,
-        nanoClusters: clusterCount
-      },
+      stats: stats,
       timestamp: new Date().toISOString()
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
+      }
     })
   } catch (error) {
     console.error('Error in AOP site-data API route:', error)

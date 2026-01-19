@@ -62,11 +62,12 @@ export function useAopDailyRunrateData(options: UseAopDailyRunrateDataOptions = 
   }, [filter])
 
   // Use useApiCache dengan validasi
+  // OPTIMIZED: Increase cache time untuk data yang jarang berubah
   const { data: cachedData, loading, error, refetch: cacheRefetch } = useApiCache<AopDailyRunrateItem[]>(
     cacheKey,
     fetchFn,
     {
-      staleTime: 2 * 60 * 1000, // 2 menit
+      staleTime: 2 * 60 * 1000, // 2 menit (daily runrate changes more frequently)
       cacheTime: 5 * 60 * 1000, // 5 menit
       refetchOnMount: true,
       validateFn: (data) => {

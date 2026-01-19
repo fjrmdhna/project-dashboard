@@ -71,6 +71,7 @@ export async function GET(request: NextRequest) {
     const impTtps = searchParams.getAll('imp_ttp') || []
     const nanoClusters = searchParams.getAll('nano_cluster') || []
     const regions = searchParams.getAll('region') || []
+    const years = searchParams.getAll('year') || []
     const statusFilters = searchParams.getAll('status') || []
 
     const { data } = await getSiteData5G({
@@ -79,6 +80,7 @@ export async function GET(request: NextRequest) {
       imp_ttp: impTtps.length ? impTtps : undefined,
       nano_cluster: nanoClusters.length ? nanoClusters : undefined,
       region: regions.length ? regions : undefined,
+      year: years.length ? years : undefined,
       search: q || undefined,
       status: statusFilters.length ? statusFilters : undefined,
       limit: 20000

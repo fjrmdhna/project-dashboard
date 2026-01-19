@@ -9,6 +9,10 @@ export async function GET() {
       status: 'success',
       data: options,
       timestamp: new Date().toISOString()
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
+      }
     })
   } catch (error) {
     console.error('Error fetching AOP filter options:', error)

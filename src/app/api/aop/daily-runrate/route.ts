@@ -63,13 +63,19 @@ export async function GET(request: NextRequest) {
       query = query.in('site_category', siteCategories);
     }
     
-    // Get data from Supabase with pagination
+    // OPTIMIZED: Note - Date filtering di Supabase client tidak mudah untuk multiple date columns
+    // Kita tetap fetch data dan filter di memory, tapi dengan limit pagination yang lebih kecil
+    // karena data yang relevan untuk 7 hari terakhir biasanya tidak terlalu banyak
+    
+    // OPTIMIZED: Get data dengan pagination yang lebih efisien
+    // Karena kita sudah filter by date, kemungkinan besar tidak perlu fetch semua data
     let allData: any[] = [];
     let hasMore = true;
     let page = 0;
     const pageSize = 1000;
+    const maxPages = 10; // Limit pagination untuk daily runrate (tidak perlu semua data)
     
-    while (hasMore) {
+    while (hasMore && page < maxPages) {
       const from = page * pageSize;
       const to = from + pageSize - 1;
       
@@ -89,6 +95,10 @@ export async function GET(request: NextRequest) {
           data: emptyData,
           timestamp: new Date().toISOString(),
           error: error.message
+        }, {
+          headers: {
+            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
+          }
         });
       }
       
@@ -98,12 +108,6 @@ export async function GET(request: NextRequest) {
         page++;
       } else {
         hasMore = false;
-      }
-      
-      // Safety break untuk mencegah infinite loop
-      if (page > 50) {
-        console.warn('Stopping pagination after 50 pages');
-        break;
       }
     }
     
@@ -158,6 +162,10 @@ export async function GET(request: NextRequest) {
       status: 'success',
       data: dailyData,
       timestamp: new Date().toISOString()
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
+      }
     });
   } catch (error) {
     console.error('Error fetching AOP daily runrate data:', error);

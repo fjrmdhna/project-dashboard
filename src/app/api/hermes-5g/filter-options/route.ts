@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
         cities: result.data.cities,
         nanoClusters: result.data.nanoClusters,
         regions: result.data.regions,
+        years: result.data.years,
         ranScores: result.data.ranScores,
       },
       timestamp: result.timestamp,

@@ -92,6 +92,10 @@ export function FilterProvider({ children }: FilterProviderProps) {
     setFiltersState(prev => ({ ...prev, regionFilter: region }))
   }, [])
 
+  const setYearFilter = useCallback((year: string) => {
+    setFiltersState(prev => ({ ...prev, yearFilter: year }))
+  }, [])
+
   const setStatusFilters = useCallback((statuses: string[]) => {
     setFiltersState(prev => ({ ...prev, statusFilters: statuses }))
   }, [])
@@ -117,6 +121,7 @@ export function FilterProvider({ children }: FilterProviderProps) {
     setCityFilter,
     setNanoClusterFilter,
     setRanScoreFilter,
+    setYearFilter,
     setSearchTerm,
     setStatusFilter,
     setRegionFilter,

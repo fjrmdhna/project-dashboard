@@ -20,6 +20,7 @@ export async function GET() {
         cities: filterOptions.data.cities,
         nanoClusters: filterOptions.data.nanoClusters,
         regions: filterOptions.data.regions,
+        years: filterOptions.data.years,
         ranScores: filterOptions.data.ranScores,
       },
       timestamp: new Date().toISOString(),
