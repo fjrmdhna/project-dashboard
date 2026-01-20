@@ -69,7 +69,8 @@ const MINIMAL_COLUMNS = [
   'year',              // Year filter
   'ic_000010_af',      // RFI - ReadinessCard
   'imp_integ_af',      // Readiness - VendorLeaderboard
-  'rfs_bf',            // Baseline - ProgressCurve
+  'mocn_activation_forecast', // Baseline - ProgressCurve (replaces rfs_bf)
+  'rfs_bf',            // Legacy Baseline - kept for backward compatibility
   'rfs_ff',            // Forecast - ProgressCurve, VendorLeaderboard, DailyRunrate
   'rfs_af',            // Actual - ProgressCurve, ActivatedCard, VendorLeaderboard, DailyRunrate
   'rfi_accepted',      // CAF stats
@@ -105,6 +106,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       ic_000010_af: row.ic_000010_af || null,
       ic_000040_af: row.ic_000040_af || null,
       imp_integ_af: row.imp_integ_af || null,
+      mocn_activation_forecast: row.mocn_activation_forecast || null, // Baseline for ProgressCurve
       rfs_bf: row.rfs_bf || null,
       rfs_ff: row.rfs_ff || null,
       rfs_af: row.rfs_af || null,

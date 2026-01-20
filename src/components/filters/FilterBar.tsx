@@ -100,17 +100,21 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               ranScores: data.data.ranScores || []
             }
             
-            // For AOP variant: detect stale cache by checking if ranScores are normalized
-            // Normalized ranScores should only have "New Site", "Expansion", or "-"
-            // If we see long values like "Expansion AOP 2025", cache is stale
-            if (variant === 'aop' && !hasRetried && newOptions.ranScores.length > 0) {
-              const hasUnnormalizedValues = newOptions.ranScores.some((rs: string) => 
-                rs.length > 15 || // Normalized values are short
-                (rs.toLowerCase().includes('aop') && rs !== 'New Site' && rs !== 'Expansion')
-              )
+            // For AOP variant: detect stale cache by checking if siteCategories are normalized
+            // Normalized siteCategories should only have "New Site", "Expansion", or other short values
+            // If we see long values like "New Site B2B", "Existing", cache is stale
+            if (variant === 'aop' && !hasRetried && newOptions.siteCategories && newOptions.siteCategories.length > 0) {
+              const hasUnnormalizedValues = newOptions.siteCategories.some((sc: string) => {
+                const lower = sc.toLowerCase()
+                // Check if value contains "new" but is not normalized to "New Site"
+                if (lower.includes('new') && sc !== 'New Site') return true
+                // Check if value contains "existing" or "upgrade" but is not normalized to "Expansion"
+                if ((lower.includes('existing') || lower.includes('upgrade')) && sc !== 'Expansion') return true
+                return false
+              })
               
               if (hasUnnormalizedValues) {
-                console.log('[FilterBar] Detected stale ranScores cache, forcing refresh...')
+                console.log('[FilterBar] Detected stale siteCategories cache, forcing refresh...')
                 hasRetried = true
                 await fetchOptions(true)
                 return

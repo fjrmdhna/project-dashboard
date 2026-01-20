@@ -307,52 +307,47 @@ const formatCircleValue = (value: string) =>
     .toLowerCase()
     .replace(/\b\w/g, char => char.toUpperCase())
 
-// Format site_category dengan Title Case untuk konsistensi display
-// Handles variations like: "existing", "Existing", "Existing " -> "Existing"
-// Handles multi-word like: "new site", "New Site", "NEW SITE" -> "New Site"
-const formatSiteCategoryValue = (value: string) =>
+/**
+ * Normalize site_category value to grouped categories
+ * Groups values containing "new" -> "New Site"
+ * Groups values containing "existing" or "upgrade" -> "Expansion"
+ * Other values remain as Title Case
+ */
+export function normalizeSiteCategoryValue(value: string): string {
+  if (!value) return value
+  
+  const lowerValue = value.toLowerCase().trim()
+  
+  // Check for "new" keyword (case-insensitive) -> "New Site"
+  if (lowerValue.includes('new')) {
+    return 'New Site'
+  }
+  
+  // Check for "existing" or "upgrade" keyword (case-insensitive) -> "Expansion"
+  if (lowerValue.includes('existing') || lowerValue.includes('upgrade')) {
+    return 'Expansion'
+  }
+  
+  // Return Title Case for others
+  return value
+    .trim()
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+/**
+ * Format ran_score value with Title Case for display consistency
+ * No grouping/normalization - returns as-is with proper casing
+ */
+const formatRanScoreValue = (value: string) =>
   value
     .trim()
     .toLowerCase()
     .split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
-
-/**
- * Normalize ran_score value to grouped categories
- * Groups values containing "New Site" -> "New Site"
- * Groups values containing "Expansion" -> "Expansion"
- * Other values remain as-is (e.g., "-")
- */
-export function normalizeRanScoreValue(value: string): string {
-  if (!value) return value
-  
-  const lowerValue = value.toLowerCase().trim()
-  
-  // Check for "new site" keyword (case-insensitive)
-  if (lowerValue.includes('new site')) {
-    return 'New Site'
-  }
-  
-  // Check for "expansion" keyword (case-insensitive)
-  if (lowerValue.includes('expansion')) {
-    return 'Expansion'
-  }
-  
-  // Return original value for others (e.g., "-")
-  return value.trim()
-}
-
-/**
- * Check if a ran_score value matches a normalized filter
- * Used for client-side filtering
- */
-export function matchesNormalizedRanScore(rowValue: string | null | undefined, filterValue: string): boolean {
-  if (!rowValue) return false
-  
-  const normalizedRow = normalizeRanScoreValue(rowValue)
-  return normalizedRow.toLowerCase() === filterValue.toLowerCase()
-}
 
 // In-memory cache untuk filter options dengan TTL
 const filterOptionsCache = new Map<string, { data: any, timestamp: number }>()
@@ -436,12 +431,12 @@ export async function getAopFilterOptions(forceRefresh = false) {
                 formatted = formatCircleValue(trimmed)
                 normalizedKey = formatted.toLowerCase()
               } else if (column === 'site_category') {
-                // Use Title Case untuk site_category agar konsisten
-                formatted = formatSiteCategoryValue(trimmed)
+                // Normalize site_category: group by "New Site" or "Expansion"
+                formatted = normalizeSiteCategoryValue(trimmed)
                 normalizedKey = formatted.toLowerCase()
               } else if (column === 'ran_score') {
-                // Normalize ran_score: group by "New Site" or "Expansion"
-                formatted = normalizeRanScoreValue(trimmed)
+                // Use Title Case untuk ran_score agar konsisten (no grouping)
+                formatted = formatRanScoreValue(trimmed)
                 normalizedKey = formatted.toLowerCase()
               } else {
                 formatted = trimmed

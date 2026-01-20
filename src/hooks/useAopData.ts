@@ -6,24 +6,24 @@ import { useApiCache } from './useApiCache'
 import { fetchWithRetry } from '@/lib/api-utils'
 import { format, subDays } from 'date-fns'
 
-// Helper function to normalize ran_score for filtering
+// Helper function to normalize site_category for filtering
 // Must match the normalization in supabase.ts
-function normalizeRanScoreForFilter(value: string | null | undefined): string {
+function normalizeSiteCategoryForFilter(value: string | null | undefined): string {
   if (!value) return ''
   
   const lowerValue = value.toLowerCase().trim()
   
-  // Check for "new site" keyword (case-insensitive)
-  if (lowerValue.includes('new site')) {
+  // Check for "new" keyword (case-insensitive) -> "new site"
+  if (lowerValue.includes('new')) {
     return 'new site'
   }
   
-  // Check for "expansion" keyword (case-insensitive)
-  if (lowerValue.includes('expansion')) {
+  // Check for "existing" or "upgrade" keyword (case-insensitive) -> "expansion"
+  if (lowerValue.includes('existing') || lowerValue.includes('upgrade')) {
     return 'expansion'
   }
   
-  // Return lowercase original value for others (e.g., "-")
+  // Return lowercase original value for others
   return lowerValue
 }
 
@@ -33,7 +33,8 @@ export interface AopSiteData extends MatrixRow {
   region_circle?: string | null
   site_category?: string | null
   ran_score?: string | null
-  rfs_bf?: string | null
+  mocn_activation_forecast?: string | null  // Baseline for ProgressCurve
+  rfs_bf?: string | null                    // Legacy baseline
   rfs_ff?: string | null
   year?: string | null
   issue_category?: string | null
@@ -171,19 +172,19 @@ function filterDataClientSide(
       if (!matchesCircle) return false
     }
     
-    // Site category filter (case-insensitive)
+    // Site category filter (normalized matching)
+    // Filter values are normalized (e.g., "New Site", "Expansion")
+    // Row values need to be normalized before comparison
     if (siteCategories.length > 0) {
-      const rowCategory = (row.site_category || '').toLowerCase()
-      const matchesCategory = siteCategories.some(sc => rowCategory.includes(sc.toLowerCase()))
+      const normalizedRowCategory = normalizeSiteCategoryForFilter(row.site_category)
+      const matchesCategory = siteCategories.some(sc => normalizedRowCategory === sc.toLowerCase())
       if (!matchesCategory) return false
     }
     
-    // RAN Score filter (normalized matching)
-    // Filter values are normalized (e.g., "New Site", "Expansion")
-    // Row values need to be normalized before comparison
+    // RAN Score filter (case-insensitive, no normalization)
     if (ranScores.length > 0) {
-      const normalizedRowRanScore = normalizeRanScoreForFilter(row.ran_score)
-      const matchesRanScore = ranScores.some(rs => normalizedRowRanScore === rs.toLowerCase())
+      const rowRanScore = (row.ran_score || '').toLowerCase().trim()
+      const matchesRanScore = ranScores.some(rs => rowRanScore === rs.toLowerCase())
       if (!matchesRanScore) return false
     }
     

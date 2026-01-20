@@ -5,13 +5,13 @@ import { TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line } from 'recharts';
 
 export type Row = {
-  rfs_bf?: string | null;             // Baseline date
-  rfs_ff?: string | null;             // Forecast date
-  rfs_af?: string | null;             // Actual date
+  mocn_activation_forecast?: string | null; // Baseline date (MOCN Activation Forecast)
+  rfs_ff?: string | null;                   // Forecast date
+  rfs_af?: string | null;                   // Actual date
   // Legacy fields (for backward compatibility with other pages)
-  rfs_forecast_lock?: string | null; // forecast date (legacy)
-  imp_integ_af?: string | null;       // readiness date (legacy)
-  mocn_activation_forecast?: string | null; // plan 5G readiness date (legacy)
+  rfs_bf?: string | null;                   // Legacy baseline (kept for backward compatibility)
+  rfs_forecast_lock?: string | null;        // forecast date (legacy)
+  imp_integ_af?: string | null;             // readiness date (legacy)
 };
 
 export type ProgressCurveProps = {
@@ -128,15 +128,42 @@ function buildHybridBuckets(anchorDate?: string, span: number = 5, rows: Row[] =
   const anchor = toStart(anchorDate ? new Date(anchorDate) : new Date());
 
   // For AOP, we want to show a fixed window around the anchor date
-  // span determines total months to display
+  // span determines minimum months to display before anchor
   // Current month is displayed as weeks, others as months
   const monthsBefore = Math.floor(span / 2);
-  const monthsAfter = span - monthsBefore - 1;
 
-  // Calculate range based on span (NOT based on data range)
-  // This ensures consistent display regardless of how much historical data exists
+  // Calculate rangeStart based on span
   const rangeStart = toStart(addMonths(anchor, -monthsBefore));
-  const rangeEnd = toEnd(addMonths(anchor, monthsAfter));
+
+  // Calculate rangeEnd dynamically based on the latest date from mocn_activation_forecast or rfs_ff
+  // This ensures the chart extends to show all planned/forecast data
+  let latestFutureDate: Date | null = null;
+  
+  for (const row of rows) {
+    // Check mocn_activation_forecast (baseline)
+    const baselineDate = safeDate(row.mocn_activation_forecast);
+    if (baselineDate && (!latestFutureDate || baselineDate > latestFutureDate)) {
+      latestFutureDate = baselineDate;
+    }
+    
+    // Check rfs_ff (forecast)
+    const forecastDate = safeDate(row.rfs_ff);
+    if (forecastDate && (!latestFutureDate || forecastDate > latestFutureDate)) {
+      latestFutureDate = forecastDate;
+    }
+  }
+
+  // Default: if no future dates found, use span-based calculation
+  // Otherwise, use the latest date from data (with 1 month buffer for visibility)
+  let rangeEnd: Date;
+  if (latestFutureDate) {
+    // Use the end of the month containing the latest future date
+    rangeEnd = toEnd(latestFutureDate);
+  } else {
+    // Fallback to span-based calculation
+    const monthsAfter = span - monthsBefore - 1;
+    rangeEnd = toEnd(addMonths(anchor, monthsAfter));
+  }
 
   const buckets: Bucket[] = [];
   let cursor = toStart(rangeStart);
@@ -227,7 +254,7 @@ function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, ra
 type Point = {
   key: string;
   label: string;
-  baseline: number | null;  // rfs_bf
+  baseline: number | null;  // mocn_activation_forecast
   forecast: number | null;  // rfs_ff
   actual: number | null;    // rfs_af
   // Legacy fields for backward compatibility
@@ -252,9 +279,9 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
     return !!(d && endDate && d <= endDate);
   };
 
-  // Detect data format: AOP (has rfs_bf/rfs_ff) or Hermes 5G (has rfs_forecast_lock/imp_integ_af)
-  const isAopFormat = rows.some(row => row.rfs_bf || row.rfs_ff);
-  const isHermesFormat = rows.some(row => row.rfs_forecast_lock || row.imp_integ_af || row.mocn_activation_forecast);
+  // Detect data format: AOP (has mocn_activation_forecast/rfs_ff) or Hermes 5G (has rfs_forecast_lock/imp_integ_af)
+  const isAopFormat = rows.some(row => row.mocn_activation_forecast || row.rfs_ff);
+  const isHermesFormat = rows.some(row => row.rfs_forecast_lock || row.imp_integ_af);
 
   // AOP Format: baseline, forecast, actual
   if (isAopFormat) {
@@ -267,7 +294,8 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
     const actualDates: number[] = [];
     
     for (const row of rows) {
-      const baselineDate = safeDate(row.rfs_bf);
+      // Baseline now uses mocn_activation_forecast instead of rfs_bf
+      const baselineDate = safeDate(row.mocn_activation_forecast);
       const forecastDate = safeDate(row.rfs_ff);
       const actualDate = safeDate(row.rfs_af);
       
