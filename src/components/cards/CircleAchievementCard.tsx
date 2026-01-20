@@ -6,8 +6,8 @@ import { Target } from "lucide-react"
 // Type for row data
 interface Row {
   region_circle?: string | null
-  rfs_af?: string | null  // Achievement (Actual)
-  rfs_bf?: string | null  // Target (Baseline)
+  rfs_af?: string | null                    // Achievement (Actual)
+  mocn_activation_forecast?: string | null  // Target (MOCN Activation Forecast)
 }
 
 // Pre-aggregated data from useAopData hook (OPTIMIZATION)
@@ -23,7 +23,7 @@ export interface CircleAchievementCardProps {
 interface CircleData {
   circle: string
   achievement: number  // Count of rfs_af in current month
-  target: number       // Count of rfs_bf in current month
+  target: number       // Count of mocn_activation_forecast in current month
   remaining: number    // target - achievement
 }
 
@@ -75,8 +75,8 @@ export function CircleAchievementCard({ rows, isLoading = false }: CircleAchieve
         data.achievement++
       }
       
-      // Count target (rfs_bf in current month)
-      if (isInCurrentMonth(row.rfs_bf)) {
+      // Count target (mocn_activation_forecast in current month)
+      if (isInCurrentMonth(row.mocn_activation_forecast)) {
         data.target++
       }
       

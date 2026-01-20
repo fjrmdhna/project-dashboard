@@ -16,53 +16,39 @@ interface CircleListCardProps {
 // Komponen item circle individual
 interface CircleItemProps {
   circleName: string
-  readinessPct: number
   activatedPct: number
   totalSites: number
-  readySites: number
   activatedSites: number
 }
 
-function CircleItem({ circleName, readinessPct, activatedPct, totalSites, readySites, activatedSites }: CircleItemProps) {
-  // Tentukan warna berdasarkan persentase readiness
-  const getReadinessColor = (pct: number) => {
+function CircleItem({ circleName, activatedPct, totalSites, activatedSites }: CircleItemProps) {
+  // Tentukan warna berdasarkan persentase activated
+  const getActivatedColor = (pct: number) => {
     if (pct < 50) return { bg: "bg-amber-500/20", text: "#F59E0B", border: "border-amber-500/30" }
     if (pct < 80) return { bg: "bg-yellow-500/20", text: "#EAB308", border: "border-yellow-500/30" }
     if (pct < 100) return { bg: "bg-lime-500/20", text: "#84CC16", border: "border-lime-500/30" }
     return { bg: "bg-green-500/20", text: "#22C55E", border: "border-green-500/30" }
   }
 
-  // Tentukan warna untuk activated percentage
-  const getActivatedColor = (pct: number) => {
-    if (pct < 50) return "#F59E0B"
-    if (pct < 80) return "#EAB308"
-    if (pct < 100) return "#84CC16"
-    return "#22C55E"
-  }
-
-  const readinessColor = getReadinessColor(readinessPct)
   const activatedColor = getActivatedColor(activatedPct)
 
   return (
-    <div className={`flex items-center justify-between rounded-md border ${readinessColor.border} p-1.5 transition-all hover:bg-white/5 min-w-0`}>
+    <div className={`flex items-center justify-between rounded-md border ${activatedColor.border} p-1.5 transition-all hover:bg-white/5 min-w-0`}>
       <div className="flex items-center flex-1 min-w-0">
-        <div className={`${readinessColor.bg} p-1 rounded-md mr-2 flex-shrink-0`}>
-          <MapPin className="h-2.5 w-2.5" style={{ color: readinessColor.text }} />
+        <div className={`${activatedColor.bg} p-1 rounded-md mr-2 flex-shrink-0`}>
+          <MapPin className="h-2.5 w-2.5" style={{ color: activatedColor.text }} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[8px] font-semibold text-white truncate">
             {circleName}
           </div>
           <div className="text-[7px] text-[#B0B7C3]">
-            {readySites}/{totalSites} sites
+            {activatedSites}/{totalSites} sites
           </div>
         </div>
       </div>
-      <div className="flex flex-col items-end ml-2">
-        <div className="text-[9px] font-bold" style={{ color: readinessColor.text }}>
-          {readinessPct.toFixed(1)}% rdy
-        </div>
-        <div className="text-[8px] font-bold" style={{ color: activatedColor }}>
+      <div className="flex items-center ml-2">
+        <div className="text-[10px] font-bold" style={{ color: activatedColor.text }}>
           {activatedPct.toFixed(1)}% act
         </div>
       </div>
@@ -175,10 +161,8 @@ export function CircleListCard({ rows = [], className = "" }: CircleListCardProp
             <CircleItem
               key={circle.id}
               circleName={circle.circleName}
-              readinessPct={circle.readinessPct}
               activatedPct={circle.activatedPct}
               totalSites={circle.totalSites}
-              readySites={circle.readySites}
               activatedSites={circle.activatedSites}
             />
           ))}

@@ -31,7 +31,6 @@ interface GapMetricItemProps {
   label: string
   bgColor: string
   textColor: string
-  description: string
   className?: string
 }
 
@@ -41,7 +40,6 @@ function GapMetricItem({
   label, 
   bgColor, 
   textColor, 
-  description,
   className = "" 
 }: GapMetricItemProps) {
   return (
@@ -49,17 +47,12 @@ function GapMetricItem({
       <div className={`${bgColor} p-1 rounded-md mr-2 flex-shrink-0`}>
         {icon}
       </div>
-      <div className="flex flex-col flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <div className="text-lg font-bold leading-none" style={{ color: textColor }}>
-            {value.toLocaleString()}
-          </div>
-          <div className="text-[9px] font-semibold text-white/90 leading-tight">
-            {label}
-          </div>
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="text-lg font-bold leading-none" style={{ color: textColor }}>
+          {value.toLocaleString()}
         </div>
-        <div className="text-[8px] text-[#B0B7C3] leading-tight mt-0.5">
-          {description}
+        <div className="text-[9px] font-semibold text-white/90 leading-tight">
+          {label}
         </div>
       </div>
     </div>
@@ -142,7 +135,6 @@ export function GapStatusCard({ rows, aggregatedGaps }: GapStatusCardProps) {
           label="SOW - RFI" 
           bgColor="bg-amber-500/20"
           textColor="#F59E0B"
-          description="System key exists, no installation"
         />
         
         {/* Gap 2: RFI - CRFI */}
@@ -152,7 +144,6 @@ export function GapStatusCard({ rows, aggregatedGaps }: GapStatusCardProps) {
           label="RFI - CRFI" 
           bgColor="bg-yellow-500/20"
           textColor="#EAB308"
-          description="Installation done, not accepted"
         />
         
         {/* Gap 3: CRFI - OA */}
@@ -162,7 +153,6 @@ export function GapStatusCard({ rows, aggregatedGaps }: GapStatusCardProps) {
           label="CRFI - OA" 
           bgColor="bg-lime-500/20"
           textColor="#84CC16"
-          description="Accepted, not activated"
         />
       </div>
     </div>
