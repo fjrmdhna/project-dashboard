@@ -65,6 +65,7 @@ const MINIMAL_COLUMNS = [
   'program_report',    // Filter
   'region_circle',     // Readiness/Activated cards + Filter
   'site_category',     // Filter
+  'ran_score',         // RAN Score filter
   'year',              // Year filter
   'ic_000010_af',      // RFI - ReadinessCard
   'imp_integ_af',      // Readiness - VendorLeaderboard
@@ -96,6 +97,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       program_report: row.program_report || null,
       region_circle: row.region_circle || null,
       site_category: row.site_category || null,
+      ran_score: row.ran_score || null,
       year: row.year || null,
       // Stats fields
       caf_approved: row.rfi_accepted || null,

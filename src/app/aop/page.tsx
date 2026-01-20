@@ -240,6 +240,7 @@ export default function AopPage() {
   const stableProgramReports = useMemo(() => debouncedFilterValue.program_report || [], [debouncedFilterValue.program_report])
   const stableCircles = useMemo(() => debouncedFilterValue.circle || [], [debouncedFilterValue.circle])
   const stableSiteCategories = useMemo(() => debouncedFilterValue.site_category || [], [debouncedFilterValue.site_category])
+  const stableRanScores = useMemo(() => debouncedFilterValue.ran_score || [], [debouncedFilterValue.ran_score])
   const stableYears = useMemo(() => debouncedFilterValue.year || [], [debouncedFilterValue.year])
   const stableSearch = debouncedFilterValue.q || ''
 
@@ -249,6 +250,7 @@ export default function AopPage() {
     programReports: stableProgramReports,
     circles: stableCircles,
     siteCategories: stableSiteCategories,
+    ranScores: stableRanScores,
     years: stableYears,
     search: stableSearch
   })

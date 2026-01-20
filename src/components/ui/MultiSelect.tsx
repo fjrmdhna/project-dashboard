@@ -30,6 +30,11 @@ export function MultiSelect({
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 0, alignRight: false })
   const [isMounted, setIsMounted] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  
+  // FIX: Use ref to always get latest selected value to prevent stale closure
+  // This fixes the issue where rapid clicks use outdated selected array
+  const selectedRef = useRef(selected)
+  selectedRef.current = selected
 
   // Update menu position when button is clicked
   const updateMenuPosition = () => {
@@ -58,14 +63,16 @@ export function MultiSelect({
   }
 
   // Handle option selection
+  // FIX: Use selectedRef.current to always get the latest selected value
+  // This prevents stale closure issue when user clicks rapidly
   const handleOptionClick = useCallback((option: string) => {
-    const newSelected = selected.includes(option)
-      ? selected.filter(item => item !== option)
-      : [...selected, option]
+    const currentSelected = selectedRef.current
+    const newSelected = currentSelected.includes(option)
+      ? currentSelected.filter(item => item !== option)
+      : [...currentSelected, option]
     
-    console.log('MultiSelect option clicked:', option, 'New selection:', newSelected)
     onChange(newSelected)
-  }, [selected, onChange])
+  }, [onChange])
 
   // Handle clear all
   const handleClearAll = () => {

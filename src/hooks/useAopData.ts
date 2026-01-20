@@ -6,11 +6,33 @@ import { useApiCache } from './useApiCache'
 import { fetchWithRetry } from '@/lib/api-utils'
 import { format, subDays } from 'date-fns'
 
+// Helper function to normalize ran_score for filtering
+// Must match the normalization in supabase.ts
+function normalizeRanScoreForFilter(value: string | null | undefined): string {
+  if (!value) return ''
+  
+  const lowerValue = value.toLowerCase().trim()
+  
+  // Check for "new site" keyword (case-insensitive)
+  if (lowerValue.includes('new site')) {
+    return 'new site'
+  }
+  
+  // Check for "expansion" keyword (case-insensitive)
+  if (lowerValue.includes('expansion')) {
+    return 'expansion'
+  }
+  
+  // Return lowercase original value for others (e.g., "-")
+  return lowerValue
+}
+
 export interface AopSiteData extends MatrixRow {
   rfc_approved?: string | null
   pac_accepted_af?: string | null
   region_circle?: string | null
   site_category?: string | null
+  ran_score?: string | null
   rfs_bf?: string | null
   rfs_ff?: string | null
   year?: string | null
@@ -88,6 +110,7 @@ export interface UseAopDataOptions {
   programReports?: string[]
   circles?: string[]
   siteCategories?: string[]
+  ranScores?: string[]
   years?: string[]
   search?: string
   autoFetch?: boolean
@@ -115,6 +138,7 @@ function filterDataClientSide(
   programReports: string[],
   circles: string[],
   siteCategories: string[],
+  ranScores: string[],
   years: string[],
   search: string
 ): AopSiteData[] {
@@ -123,7 +147,7 @@ function filterDataClientSide(
   // If no filters, return all data
   const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
                      circles.length > 0 || siteCategories.length > 0 || 
-                     years.length > 0 || search.length > 0
+                     ranScores.length > 0 || years.length > 0 || search.length > 0
   
   if (!hasFilters) return data
   
@@ -152,6 +176,15 @@ function filterDataClientSide(
       const rowCategory = (row.site_category || '').toLowerCase()
       const matchesCategory = siteCategories.some(sc => rowCategory.includes(sc.toLowerCase()))
       if (!matchesCategory) return false
+    }
+    
+    // RAN Score filter (normalized matching)
+    // Filter values are normalized (e.g., "New Site", "Expansion")
+    // Row values need to be normalized before comparison
+    if (ranScores.length > 0) {
+      const normalizedRowRanScore = normalizeRanScoreForFilter(row.ran_score)
+      const matchesRanScore = ranScores.some(rs => normalizedRowRanScore === rs.toLowerCase())
+      if (!matchesRanScore) return false
     }
     
     // Year filter
@@ -374,7 +407,7 @@ function calculateStatsFromFilteredData(data: AopSiteData[]): AopDataStats {
 }
 
 export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
-  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], years = [], search = '' } = options
+  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], ranScores = [], years = [], search = '' } = options
 
   // OPTIMIZATION: Always fetch ALL data (no filter) and filter client-side
   // This makes filter changes instant instead of waiting 15-20s for API
@@ -430,11 +463,11 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
     
     const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
                        circles.length > 0 || siteCategories.length > 0 || 
-                       years.length > 0 || search.length > 0
+                       ranScores.length > 0 || years.length > 0 || search.length > 0
     
     // If no filters, use base data and calculate aggregation
     const dataToUse = hasFilters 
-      ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, years, search)
+      ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, ranScores, years, search)
       : baseData.data
     
     // Calculate stats (single pass)
@@ -451,7 +484,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       filteredStats: stats,
       aggregated: agg
     }
-  }, [baseData, vendorNames, programReports, circles, siteCategories, years, search])
+  }, [baseData, vendorNames, programReports, circles, siteCategories, ranScores, years, search])
 
   // Refetch function
   const refetch = useCallback(async () => {

@@ -318,19 +318,69 @@ const formatSiteCategoryValue = (value: string) =>
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 
+/**
+ * Normalize ran_score value to grouped categories
+ * Groups values containing "New Site" -> "New Site"
+ * Groups values containing "Expansion" -> "Expansion"
+ * Other values remain as-is (e.g., "-")
+ */
+export function normalizeRanScoreValue(value: string): string {
+  if (!value) return value
+  
+  const lowerValue = value.toLowerCase().trim()
+  
+  // Check for "new site" keyword (case-insensitive)
+  if (lowerValue.includes('new site')) {
+    return 'New Site'
+  }
+  
+  // Check for "expansion" keyword (case-insensitive)
+  if (lowerValue.includes('expansion')) {
+    return 'Expansion'
+  }
+  
+  // Return original value for others (e.g., "-")
+  return value.trim()
+}
+
+/**
+ * Check if a ran_score value matches a normalized filter
+ * Used for client-side filtering
+ */
+export function matchesNormalizedRanScore(rowValue: string | null | undefined, filterValue: string): boolean {
+  if (!rowValue) return false
+  
+  const normalizedRow = normalizeRanScoreValue(rowValue)
+  return normalizedRow.toLowerCase() === filterValue.toLowerCase()
+}
+
 // In-memory cache untuk filter options dengan TTL
 const filterOptionsCache = new Map<string, { data: any, timestamp: number }>()
 const FILTER_OPTIONS_CACHE_TTL = 10 * 60 * 1000 // 10 menit
 
-export async function getAopFilterOptions() {
-  // Check cache first
+/**
+ * Clear in-memory filter options cache
+ * Call this when you need to force refresh filter options
+ */
+export function clearAopFilterOptionsCache() {
+  filterOptionsCache.clear()
+  console.log('[AOP Filters] In-memory cache cleared')
+}
+
+export async function getAopFilterOptions(forceRefresh = false) {
+  // Check cache first (unless force refresh)
   const cacheKey = 'aop_filter_options'
   const cached = filterOptionsCache.get(cacheKey)
   const now = Date.now()
   
-  if (cached && (now - cached.timestamp) < FILTER_OPTIONS_CACHE_TTL) {
+  if (!forceRefresh && cached && (now - cached.timestamp) < FILTER_OPTIONS_CACHE_TTL) {
     console.log(`[AOP Filters] Using cached data (age: ${Math.round((now - cached.timestamp) / 1000)}s)`)
     return cached.data
+  }
+  
+  if (forceRefresh) {
+    filterOptionsCache.delete(cacheKey)
+    console.log(`[AOP Filters] Force refresh - clearing cache...`)
   }
   
   console.log(`[AOP Filters] Fetching fresh data from database...`)
@@ -378,20 +428,28 @@ export async function getAopFilterOptions() {
           if (typeof value === 'string') {
             const trimmed = value.trim()
             if (trimmed) {
-              const normalized = trimmed.toLowerCase()
-              if (!values.has(normalized)) {
-                // Format nilai berdasarkan kolom untuk konsistensi display
-                let formatted: string
-                if (column === 'region_circle') {
-                  formatted = formatCircleValue(trimmed)
-                } else if (column === 'site_category') {
-                  // Use Title Case untuk site_category agar konsisten
-                  // "existing", "Existing", "Existing " -> "Existing"
-                  formatted = formatSiteCategoryValue(trimmed)
-                } else {
-                  formatted = trimmed
-                }
-                values.set(normalized, formatted)
+              // Format nilai berdasarkan kolom untuk konsistensi display
+              let formatted: string
+              let normalizedKey: string
+              
+              if (column === 'region_circle') {
+                formatted = formatCircleValue(trimmed)
+                normalizedKey = formatted.toLowerCase()
+              } else if (column === 'site_category') {
+                // Use Title Case untuk site_category agar konsisten
+                formatted = formatSiteCategoryValue(trimmed)
+                normalizedKey = formatted.toLowerCase()
+              } else if (column === 'ran_score') {
+                // Normalize ran_score: group by "New Site" or "Expansion"
+                formatted = normalizeRanScoreValue(trimmed)
+                normalizedKey = formatted.toLowerCase()
+              } else {
+                formatted = trimmed
+                normalizedKey = trimmed.toLowerCase()
+              }
+              
+              if (!values.has(normalizedKey)) {
+                values.set(normalizedKey, formatted)
               }
             }
           }
@@ -424,11 +482,12 @@ export async function getAopFilterOptions() {
 
   // OPTIMIZED: Fetch semua columns secara paralel dengan pagination per column
   // Setiap column akan di-fetch dengan pagination untuk memastikan semua data ter-fetch
-  const [vendors, programs, circles, siteCategories, years] = await Promise.all([
+  const [vendors, programs, circles, siteCategories, ranScores, years] = await Promise.all([
     fetchDistinctValuesOptimized('vendor_name'),
     fetchDistinctValuesOptimized('program_report'),
     fetchDistinctValuesOptimized('region_circle'),
     fetchDistinctValuesOptimized('site_category'),
+    fetchDistinctValuesOptimized('ran_score'),
     fetchDistinctValuesOptimized('year')
   ])
 
@@ -437,6 +496,7 @@ export async function getAopFilterOptions() {
     programs,
     circles,
     siteCategories,
+    ranScores,
     years: years.sort((a, b) => b.localeCompare(a)) // Sort years descending (newest first)
   }
 

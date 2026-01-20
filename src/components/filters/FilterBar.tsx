@@ -17,6 +17,7 @@ export interface FilterValue {
   year?: string[] // Year filter
   circle?: string[]
   site_category?: string[] // Site category filter for AOP
+  ran_score?: string[] // RAN Score filter for AOP
 }
 
 // Props untuk FilterBar
@@ -38,6 +39,7 @@ interface FilterOptions {
   years: string[] // Years for Hermes 5G
   circles: string[]
   siteCategories?: string[] // Site categories for AOP
+  ranScores?: string[] // RAN Scores for AOP
 }
 
 // Fungsi helper untuk memendekkan teks yang terlalu panjang
@@ -60,7 +62,8 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     regions: [],
     years: [],
     circles: [],
-    siteCategories: []
+    siteCategories: [],
+    ranScores: []
   })
   
   // State untuk loading
@@ -72,18 +75,20 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
   // Fetch filter options dari API
   useEffect(() => {
     let isMounted = true
+    let hasRetried = false
     
-    async function fetchOptions() {
+    async function fetchOptions(forceRefresh = false) {
       try {
         setIsLoading(true)
-        const response = await fetch(endpoint)
+        const url = forceRefresh ? `${endpoint}?refresh=true` : endpoint
+        const response = await fetch(url)
         
         if (!isMounted) return
         
         if (response.ok) {
           const data = await response.json()
           if (data.status === 'success') {
-            setOptions({
+            const newOptions = {
               vendors: data.data.vendors || [],
               programs: data.data.programs || [],
               cities: data.data.cities || [],
@@ -91,8 +96,28 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               regions: data.data.regions || [],
               years: data.data.years || [],
               circles: data.data.circles || [],
-              siteCategories: data.data.siteCategories || []
-            })
+              siteCategories: data.data.siteCategories || [],
+              ranScores: data.data.ranScores || []
+            }
+            
+            // For AOP variant: detect stale cache by checking if ranScores are normalized
+            // Normalized ranScores should only have "New Site", "Expansion", or "-"
+            // If we see long values like "Expansion AOP 2025", cache is stale
+            if (variant === 'aop' && !hasRetried && newOptions.ranScores.length > 0) {
+              const hasUnnormalizedValues = newOptions.ranScores.some((rs: string) => 
+                rs.length > 15 || // Normalized values are short
+                (rs.toLowerCase().includes('aop') && rs !== 'New Site' && rs !== 'Expansion')
+              )
+              
+              if (hasUnnormalizedValues) {
+                console.log('[FilterBar] Detected stale ranScores cache, forcing refresh...')
+                hasRetried = true
+                await fetchOptions(true)
+                return
+              }
+            }
+            
+            setOptions(newOptions)
           }
         }
       } catch (error) {
@@ -109,7 +134,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     return () => {
       isMounted = false
     }
-  }, [endpoint])
+  }, [endpoint, variant])
   
   // Update search value ketika debounce selesai
   useEffect(() => {
@@ -164,12 +189,18 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     console.log('Site category filter changed:', selected)
     onChange({ ...value, site_category: selected })
   }, [onChange, value])
+
+  // Handler untuk RAN score selection (AOP variant)
+  const handleRanScoreChange = useCallback((selected: string[]) => {
+    console.log('RAN score filter changed:', selected)
+    onChange({ ...value, ran_score: selected })
+  }, [onChange, value])
   
   // Handler untuk reset semua filter
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [], ran_score: [] })
   }
 
   // Handler untuk remove individual filter
@@ -196,12 +227,13 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.year?.length || 0) > 0 ||
     (value.circle?.length || 0) > 0 ||
     (value.status?.length || 0) > 0 ||
-    (value.site_category?.length || 0) > 0
+    (value.site_category?.length || 0) > 0 ||
+    (value.ran_score?.length || 0) > 0
 
-  // Grid layout berbeda untuk variant AOP (5 filter: vendor, program, circle, site_category, year) vs default (7 filter dengan region dan year)
+  // Grid layout berbeda untuk variant AOP (6 filter: vendor, program, circle, site_category, ran_score, year) vs default (7 filter dengan region dan year)
   const gridClass =
     variant === "aop"
-      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))_auto] md:items-center md:gap-2"
+      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(6,minmax(0,1fr))_auto] md:items-center md:gap-2"
       : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(6,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
   return (
@@ -295,7 +327,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
           </>
         )}
 
-        {/* Circle, Site Category, Year Filters - AOP variant only */}
+        {/* Circle, Site Category, RAN Score, Year Filters - AOP variant only */}
         {variant === "aop" && (
           <>
             <MultiSelect
@@ -313,6 +345,16 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.site_category ?? []}
               placeholder="Site Category"
               onChange={handleSiteCategoryChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 md:col-span-1"
+            />
+            {/* RAN Score Filter */}
+            <MultiSelect
+              options={options.ranScores || []}
+              selected={value.ran_score ?? []}
+              placeholder="RAN Score"
+              onChange={handleRanScoreChange}
               disabled={isLoading}
               width="w-full"
               className="col-span-2 md:col-span-1"
@@ -483,6 +525,20 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               <X
                 className="h-2 w-2 cursor-pointer"
                 onClick={() => removeFilter('site_category', category)}
+              />
+            </div>
+          ))}
+
+          {value.ran_score?.map(ranScore => (
+            <div
+              key={`ran-score-${ranScore}`}
+              className="bg-rose-500/20 text-rose-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`RAN Score: ${ranScore}`}
+            >
+              <span>RS: {truncateText(ranScore, 12)}</span>
+              <X
+                className="h-2 w-2 cursor-pointer"
+                onClick={() => removeFilter('ran_score', ranScore)}
               />
             </div>
           ))}
