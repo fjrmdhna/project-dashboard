@@ -155,6 +155,15 @@ export function Hermes5GMap({ points, colors, loading = false, error = null }: H
     const bounds = L.latLngBounds([])
 
     orderedPoints.forEach((point) => {
+      // Validate coordinates are within valid ranges
+      // General valid range: Lat -90 to 90, Long -180 to 180
+      const isValidLat = typeof point.lat === 'number' && point.lat >= -90 && point.lat <= 90
+      const isValidLong = typeof point.long === 'number' && point.long >= -180 && point.long <= 180
+      
+      if (!isValidLat || !isValidLong) {
+        return // Skip invalid coordinates
+      }
+
       const color = point.isExcluded ? EXCLUDED_COLOR : (palette[point.status] ?? EXCLUDED_COLOR)
       const marker: CircleMarker = L.circleMarker([point.lat, point.long], {
         radius: 4,

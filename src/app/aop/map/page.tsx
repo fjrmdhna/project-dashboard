@@ -21,14 +21,47 @@ import type { HermesMapPoint, StatusLabel } from '@/components/maps/Hermes5GMap'
 import { FilterBar, FilterValue } from '@/components/filters/FilterBar'
 import { useDebounce } from '@/hooks/useDebounce'
 
+// Compact point format from API
+interface CompactMapPoint {
+  i: string   // id
+  s: number   // status (0=SOW, 1=RFI, 2=INSTALL, 3=ON_AIR)
+  a: number   // lat
+  o: number   // long
+  v?: string  // vendorName
+  n?: string  // siteName
+  d?: string  // siteId
+  p?: string  // programReport
+  t?: string  // impTtp
+  c?: string  // nanoCluster
+}
+
+const NUM_TO_STATUS: StatusLabel[] = ['SOW', 'RFI', 'INSTALL', 'ON_AIR']
+
+// Convert compact point to full point
+function expandPoint(cp: CompactMapPoint): HermesMapPoint {
+  return {
+    id: cp.i,
+    status: NUM_TO_STATUS[cp.s] || 'SOW',
+    lat: cp.a,
+    long: cp.o,
+    vendorName: cp.v || null,
+    siteName: cp.n || null,
+    siteId: cp.d || null,
+    programReport: cp.p || null,
+    impTtp: cp.t || null,
+    nanoCluster: cp.c || null
+  }
+}
+
 interface MapApiSuccess {
   status: 'success'
   data: {
-    points: HermesMapPoint[]
+    points: HermesMapPoint[] | CompactMapPoint[]
     counts: Record<StatusLabel, number>
     total: number
     colors: Record<StatusLabel, string>
     invalidCoordinates: number
+    compact?: boolean
   }
   timestamp: string
 }
@@ -106,6 +139,8 @@ export default function AopMapPage() {
   const [colors, setColors] = useState<Record<StatusLabel, string>>(() => ({ ...DEFAULT_COLORS }))
   const [invalidCoordinates, setInvalidCoordinates] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [isFilterLoading, setIsFilterLoading] = useState(false) // State khusus untuk filter loading
+  const [hasInitialLoad, setHasInitialLoad] = useState(false) // Track initial load completion
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [showExcluded, setShowExcluded] = useState(true)
@@ -141,6 +176,7 @@ export default function AopMapPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
+      setIsFilterLoading(true) // Set filter loading state
       setError(null)
 
       // Build URL with current filter
@@ -157,6 +193,15 @@ export default function AopMapPage() {
       debouncedFilterValue.circle?.forEach((value) => {
         params.append('region_circle', value)
       })
+      debouncedFilterValue.site_category?.forEach((value) => {
+        params.append('site_category', value)
+      })
+      debouncedFilterValue.ran_score?.forEach((value) => {
+        params.append('ran_score', value)
+      })
+      debouncedFilterValue.year?.forEach((value) => {
+        params.append('year', value)
+      })
       debouncedFilterValue.status.forEach((value) => {
         params.append('status', value)
       })
@@ -164,6 +209,7 @@ export default function AopMapPage() {
       const url = `/api/aop/map-data?${params.toString()}`
       console.log('Loading AOP map data with filter:', debouncedFilterValue)
       console.log('Map API URL:', url)
+
       const response = await fetch(url, { cache: 'no-store' })
 
       if (!response.ok) {
@@ -176,11 +222,17 @@ export default function AopMapPage() {
         throw new Error(payload.message || 'Failed to load map data')
       }
 
-      setPoints(payload.data.points)
+      // Handle compact format
+      const expandedPoints = payload.data.compact 
+        ? (payload.data.points as CompactMapPoint[]).map(expandPoint)
+        : payload.data.points as HermesMapPoint[]
+      
+      setPoints(expandedPoints)
       setCounts(payload.data.counts as Record<StatusLabel, number>)
       setColors(payload.data.colors as Record<StatusLabel, string>)
       setInvalidCoordinates(payload.data.invalidCoordinates || 0)
       setLastUpdated(payload.timestamp)
+      setHasInitialLoad(true) // Mark initial load as complete
 
       // Load total counts for status summary (without status filter)
       if (debouncedFilterValue.status.length > 0) {
@@ -227,6 +279,7 @@ export default function AopMapPage() {
       setInvalidCoordinates(0)
     } finally {
       setLoading(false)
+      setIsFilterLoading(false) // Clear filter loading state
     }
   }, [debouncedFilterValue])
 
@@ -239,18 +292,45 @@ export default function AopMapPage() {
   // Handler untuk perubahan filter
   const handleFilterChange = (newFilters: FilterValue) => {
     console.log("Filter changed:", newFilters)
+    // Set filter loading state immediately untuk memberikan feedback visual yang cepat
+    setIsFilterLoading(true)
     setFilterValue(newFilters)
   }
 
   // Handler untuk reset filter
   const handleFilterReset = () => {
     console.log("Filters reset")
+    // Set filter loading state untuk memberikan feedback visual
+    setIsFilterLoading(true)
     setFilterValue(INITIAL_FILTER)
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#070F2B] via-[#050B1B] to-[#050B1B] text-white">
-      <header className="border-b border-white/10 bg-[#0B1533]/70 backdrop-blur">
+    <div className="min-h-screen bg-gradient-to-b from-[#070F2B] via-[#050B1B] to-[#050B1B] text-white relative">
+      {/* Loading Overlay dengan Blur Effect - hanya muncul saat filter loading (setelah initial load) */}
+      {isFilterLoading && hasInitialLoad && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-[#050B1B]/90 backdrop-blur-md transition-all duration-300 ease-in-out"
+          aria-live="polite"
+          aria-busy="true"
+          role="status"
+          style={{ pointerEvents: 'auto' }}
+        >
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative flex h-16 w-16 items-center justify-center">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full border border-emerald-400/30" />
+              <span className="absolute inline-flex h-[60px] w-[60px] rounded-full border border-white/10" />
+              <span className="h-12 w-12 animate-spin rounded-full border-2 border-transparent border-l-emerald-300 border-t-cyan-300" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-white">Loading map data...</p>
+              <p className="mt-1 text-xs text-white/60">Applying filters</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <header className={`border-b border-white/10 bg-[#0B1533]/70 backdrop-blur transition-opacity duration-300 ${isFilterLoading ? 'opacity-40' : ''}`}>
         <div className="mx-auto flex max-w-[1440px] flex-col gap-3 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -301,7 +381,7 @@ export default function AopMapPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex h-[calc(100vh-120px)] max-w-[1440px] flex-col gap-5 px-6 py-5 lg:h-[calc(100vh-140px)]">
+      <main className={`mx-auto flex h-[calc(100vh-120px)] max-w-[1440px] flex-col gap-5 px-6 py-5 lg:h-[calc(100vh-140px)] transition-opacity duration-300 ${isFilterLoading ? 'opacity-30' : ''}`} style={{ pointerEvents: isFilterLoading ? 'none' : 'auto' }}>
         {/* Filter Bar */}
         <div className="rounded-2xl border border-white/10 bg-[#0B1533]/60 p-4">
           <FilterBar

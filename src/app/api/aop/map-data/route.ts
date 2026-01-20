@@ -46,22 +46,41 @@ interface MapDataResponse {
   invalidCoordinates: number
 }
 
-const COLUMNS = [
+// Minimal columns for map display - reduces payload significantly
+const MAP_COLUMNS = [
   'system_key',
-  'vendor_name',
-  'program_report',
-  'ic_000010_af',
-  'ic_000040_af',
-  'mos_af',
-  'imp_integ_af',
-  'rfs_af',
-  'site_id',
-  'site_name',
+  'ic_000010_af',  // For status resolution
+  'ic_000040_af',  // For status resolution
+  'imp_integ_af',  // For status resolution
+  'rfs_af',        // For status resolution
   'latitude',
   'longitude',
+  'vendor_name',
+  'site_id',
+  'site_name',
+  'program_report',
+  'region',
+  'region_circle'
+].join(',')
+
+// Filter columns - used when filters are applied
+const FILTER_COLUMNS = [
+  'system_key',
+  'ic_000010_af',
+  'ic_000040_af',
+  'imp_integ_af',
+  'rfs_af',
+  'latitude',
+  'longitude',
+  'vendor_name',
+  'site_id',
+  'site_name',
+  'program_report',
   'region',
   'region_circle',
-  'site_category'
+  'site_category',
+  'ran_score',
+  'year'
 ].join(',')
 
 function parseCoordinate(value: unknown): number | null {
@@ -93,91 +112,135 @@ function resolveStatus(row: any): StatusLabel {
   return STATUS_LABEL.sow
 }
 
-// Fetch data from database with pagination
+// Fetch data from database - optimized with larger batch size
 async function fetchMapDataFromDatabase(
   vendorNames: string[],
   programReports: string[],
   circles: string[],
   siteCategories: string[],
+  ranScores: string[],
+  years: string[],
   q: string
 ): Promise<any[]> {
+  // Determine if we need filter columns
+  const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
+                     circles.length > 0 || siteCategories.length > 0 || 
+                     ranScores.length > 0 || years.length > 0 || q.length > 0
+  
+  const columns = hasFilters ? FILTER_COLUMNS : MAP_COLUMNS
+
+  // Use larger batch size to reduce round-trips
+  const BATCH_SIZE = 10000
+  const MAX_BATCHES = 10
+  
   let allData: any[] = []
-  let hasMore = true
-  let page = 0
-  const pageSize = 1000
-  const MAX_PAGES = 100
+  let batch = 0
 
-  // Build base query
-  let baseQuery = supabase
-    .from('site_data_aop')
-    .select(COLUMNS, { count: 'exact' })
+  while (batch < MAX_BATCHES) {
+    const from = batch * BATCH_SIZE
+    const to = from + BATCH_SIZE - 1
 
-  // Apply filters
-  if (vendorNames.length > 0) {
-    baseQuery = baseQuery.in('vendor_name', vendorNames)
-  }
+    // Build query for this batch
+    let query = supabase
+      .from('site_data_aop')
+      .select(columns)
+      .range(from, to)
 
-  if (programReports.length > 0) {
-    baseQuery = baseQuery.in('program_report', programReports)
-  }
+    // Apply filters
+    if (vendorNames.length > 0) {
+      query = query.in('vendor_name', vendorNames)
+    }
 
-  if (circles.length > 0) {
-    const circleConditions = circles
-      .map(c => {
-        const normalized = c.trim().toLowerCase()
-        return `region_circle.ilike.${normalized}`
-      })
-      .join(',')
-    baseQuery = baseQuery.or(circleConditions)
-  }
+    if (programReports.length > 0) {
+      query = query.in('program_report', programReports)
+    }
 
-  if (siteCategories.length > 0) {
-    const siteCategoryConditions = siteCategories
-      .map(sc => {
-        const normalized = sc.trim().toLowerCase()
-        return `site_category.ilike.${normalized}`
-      })
-      .join(',')
-    baseQuery = baseQuery.or(siteCategoryConditions)
-  }
+    if (circles.length > 0) {
+      const circleConditions = circles
+        .map(c => `region_circle.ilike.%${c.trim().toLowerCase()}%`)
+        .join(',')
+      query = query.or(circleConditions)
+    }
 
-  if (q) {
-    baseQuery = baseQuery.or(`system_key.ilike.%${q}%,site_id.ilike.%${q}%,site_name.ilike.%${q}%,vendor_name.ilike.%${q}%`)
-  }
+    if (siteCategories.length > 0) {
+      const siteCategoryConditions = siteCategories
+        .map(sc => {
+          const lower = sc.toLowerCase()
+          if (lower === 'new site') {
+            return `site_category.ilike.%new%`
+          } else if (lower === 'expansion') {
+            return `site_category.ilike.%existing%,site_category.ilike.%upgrade%`
+          }
+          return `site_category.ilike.%${sc}%`
+        })
+        .join(',')
+      query = query.or(siteCategoryConditions)
+    }
 
-  // Fetch all data using pagination
-  while (hasMore && page < MAX_PAGES) {
-    const from = page * pageSize
-    const to = from + pageSize - 1
+    if (ranScores.length > 0) {
+      query = query.in('ran_score', ranScores)
+    }
 
-    const query = baseQuery.range(from, to)
-    const { data: pageData, error: pageError } = await query
+    if (years.length > 0) {
+      query = query.in('year', years)
+    }
 
-    if (pageError) {
-      if (pageError.code === 'PGRST116') {
-        return []
+    if (q) {
+      query = query.or(`system_key.ilike.%${q}%,site_id.ilike.%${q}%,site_name.ilike.%${q}%,vendor_name.ilike.%${q}%`)
+    }
+
+    const { data: batchData, error: batchError } = await query
+
+    if (batchError) {
+      if (batchError.code === 'PGRST116') {
+        break
       }
-      throw pageError
+      throw batchError
     }
 
-    if (pageData && pageData.length > 0) {
-      allData = [...allData, ...pageData]
-      hasMore = pageData.length === pageSize
-      page++
+    if (batchData && batchData.length > 0) {
+      allData = allData.concat(batchData)
+      
+      // If we got less than batch size, we're done
+      if (batchData.length < BATCH_SIZE) {
+        break
+      }
+      batch++
     } else {
-      hasMore = false
+      break
     }
   }
 
-  if (page >= MAX_PAGES) {
-    console.warn(`[AOP Map Data] Pagination safety limit reached at ${page} pages, fetched ${allData.length} records`)
+  if (batch >= MAX_BATCHES) {
+    console.warn(`[AOP Map Data] Batch limit reached at ${batch} batches, fetched ${allData.length} records`)
   }
 
   return allData
 }
 
-// Process data to map points and counts
-function processMapData(allData: any[], statusFilters: string[]): MapDataResponse {
+// Compact point format for reduced payload
+interface CompactMapPoint {
+  i: string   // id (system_key)
+  s: number   // status (0=SOW, 1=RFI, 2=INSTALL, 3=ON_AIR)
+  a: number   // lat
+  o: number   // long
+  v?: string  // vendorName
+  n?: string  // siteName
+  d?: string  // siteId
+  p?: string  // programReport
+  t?: string  // impTtp
+  c?: string  // nanoCluster
+}
+
+const STATUS_TO_NUM: Record<StatusLabel, number> = {
+  [STATUS_LABEL.sow]: 0,
+  [STATUS_LABEL.rfi]: 1,
+  [STATUS_LABEL.install]: 2,
+  [STATUS_LABEL.onAir]: 3
+}
+
+// Process data to map points and counts - with compact format option
+function processMapData(allData: any[], statusFilters: string[], compact: boolean = true): MapDataResponse | { points: CompactMapPoint[], counts: Record<StatusLabel, number>, total: number, colors: Record<StatusLabel, string>, invalidCoordinates: number, compact: true } {
   const counts: Record<StatusLabel, number> = {
     [STATUS_LABEL.onAir]: 0,
     [STATUS_LABEL.install]: 0,
@@ -186,6 +249,7 @@ function processMapData(allData: any[], statusFilters: string[]): MapDataRespons
   }
 
   const points: MapPoint[] = []
+  const compactPoints: CompactMapPoint[] = []
   let invalidCoordinatesCount = 0
   const uniqueSystemKeys = new Set<string>()
 
@@ -211,18 +275,46 @@ function processMapData(allData: any[], statusFilters: string[]): MapDataRespons
 
     counts[status] += 1
 
-    points.push({
-      id: row.system_key || '',
-      status,
-      lat,
-      long,
-      vendorName: row.vendor_name ?? null,
-      siteName: row.site_name ?? null,
-      siteId: row.site_id ?? null,
-      programReport: row.program_report ?? null,
-      impTtp: row.region ?? null,
-      nanoCluster: row.region_circle ?? null
-    })
+    if (compact) {
+      // Compact format - only include non-null values
+      const cp: CompactMapPoint = {
+        i: row.system_key || '',
+        s: STATUS_TO_NUM[status],
+        a: lat,
+        o: long
+      }
+      if (row.vendor_name) cp.v = row.vendor_name
+      if (row.site_name) cp.n = row.site_name
+      if (row.site_id) cp.d = row.site_id
+      if (row.program_report) cp.p = row.program_report
+      if (row.region) cp.t = row.region
+      if (row.region_circle) cp.c = row.region_circle
+      compactPoints.push(cp)
+    } else {
+      points.push({
+        id: row.system_key || '',
+        status,
+        lat,
+        long,
+        vendorName: row.vendor_name ?? null,
+        siteName: row.site_name ?? null,
+        siteId: row.site_id ?? null,
+        programReport: row.program_report ?? null,
+        impTtp: row.region ?? null,
+        nanoCluster: row.region_circle ?? null
+      })
+    }
+  }
+
+  if (compact) {
+    return {
+      points: compactPoints,
+      counts,
+      total: uniqueSystemKeys.size,
+      colors: STATUS_COLOR_MAP,
+      invalidCoordinates: invalidCoordinatesCount,
+      compact: true
+    }
   }
 
   return {
@@ -243,6 +335,8 @@ export async function GET(request: NextRequest) {
     const programReports = searchParams.getAll('program_report') || []
     const circles = searchParams.getAll('region_circle') || []
     const siteCategories = searchParams.getAll('site_category') || []
+    const ranScores = searchParams.getAll('ran_score') || []
+    const years = searchParams.getAll('year') || []
     const statusFilters = searchParams.getAll('status') || []
 
     // Create filter params for cache key (include status filters)
@@ -251,6 +345,8 @@ export async function GET(request: NextRequest) {
       programReports,
       circles,
       siteCategories,
+      ranScores,
+      years,
       search: q
     }
 
@@ -282,18 +378,27 @@ export async function GET(request: NextRequest) {
       programReports,
       circles,
       siteCategories,
+      ranScores,
+      years,
       q
     )
 
-    const responseData = processMapData(allData, statusFilters)
+    // Use compact format for better performance
+    const responseData = processMapData(allData, statusFilters, true)
     const fetchTime = Date.now() - startTime
 
     console.log(`[AOP Map Data] Database fetch completed in ${fetchTime}ms, ${allData.length} records, ${responseData.points.length} valid points`)
 
-    // Cache the response (don't await to not block response)
-    setCache(cacheKey, responseData, CACHE_TTL.MAP_DATA).catch(err => {
-      console.error('[AOP Map Data] Failed to cache response:', err)
-    })
+    // Only cache if payload is small enough for Redis (< 200KB)
+    // Vercel KV/Upstash has 256KB limit per value
+    const payloadSizeForCache = JSON.stringify(responseData).length
+    if (payloadSizeForCache < 200 * 1024) {
+      setCache(cacheKey, responseData, CACHE_TTL.MAP_DATA).catch(err => {
+        console.error('[AOP Map Data] Failed to cache response:', err)
+      })
+    } else {
+      console.log(`[AOP Map Data] Skipping cache - payload too large: ${Math.round(payloadSizeForCache / 1024)}KB`)
+    }
 
     return NextResponse.json({
       status: 'success',

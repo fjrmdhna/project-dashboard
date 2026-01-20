@@ -193,6 +193,8 @@ export interface FilterParams {
   programReports?: string[]
   circles?: string[]
   siteCategories?: string[]
+  ranScores?: string[]
+  years?: string[]
   search?: string
 }
 
@@ -200,7 +202,7 @@ export interface FilterParams {
  * Generate a consistent hash for filter parameters
  * Used as part of cache key to uniquely identify filter combinations
  * @param filters Filter parameters
- * @returns Base64-encoded hash string (truncated to 32 chars)
+ * @returns Base64-encoded hash string
  */
 export function getFilterHash(filters: FilterParams): string {
   const normalized = {
@@ -208,6 +210,8 @@ export function getFilterHash(filters: FilterParams): string {
     p: filters.programReports?.slice().sort() || [],
     c: filters.circles?.slice().sort() || [],
     s: filters.siteCategories?.slice().sort() || [],
+    r: filters.ranScores?.slice().sort() || [],
+    y: filters.years?.slice().sort() || [],
     q: (filters.search || '').toLowerCase().trim()
   }
 
@@ -215,8 +219,10 @@ export function getFilterHash(filters: FilterParams): string {
   const jsonString = JSON.stringify(normalized)
   const base64 = Buffer.from(jsonString).toString('base64')
   
-  // Return first 32 characters for shorter keys
-  return base64.slice(0, 32)
+  // Use full base64 string to ensure all filter values are included in hash
+  // Previous truncation to 32 chars caused siteCategories to be excluded
+  // when other filters were empty (JSON started with {"v":[],"p":[],"c":[],"s...)
+  return base64
 }
 
 /**
@@ -230,6 +236,8 @@ export function isEmptyFilter(filters: FilterParams): boolean {
     (!filters.programReports || filters.programReports.length === 0) &&
     (!filters.circles || filters.circles.length === 0) &&
     (!filters.siteCategories || filters.siteCategories.length === 0) &&
+    (!filters.ranScores || filters.ranScores.length === 0) &&
+    (!filters.years || filters.years.length === 0) &&
     (!filters.search || filters.search.trim() === '')
   )
 }

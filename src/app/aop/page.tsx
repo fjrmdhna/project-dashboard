@@ -429,7 +429,7 @@ export default function AopPage() {
   const circleList = <CircleListCard rows={rows} />
   const circleAchievement = <CircleAchievementCard rows={rows} isLoading={aopLoading} />
 
-  const header = <ProgramHeader title="Dashboard AOP 2025" dateLabel={formattedDate} mapHref="/aop/map" />
+  const header = <ProgramHeader title="Dashboard AOP" dateLabel={formattedDate} mapHref="/aop/map" />
 
   const wallboardView = (
     <Wallboard1080
@@ -499,7 +499,7 @@ export default function AopPage() {
         </div>
 
         <h1 className="mt-4 text-center text-xl font-semibold tracking-wide text-white">
-          DASHBOARD AOP 2025
+          DASHBOARD AOP
         </h1>
         <div className="mt-3 flex justify-center gap-3 text-[11px] uppercase tracking-[0.32em]">
           <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-3 py-1 font-semibold text-[#34D399]">Overview</span>
