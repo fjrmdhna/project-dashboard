@@ -9,6 +9,7 @@ import { SearchInput } from "@/components/home/SearchInput"
 import { SectionHeader } from "@/components/home/SectionHeader"
 import { HeroHighlight, NavigationAction, ProjectCardData } from "@/types/home"
 import { getProjectProgress } from "@/lib/project-progress"
+import { EXCLUDED_PROGRAM_REPORTS } from "@/lib/hermes-5g-constants"
 
 const heroHighlight: HeroHighlight = {
   eyebrow: "Explore",
@@ -18,35 +19,6 @@ const heroHighlight: HeroHighlight = {
   href: "/map",
 }
 
-// Static project data (untuk project yang belum menggunakan data real)
-const staticProjects: ProjectCardData[] = [
-  {
-    id: "cme",
-    title: "CME",
-    category: "Civil & Mechanical",
-    date: new Date().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }),
-    progress: 45,
-    href: "/cme",
-    isDummy: true, // Menandai sebagai dummy/placeholder data
-  },
-  {
-    id: "tlm",
-    title: "TLM",
-    category: "Asset Intelligence",
-    date: new Date().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }),
-    progress: 58,
-    href: "/tlm",
-    isDummy: true, // Menandai sebagai dummy/placeholder data
-  },
-]
 
 const navActions: NavigationAction[] = [
   { id: "home", label: "Home", href: "/", icon: HomeIcon },
@@ -57,12 +29,11 @@ const navActions: NavigationAction[] = [
 
 export default async function Home() {
   // Fetch progress real untuk Hermes 5G
-  // Filter hanya untuk program_name yang mengandung "Hermes H2"
+  // Menggunakan exclude filter yang sama dengan Matrix Statistics di dashboard Hermes 5G
   let hermesProgress = 0
   try {
     const hermesProgressData = await getProjectProgress("site_data_5g", {
-      program_name: "Hermes H2",
-      program_name_match: "contains", // Menggunakan contains untuk partial match
+      exclude_program_reports: [...EXCLUDED_PROGRAM_REPORTS],
     })
     hermesProgress = hermesProgressData.progress
   } catch (error) {
@@ -122,7 +93,6 @@ export default async function Home() {
       mood: "primary",
       href: "/tlp-new-site",
     },
-    ...staticProjects,
   ]
 
   return (

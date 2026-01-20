@@ -1,4 +1,5 @@
 import { supabase } from "./supabase"
+import { EXCLUDED_PROGRAM_REPORTS } from "./hermes-5g-constants"
 
 export interface ProjectProgress {
   scope: number
@@ -9,6 +10,7 @@ export interface ProjectProgress {
 export interface ProjectProgressFilters {
   program_name?: string | string[]
   program_name_match?: "exact" | "contains" // exact untuk eq, contains untuk ilike
+  exclude_program_reports?: string[] // Program reports to exclude
   [key: string]: string | string[] | undefined
 }
 
@@ -38,10 +40,18 @@ export async function getProjectProgress(
       .select("rfs_af", { count: "exact", head: true })
       .not("rfs_af", "is", null)
 
-    // Apply filters jika ada
+    // Apply exclude filters first
+    if (filters?.exclude_program_reports && filters.exclude_program_reports.length > 0) {
+      filters.exclude_program_reports.forEach((excludedProgram) => {
+        scopeQuery = scopeQuery.neq("program_report", excludedProgram)
+        activatedQuery = activatedQuery.neq("program_report", excludedProgram)
+      })
+    }
+
+    // Apply other filters jika ada
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
-        if (value && key !== "program_name_match") {
+        if (value && key !== "program_name_match" && key !== "exclude_program_reports") {
           // Handle program_name dengan ilike untuk contains match
           if (key === "program_name" && filters.program_name_match === "contains") {
             const searchValue = Array.isArray(value) ? value[0] : value
@@ -111,10 +121,17 @@ async function getProjectProgressFallback(
       .from(tableName)
       .select(selectColumns.join(", "))
 
-    // Apply filters jika ada
+    // Apply exclude filters first
+    if (filters?.exclude_program_reports && filters.exclude_program_reports.length > 0) {
+      filters.exclude_program_reports.forEach((excludedProgram) => {
+        query = query.neq("program_report", excludedProgram)
+      })
+    }
+
+    // Apply other filters jika ada
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
-        if (value && key !== "program_name_match") {
+        if (value && key !== "program_name_match" && key !== "exclude_program_reports") {
           // Handle program_name dengan ilike untuk contains match
           if (key === "program_name" && filters.program_name_match === "contains") {
             const searchValue = Array.isArray(value) ? value[0] : value
