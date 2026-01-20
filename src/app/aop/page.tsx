@@ -410,7 +410,7 @@ export default function AopPage() {
   />
   const gapStatusCard = <GapStatusCard rows={rows} aggregatedGaps={deferredAggregated?.gaps} />
   const progressCurve = (
-    <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} monthsSpan={5} />
+    <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} yearFilter={2026} />
   )
   const dailyRunrate = (
     <DailyRunrateCard 

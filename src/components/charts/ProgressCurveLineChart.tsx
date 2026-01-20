@@ -18,6 +18,7 @@ export type ProgressCurveProps = {
   rows: Row[];                // HASIL FILTER dari FilterBar
   anchorDate?: string;        // ISO; default today
   monthsSpan?: number;        // Number of months to display (default 5)
+  yearFilter?: number;        // Filter to show only specific year (e.g., 2026)
   className?: string;
 };
 
@@ -124,45 +125,55 @@ type ProgressCurveTooltipProps = {
   payload?: ProgressCurveTooltipItem[];
 };
 
-function buildHybridBuckets(anchorDate?: string, span: number = 5, rows: Row[] = []): Bucket[] {
+function buildHybridBuckets(anchorDate?: string, span: number = 5, rows: Row[] = [], yearFilter?: number): Bucket[] {
   const anchor = toStart(anchorDate ? new Date(anchorDate) : new Date());
 
-  // For AOP, we want to show a fixed window around the anchor date
-  // span determines minimum months to display before anchor
-  // Current month is displayed as weeks, others as months
-  const monthsBefore = Math.floor(span / 2);
-
-  // Calculate rangeStart based on span
-  const rangeStart = toStart(addMonths(anchor, -monthsBefore));
-
-  // Calculate rangeEnd dynamically based on the latest date from mocn_activation_forecast or rfs_ff
-  // This ensures the chart extends to show all planned/forecast data
-  let latestFutureDate: Date | null = null;
-  
-  for (const row of rows) {
-    // Check mocn_activation_forecast (baseline)
-    const baselineDate = safeDate(row.mocn_activation_forecast);
-    if (baselineDate && (!latestFutureDate || baselineDate > latestFutureDate)) {
-      latestFutureDate = baselineDate;
-    }
-    
-    // Check rfs_ff (forecast)
-    const forecastDate = safeDate(row.rfs_ff);
-    if (forecastDate && (!latestFutureDate || forecastDate > latestFutureDate)) {
-      latestFutureDate = forecastDate;
-    }
-  }
-
-  // Default: if no future dates found, use span-based calculation
-  // Otherwise, use the latest date from data (with 1 month buffer for visibility)
+  // If yearFilter is provided, use year-based range instead of span-based
+  let rangeStart: Date;
   let rangeEnd: Date;
-  if (latestFutureDate) {
-    // Use the end of the month containing the latest future date
-    rangeEnd = toEnd(latestFutureDate);
+
+  if (yearFilter) {
+    // For year filter: show January to December of the specified year
+    rangeStart = new Date(yearFilter, 0, 1, 0, 0, 0, 0); // January 1st
+    rangeEnd = new Date(yearFilter, 11, 31, 23, 59, 59, 999); // December 31st
   } else {
-    // Fallback to span-based calculation
-    const monthsAfter = span - monthsBefore - 1;
-    rangeEnd = toEnd(addMonths(anchor, monthsAfter));
+    // Original span-based logic
+    // For AOP, we want to show a fixed window around the anchor date
+    // span determines minimum months to display before anchor
+    // Current month is displayed as weeks, others as months
+    const monthsBefore = Math.floor(span / 2);
+
+    // Calculate rangeStart based on span
+    rangeStart = toStart(addMonths(anchor, -monthsBefore));
+
+    // Calculate rangeEnd dynamically based on the latest date from mocn_activation_forecast or rfs_ff
+    // This ensures the chart extends to show all planned/forecast data
+    let latestFutureDate: Date | null = null;
+    
+    for (const row of rows) {
+      // Check mocn_activation_forecast (baseline)
+      const baselineDate = safeDate(row.mocn_activation_forecast);
+      if (baselineDate && (!latestFutureDate || baselineDate > latestFutureDate)) {
+        latestFutureDate = baselineDate;
+      }
+      
+      // Check rfs_ff (forecast)
+      const forecastDate = safeDate(row.rfs_ff);
+      if (forecastDate && (!latestFutureDate || forecastDate > latestFutureDate)) {
+        latestFutureDate = forecastDate;
+      }
+    }
+
+    // Default: if no future dates found, use span-based calculation
+    // Otherwise, use the latest date from data (with 1 month buffer for visibility)
+    if (latestFutureDate) {
+      // Use the end of the month containing the latest future date
+      rangeEnd = toEnd(latestFutureDate);
+    } else {
+      // Fallback to span-based calculation
+      const monthsAfter = span - monthsBefore - 1;
+      rangeEnd = toEnd(addMonths(anchor, monthsAfter));
+    }
   }
 
   const buckets: Bucket[] = [];
@@ -1072,13 +1083,13 @@ const PlanReadinessDotWithLabel = (props: any) => {
 };
 
 // Main component
-export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, className }: ProgressCurveProps) {
+export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, yearFilter, className }: ProgressCurveProps) {
   // Memoize buckets and data to prevent unnecessary recalculations
   const buckets = useMemo(() => {
-    const builtBuckets = buildHybridBuckets(anchorDate, monthsSpan, rows ?? []);
+    const builtBuckets = buildHybridBuckets(anchorDate, monthsSpan, rows ?? [], yearFilter);
     // Ensure buckets are sorted by start date (should already be sorted, but double-check)
     return builtBuckets.sort((a, b) => a.start.getTime() - b.start.getTime());
-  }, [anchorDate, monthsSpan, rows]);
+  }, [anchorDate, monthsSpan, rows, yearFilter]);
   
   const data = useMemo(() => {
     const aggregated = aggregate(rows ?? [], buckets, anchorDate);
