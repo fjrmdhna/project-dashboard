@@ -22,19 +22,26 @@ export interface CircleAchievementCardProps {
 
 interface CircleData {
   circle: string
-  achievement: number  // Count of rfs_af in current month
-  target: number       // Count of mocn_activation_forecast in current month
+  achievement: number  // Cumulative count of rfs_af up to end of current month
+  target: number       // Cumulative count of mocn_activation_forecast up to end of current month
   remaining: number    // target - achievement
 }
 
-// Helper function to check if date is in current month
-function isInCurrentMonth(dateStr: string | null | undefined): boolean {
+// Helper function to get the end of current month
+function getEndOfCurrentMonth(): Date {
+  const now = new Date()
+  // Last day of current month at 23:59:59.999
+  return new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+}
+
+// Helper function to check if date is on or before end of current month (cumulative)
+function isOnOrBeforeEndOfMonth(dateStr: string | null | undefined, endOfMonth: Date): boolean {
   if (!dateStr) return false
   
   try {
     const date = new Date(dateStr)
-    const now = new Date()
-    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+    // Check if date is valid and <= end of current month
+    return !isNaN(date.getTime()) && date <= endOfMonth
   } catch {
     return false
   }
@@ -55,11 +62,14 @@ function normalizeCircle(circle: string | null | undefined): string {
 export function CircleAchievementCard({ rows, isLoading = false }: CircleAchievementCardProps) {
   const currentMonth = useMemo(() => getCurrentMonthName(), [])
   
-  // Calculate achievement data per circle
+  // Calculate cumulative achievement data per circle (up to end of current month)
   const circleData = useMemo(() => {
     if (isLoading || !rows || rows.length === 0) {
       return []
     }
+
+    // Get end of current month for cumulative calculation
+    const endOfMonth = getEndOfCurrentMonth()
 
     // Group data by circle
     const circleMap = new Map<string, { achievement: number; target: number }>()
@@ -70,13 +80,13 @@ export function CircleAchievementCard({ rows, isLoading = false }: CircleAchieve
       
       const data = circleMap.get(circle) || { achievement: 0, target: 0 }
       
-      // Count achievement (rfs_af in current month)
-      if (isInCurrentMonth(row.rfs_af)) {
+      // Count achievement (cumulative: rfs_af <= end of current month)
+      if (isOnOrBeforeEndOfMonth(row.rfs_af, endOfMonth)) {
         data.achievement++
       }
       
-      // Count target (mocn_activation_forecast in current month)
-      if (isInCurrentMonth(row.mocn_activation_forecast)) {
+      // Count target (cumulative: mocn_activation_forecast <= end of current month)
+      if (isOnOrBeforeEndOfMonth(row.mocn_activation_forecast, endOfMonth)) {
         data.target++
       }
       
@@ -151,10 +161,10 @@ export function CircleAchievementCard({ rows, isLoading = false }: CircleAchieve
                 Circle
               </th>
               <th className="text-center py-0.5 px-1.5 text-white/60 font-medium bg-green-500/10">
-                Ach. {currentMonth}
+                Ach. ≤{currentMonth}
               </th>
               <th className="text-center py-0.5 px-1.5 text-white/60 font-medium bg-cyan-500/10">
-                Target {currentMonth}
+                Target ≤{currentMonth}
               </th>
               <th className="text-center py-0.5 px-1.5 text-white/60 font-medium bg-orange-500/10 rounded-tr-lg">
                 Rem.
@@ -197,7 +207,7 @@ export function CircleAchievementCard({ rows, isLoading = false }: CircleAchieve
 
         {circleData.length === 0 && (
           <div className="flex-1 flex items-center justify-center text-white/40 text-[8px]">
-            No data for current month
+            No data available
           </div>
         )}
       </div>
