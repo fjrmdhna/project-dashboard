@@ -122,10 +122,13 @@ export async function getSiteData5G(
     'hotnews_af',
     'endorse_af',
     'pac_accepted_af',
+    'patp_accepted_af',  // PATP stats
     'site_id',
     'site_name',
     'lat',
-    'long'
+    'long',
+    'year',        // Year filter
+    'region'       // Region filter
   ].join(',')
 
   const { includeExcludedProgramReports = false, onlyExcludedProgramReports = false } = options

@@ -75,6 +75,8 @@ const MINIMAL_COLUMNS = [
   'rfs_af',            // Actual - ProgressCurve, ActivatedCard, VendorLeaderboard, DailyRunrate
   'rfi_accepted',      // CAF stats
   'mos_af',            // MOS stats
+  'project_name',      // AgingPoCard - project grouping
+  'po_date',           // AgingPoCard - PO aging calculation
   'ic_000040_af',      // Install stats
   'rfc_approved',      // RFC stats
   'hotnews_af',        // Hotnews stats
@@ -115,6 +117,8 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       endorse_af: row.endorse_af || null,
       pac_accepted_af: row.pac_accepted_af || null,
       issue_category: row.issue_category || null,
+      project_name: row.project_name || null,
+      po_date: row.po_date || null,
     }))
   }
   

@@ -14,11 +14,9 @@ import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
 import { VendorLeaderboardCard } from "@/components/cards/VendorLeaderboardCard"
 import { NanoClusterListCard } from "@/components/cards/NewFeatureCard"
 import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
-import { useSiteData } from "@/hooks/useSiteData"
 import { useFilter } from "@/contexts/FilterContext"
-import { useTopIssueData } from "@/hooks/useTopIssueData"
-import { useDailyRunrateData } from "@/hooks/useDailyRunrateData"
-import { useVendorLeaderboard } from "@/hooks/useVendorLeaderboard"
+import { useHermes5GDataOptimized } from "@/hooks/useHermes5GDataOptimized"
+import { useDeferredValue, useTransition } from "react"
 import { Wallboard1080 } from "@/layouts/Wallboard1080"
 import { useIsMobile } from "@/hooks/useIsMobile"
 // Debug overlays removed for production-like view
@@ -88,11 +86,12 @@ export default function Hermes5GPage() {
     status: filterContext.statusFilters || []
   }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.statusFilters])
   
-  // Convert debounced filters to FilterValue format - use debouncedFilters for data fetching
-  const debouncedFilter: FilterValue = useMemo(() => {
+  // Convert filter context to FilterValue format - use debouncedFilters from context (already debounced 300ms)
+  // FilterContext already handles debouncing, so we use debouncedFilters directly
+  const debouncedFilterValue: FilterValue = useMemo(() => {
     const debounced = filterContext.debouncedFilters || filterContext
     return {
-      q: debounced.searchTerm,
+      q: debounced.searchTerm || '',
       vendor_name: debounced.vendorFilter !== 'all' ? debounced.vendorFilter.split(',').filter(Boolean) : [],
       program_report: debounced.programFilter !== 'all' ? debounced.programFilter.split(',').filter(Boolean) : [],
       imp_ttp: debounced.cityFilter !== 'all' ? debounced.cityFilter.split(',').filter(Boolean) : [],
@@ -101,41 +100,66 @@ export default function Hermes5GPage() {
       year: debounced.yearFilter !== 'all' ? debounced.yearFilter.split(',').filter(Boolean) : [],
       status: debounced.statusFilters || []
     }
-  }, [filterContext.debouncedFilters, filterContext])
-  
-  // Menggunakan hook useSiteData untuk mengambil data berdasarkan debounced filter
+  }, [filterContext.debouncedFilters, filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.statusFilters])
+
+  // Current filter (non-debounced) for display purposes
+  const filterValue: FilterValue = useMemo(() => ({
+    q: filterContext.searchTerm || '',
+    vendor_name: filterContext.vendorFilter !== 'all' ? filterContext.vendorFilter.split(',').filter(Boolean) : [],
+    program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
+    imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
+    nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
+    region: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [],
+    year: filterContext.yearFilter !== 'all' ? filterContext.yearFilter.split(',').filter(Boolean) : [],
+    status: filterContext.statusFilters || []
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.statusFilters])
+
+  const [isPending, startTransition] = useTransition()
+
+  // OPTIMIZATION: Stabilize filter arrays to prevent unnecessary re-renders
+  const stableVendorNames = useMemo(() => debouncedFilterValue.vendor_name || [], [debouncedFilterValue.vendor_name])
+  const stableProgramReports = useMemo(() => debouncedFilterValue.program_report || [], [debouncedFilterValue.program_report])
+  const stableImpTtps = useMemo(() => debouncedFilterValue.imp_ttp || [], [debouncedFilterValue.imp_ttp])
+  const stableNanoClusters = useMemo(() => debouncedFilterValue.nano_cluster || [], [debouncedFilterValue.nano_cluster])
+  const stableRanScores = useMemo(() => debouncedFilterValue.ran_score || [], [debouncedFilterValue.ran_score])
+  const stableYears = useMemo(() => debouncedFilterValue.year || [], [debouncedFilterValue.year])
+  const stableRegions = useMemo(() => debouncedFilterValue.region || [], [debouncedFilterValue.region])
+  const stableSearch = debouncedFilterValue.q || ''
+
+  // Fetch data from API menggunakan debounced filter with stable references
   const { 
-    rows, 
-    loading, 
-    error, 
-    count, 
-    filter, 
-    updateFilter 
-  } = useSiteData({ initialFilter: debouncedFilter })
+    data: hermesData, 
+    stats: hermesStats, 
+    aggregated: hermesAggregated, 
+    loading: hermesLoading, 
+    error: hermesError 
+  } = useHermes5GDataOptimized({
+    vendorNames: stableVendorNames,
+    programReports: stableProgramReports,
+    impTtps: stableImpTtps,
+    nanoClusters: stableNanoClusters,
+    ranScores: stableRanScores,
+    years: stableYears,
+    regions: stableRegions,
+    search: stableSearch
+  })
+  
+  // Use deferred value for rows only (heavy visual component)
+  const deferredAggregated = useDeferredValue(hermesAggregated)
+  const rows = useDeferredValue(hermesData || [])
+  const isStaleData = rows !== hermesData
 
-  // Menggunakan hook useTopIssueData untuk mengambil data top 5 issue
-  // Meneruskan debounced filter untuk unified debouncing
-  const {
-    data: topIssuesData,
-    loading: topIssuesLoading,
-    topIssuesTotal,
-    totalIssues
-  } = useTopIssueData({ filter: debouncedFilter })
+  // Get top issues and daily runrate from aggregated data (client-side)
+  const topIssuesData = hermesAggregated?.topIssues?.issues || []
+  const topIssuesTotal = hermesAggregated?.topIssues?.top5Count || 0
+  const totalIssues = hermesAggregated?.topIssues?.totalCount || 0
+  const dailyRunrateData = hermesAggregated?.dailyRunrate || []
 
-  // Menggunakan hook useDailyRunrateData untuk mengambil data daily runrate
-  // Meneruskan debounced filter untuk unified debouncing
-  const {
-    data: dailyRunrateData,
-    loading: dailyRunrateLoading
-  } = useDailyRunrateData({ filter: debouncedFilter })
-
-  // Menggunakan hook useVendorLeaderboard untuk mengambil data vendor leaderboard
-  // Meneruskan debounced filter untuk unified debouncing
-  const {
-    data: vendorLeaderboardData,
-    loading: vendorLeaderboardLoading,
-    totalVendors
-  } = useVendorLeaderboard({ filter: debouncedFilter })
+  // Loading state now only depends on main hermesLoading (no separate API calls)
+  const loading = hermesLoading
+  const error = hermesError ? new Error(hermesError) : null
+  const count = hermesData?.length || 0
+  const filter = filterValue
 
   const isMobile = useIsMobile()
   const [hasMounted, setHasMounted] = useState(false)
@@ -145,7 +169,7 @@ export default function Hermes5GPage() {
   const [exportStatus, setExportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [hasInitialDataLoaded, setHasInitialDataLoaded] = useState(false)
 
-  const isAnyDataLoading = loading || topIssuesLoading || dailyRunrateLoading || vendorLeaderboardLoading
+  const isAnyDataLoading = loading
 
   useEffect(() => {
     setHasMounted(true)
@@ -235,16 +259,17 @@ export default function Hermes5GPage() {
   // Handler untuk perubahan filter
   const handleFilterChange = (newFilters: FilterValue) => {
     console.log("Filter changed:", newFilters)
-    // Update filter context - support multiselect by joining arrays
-    filterContext.setSearchTerm(newFilters.q)
-    filterContext.setVendorFilter(newFilters.vendor_name.length > 0 ? newFilters.vendor_name.join(',') : 'all')
-    filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report.join(',') : 'all')
-    filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp.join(',') : 'all')
-    filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster.join(',') : 'all')
-    filterContext.setRegionFilter(newFilters.region && newFilters.region.length > 0 ? newFilters.region.join(',') : 'all')
-    filterContext.setYearFilter(newFilters.year && newFilters.year.length > 0 ? newFilters.year.join(',') : 'all')
-    // ran_score filter removed - no longer used
-    updateFilter(newFilters)
+    // OPTIMIZED: Use startTransition untuk non-urgent state updates (mencegah UI freeze)
+    startTransition(() => {
+      // Update filter context - support multiselect by joining arrays
+      filterContext.setSearchTerm(newFilters.q || '')
+      filterContext.setVendorFilter(newFilters.vendor_name.length > 0 ? newFilters.vendor_name.join(',') : 'all')
+      filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report.join(',') : 'all')
+      filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp.join(',') : 'all')
+      filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster.join(',') : 'all')
+      filterContext.setRegionFilter(newFilters.region && newFilters.region.length > 0 ? newFilters.region.join(',') : 'all')
+      filterContext.setYearFilter(newFilters.year && newFilters.year.length > 0 ? newFilters.year.join(',') : 'all')
+    })
   }
 
   // Handler untuk reset filter
@@ -397,19 +422,43 @@ export default function Hermes5GPage() {
     </div>
   )
 
-  // MatrixStats component
+  // MatrixStats component - OPTIMIZED: Pass stats dari API untuk menghindari redundant calculation
   const matrixStats = (
-    <MatrixStatsCard rows={rows} />
+    <MatrixStatsCard 
+      rows={rows} 
+      patpCount={hermesStats?.patp || 0}
+      stats={hermesStats ? {
+        totalSites: hermesStats.totalSites,
+        caf: hermesStats.caf,
+        mos: hermesStats.mos,
+        install: hermesStats.install,
+        rfs: hermesStats.activated,
+        rfc: hermesStats.rfc,
+        hotnews: hermesStats.hotnews,
+        endorse: hermesStats.endorse,
+        pac: hermesStats.pac
+      } : undefined}
+    />
   )
 
-  // 5G Readiness component
+  // 5G Readiness component - OPTIMIZED: Use pre-aggregated data
   const readinessCard = (
-    <FiveGReadinessCard rows={rows} maxCities={10} />
+    <FiveGReadinessCard 
+      rows={rows} 
+      maxCities={10} 
+      variant="city"
+      aggregatedByCircle={deferredAggregated?.byCity}
+    />
   )
 
-  // 5G Activated component
+  // 5G Activated component - OPTIMIZED: Use pre-aggregated data
   const activatedCard = (
-    <FiveGActivatedCard rows={rows} maxCities={10} />
+    <FiveGActivatedCard 
+      rows={rows} 
+      maxCities={10} 
+      variant="city"
+      aggregatedByCircle={deferredAggregated?.byCity}
+    />
   )
 
   // Nano Cluster component
@@ -423,21 +472,21 @@ export default function Hermes5GPage() {
   )
   
 
-  // Daily Runrate component
+  // Daily Runrate component - OPTIMIZED: Use pre-aggregated data
   const dailyRunrateCard = (
     <DailyRunrateCard 
       data={dailyRunrateData} 
-      isLoading={dailyRunrateLoading} 
+      isLoading={loading} 
     />
   )
 
-  // TopIssueCard component
+  // TopIssueCard component - OPTIMIZED: Use pre-aggregated data
   const topIssueCard = (
     <TopIssueCard 
       issues={topIssuesData} 
       totalIssues={totalIssues} 
       topIssuesTotal={topIssuesTotal}
-      isLoading={topIssuesLoading}
+      isLoading={loading}
     />
   )
 
@@ -448,11 +497,12 @@ export default function Hermes5GPage() {
     />
   )
 
-  // Vendor Leaderboard component
+  // Vendor Leaderboard component - OPTIMIZED: Use pre-aggregated data
   const vendorLeaderboardCard = (
     <VendorLeaderboardCard 
       rows={rows}
-      isLoading={vendorLeaderboardLoading}
+      isLoading={loading}
+      aggregatedByVendor={deferredAggregated?.byVendor}
     />
   )
 

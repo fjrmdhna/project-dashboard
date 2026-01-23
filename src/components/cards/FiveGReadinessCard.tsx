@@ -159,14 +159,14 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
   // Agregasi data untuk chart - OPTIMIZED: Use pre-aggregated data if available
   const chartData = useMemo(() => {
     // OPTIMIZATION: If pre-aggregated data is available, use it (O(1) instead of O(n))
-    if (aggregatedByCircle && variant === 'circle') {
-      const result: ChartItem[] = Array.from(aggregatedByCircle.entries()).map(([circle, data]) => {
+    if (aggregatedByCircle && (variant === 'circle' || variant === 'city')) {
+      const result: ChartItem[] = Array.from(aggregatedByCircle.entries()).map(([location, data]) => {
         // For AOP, use rfi field; for default, use ready field
-        const rdyCount = dataVariant === 'aop' ? data.rfi : data.ready
+        const rdyCount = dataVariant === 'aop' ? (data as any).rfi : data.ready
         const nyCount = data.total - rdyCount
         return {
-          city: '',
-          circle: normalizeCircle(circle),
+          city: variant === 'circle' ? '' : location,
+          circle: variant === 'circle' ? normalizeCircle(location) : '',
           ny: Math.abs(nyCount),
           rdy: rdyCount > 0 ? Math.abs(rdyCount) : null,
           total: data.total

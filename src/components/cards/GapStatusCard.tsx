@@ -6,22 +6,15 @@ import { AlertCircle, Clock, CheckCircle } from "lucide-react"
 // Tipe data untuk row dari site_data_aop
 type Row = {
   system_key?: string | null
-  ic_000040_af?: string | null // INSTALL milestone
-  caf_approved?: string | null // RFI accepted equivalent (rfi_accepted di database)
-  rfs_af?: string | null // Activated
-}
-
-// Pre-aggregated gaps from useAopData hook (OPTIMIZATION)
-type AggregatedGaps = {
-  sowToRfi: number
-  rfiToCrfi: number
-  crfiToOa: number
+  rfs_af?: string | null // RFS Actual
+  rfc_approved?: string | null // RFC Approved
+  hotnews_af?: string | null // Hotnews
+  endorse_af?: string | null // Endorse
 }
 
 type GapStatusCardProps = {
   rows: Row[]
-  // OPTIMIZATION: Pre-aggregated data to avoid 41k row iteration
-  aggregatedGaps?: AggregatedGaps
+  isLoading?: boolean
 }
 
 // Komponen metrik individual untuk gap status
@@ -59,55 +52,75 @@ function GapMetricItem({
   )
 }
 
-export function GapStatusCard({ rows, aggregatedGaps }: GapStatusCardProps) {
-  // Hitung gap metrics dari rows - OPTIMIZED: Use pre-aggregated data if available
+// Helper function to check if date string is valid
+function isValidDate(dateStr: string | null | undefined): boolean {
+  if (!dateStr) return false
+  try {
+    const date = new Date(dateStr)
+    return !isNaN(date.getTime())
+  } catch {
+    return false
+  }
+}
+
+export function GapStatusCard({ rows, isLoading = false }: GapStatusCardProps) {
+  // Hitung gap metrics dari rows
   const gapMetrics = useMemo(() => {
-    // OPTIMIZATION: If pre-aggregated data is available, use it (O(1) instead of O(n))
-    if (aggregatedGaps) {
+    if (isLoading || !rows || rows.length === 0) {
       return {
-        sowToRfi: aggregatedGaps.sowToRfi,
-        rfiToCrfi: aggregatedGaps.rfiToCrfi,
-        crfiToOa: aggregatedGaps.crfiToOa,
-        total: rows.length
+        rfsToRfc: 0,
+        rfsToHotnews: 0,
+        rfsToEndorse: 0,
+        total: 0
       }
     }
     
-    // Fallback: Aggregate from rows (legacy path)
-    let sowToRfi = 0
-    let rfiToCrfi = 0
-    let crfiToOa = 0
+    let rfsToRfc = 0      // RFS ada, tapi RFC belum ada
+    let rfsToHotnews = 0  // RFS ada, tapi Hotnews belum ada
+    let rfsToEndorse = 0  // RFS ada, tapi Endorse belum ada
     
     rows.forEach(row => {
-      if (!row.system_key) return
+      const hasRfsAf = isValidDate(row.rfs_af)
       
-      const hasSystemKey = !!(row.system_key && String(row.system_key).trim() !== '')
-      const hasIc000040Af = !!(row.ic_000040_af && String(row.ic_000040_af).trim() !== '')
-      
-      if (hasSystemKey && !hasIc000040Af) {
-        sowToRfi++
-      }
-      
-      const hasCafApproved = !!(row.caf_approved && String(row.caf_approved).trim() !== '')
-      
-      if (hasIc000040Af && !hasCafApproved) {
-        rfiToCrfi++
-      }
-      
-      const hasRfsAf = !!(row.rfs_af && String(row.rfs_af).trim() !== '')
-      
-      if (hasCafApproved && !hasRfsAf) {
-        crfiToOa++
+      // Hanya hitung jika sudah RFS
+      if (hasRfsAf) {
+        const hasRfc = isValidDate(row.rfc_approved)
+        const hasHotnews = isValidDate(row.hotnews_af)
+        const hasEndorse = isValidDate(row.endorse_af)
+        
+        // RFS to RFC gap
+        if (!hasRfc) {
+          rfsToRfc++
+        }
+        
+        // RFS to Hotnews gap
+        if (!hasHotnews) {
+          rfsToHotnews++
+        }
+        
+        // RFS to Endorse gap
+        if (!hasEndorse) {
+          rfsToEndorse++
+        }
       }
     })
     
     return {
-      sowToRfi,
-      rfiToCrfi,
-      crfiToOa,
-      total: rows.filter(row => !!(row.system_key && String(row.system_key).trim() !== '')).length
+      rfsToRfc,
+      rfsToHotnews,
+      rfsToEndorse,
+      total: rows.filter(row => isValidDate(row.rfs_af)).length
     }
-  }, [rows, aggregatedGaps])
+  }, [rows, isLoading])
   
+  if (isLoading) {
+    return (
+      <div className="rounded-lg bg-[#0F1630]/80 border border-white/5 w-full h-full flex items-center justify-center p-1">
+        <div className="animate-pulse text-white/50 text-[9px]">Loading...</div>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-lg bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col text-white min-w-0 p-1 overflow-hidden">
       {/* Header - Compact horizontal layout */}
@@ -121,38 +134,38 @@ export function GapStatusCard({ rows, aggregatedGaps }: GapStatusCardProps) {
           </div>
         </div>
         <div className="bg-orange-500/10 px-1.5 py-0.5 rounded-sm flex items-center">
-          <div className="text-[7px] text-orange-300 mr-1">Total:</div>
+          <div className="text-[7px] text-orange-300 mr-1">RFS:</div>
           <div className="text-xs font-bold text-white">{gapMetrics.total.toLocaleString()}</div>
         </div>
       </div>
       
       {/* Grid of gap metrics */}
       <div className="grid grid-cols-1 gap-1 flex-1 min-h-0 overflow-hidden">
-        {/* Gap 1: SOW - RFI */}
+        {/* Gap 1: RFS to RFC */}
         <GapMetricItem 
-          icon={<Clock className="h-3 w-3 text-amber-400" />} 
-          value={gapMetrics.sowToRfi} 
-          label="SOW - RFI" 
-          bgColor="bg-amber-500/20"
-          textColor="#F59E0B"
+          icon={<Clock className="h-3 w-3 text-cyan-400" />} 
+          value={gapMetrics.rfsToRfc} 
+          label="RFS to RFC" 
+          bgColor="bg-cyan-500/20"
+          textColor="#22D3EE"
         />
         
-        {/* Gap 2: RFI - CRFI */}
+        {/* Gap 2: RFS to Hotnews */}
         <GapMetricItem 
           icon={<AlertCircle className="h-3 w-3 text-yellow-400" />} 
-          value={gapMetrics.rfiToCrfi} 
-          label="RFI - CRFI" 
+          value={gapMetrics.rfsToHotnews} 
+          label="RFS to Hotnews" 
           bgColor="bg-yellow-500/20"
           textColor="#EAB308"
         />
         
-        {/* Gap 3: CRFI - OA */}
+        {/* Gap 3: RFS to Endorse */}
         <GapMetricItem 
-          icon={<CheckCircle className="h-3 w-3 text-lime-400" />} 
-          value={gapMetrics.crfiToOa} 
-          label="CRFI - OA" 
-          bgColor="bg-lime-500/20"
-          textColor="#84CC16"
+          icon={<CheckCircle className="h-3 w-3 text-green-400" />} 
+          value={gapMetrics.rfsToEndorse} 
+          label="RFS to Endorse" 
+          bgColor="bg-green-500/20"
+          textColor="#22C55E"
         />
       </div>
     </div>

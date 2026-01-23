@@ -10,38 +10,46 @@ interface Row {
   mocn_activation_forecast?: string | null  // Target (MOCN Activation Forecast)
 }
 
-// Pre-aggregated data from useAopData hook (OPTIMIZATION)
-type AggregatedByCircle = Map<string, { total: number; ready: number; activated: number; rfi: number }>
-
 export interface CircleAchievementCardProps {
   rows: Row[]
   isLoading?: boolean
-  // OPTIMIZATION: Pre-aggregated data to avoid row iteration
-  aggregatedByCircle?: AggregatedByCircle
 }
 
 interface CircleData {
   circle: string
-  achievement: number  // Cumulative count of rfs_af up to end of current month
-  target: number       // Cumulative count of mocn_activation_forecast up to end of current month
-  remaining: number    // target - achievement
+  // MTD (Month to Date) - Current month only
+  mtdTarget: number
+  mtdActual: number
+  mtdRemaining: number
+  // YTD (Year to Date) - Current year only
+  ytdTarget: number
+  ytdActual: number
+  ytdRemaining: number
 }
 
-// Helper function to get the end of current month
-function getEndOfCurrentMonth(): Date {
+// Get date ranges for MTD and YTD calculations
+function getDateRanges(): { mtdStart: Date; mtdEnd: Date; ytdStart: Date; ytdEnd: Date } {
   const now = new Date()
-  // Last day of current month at 23:59:59.999
-  return new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  
+  return {
+    // MTD: First day of current month to last day of current month
+    mtdStart: new Date(year, month, 1, 0, 0, 0, 0),
+    mtdEnd: new Date(year, month + 1, 0, 23, 59, 59, 999),
+    // YTD: First day of current year to last day of current year
+    ytdStart: new Date(year, 0, 1, 0, 0, 0, 0),
+    ytdEnd: new Date(year, 11, 31, 23, 59, 59, 999)
+  }
 }
 
-// Helper function to check if date is on or before end of current month (cumulative)
-function isOnOrBeforeEndOfMonth(dateStr: string | null | undefined, endOfMonth: Date): boolean {
+// Helper function to check if date is within a range
+function isInRange(dateStr: string | null | undefined, start: Date, end: Date): boolean {
   if (!dateStr) return false
   
   try {
     const date = new Date(dateStr)
-    // Check if date is valid and <= end of current month
-    return !isNaN(date.getTime()) && date <= endOfMonth
+    return !isNaN(date.getTime()) && date >= start && date <= end
   } catch {
     return false
   }
@@ -53,41 +61,85 @@ function getCurrentMonthName(): string {
   return now.toLocaleString('en-US', { month: 'short' })
 }
 
+// Helper function to get current year
+function getCurrentYear(): number {
+  return new Date().getFullYear()
+}
+
 // Helper to normalize circle name
 function normalizeCircle(circle: string | null | undefined): string {
   if (!circle) return "Unknown"
   return circle.trim().toUpperCase()
 }
 
+// Get color based on remaining value (negative = over-achieved, positive = under-achieved)
+function getRemainingColor(remaining: number): string {
+  if (remaining <= 0) return "text-green-400"
+  if (remaining <= 20) return "text-yellow-400"
+  return "text-orange-400"
+}
+
+function getRemainingBg(remaining: number): string {
+  if (remaining <= 0) return "bg-green-500/10"
+  if (remaining <= 20) return "bg-yellow-500/10"
+  return "bg-orange-500/10"
+}
+
+// Get achievement rate color (actual vs target percentage)
+function getAchievementColor(actual: number, target: number): string {
+  if (target === 0) return "text-gray-400"
+  const rate = (actual / target) * 100
+  if (rate >= 100) return "text-green-400"
+  if (rate >= 80) return "text-lime-400"
+  if (rate >= 60) return "text-yellow-400"
+  return "text-orange-400"
+}
+
 export function CircleAchievementCard({ rows, isLoading = false }: CircleAchievementCardProps) {
   const currentMonth = useMemo(() => getCurrentMonthName(), [])
+  const currentYear = useMemo(() => getCurrentYear(), [])
   
-  // Calculate cumulative achievement data per circle (up to end of current month)
+  // Calculate MTD and YTD achievement data per circle
   const circleData = useMemo(() => {
     if (isLoading || !rows || rows.length === 0) {
       return []
     }
 
-    // Get end of current month for cumulative calculation
-    const endOfMonth = getEndOfCurrentMonth()
+    const { mtdStart, mtdEnd, ytdStart, ytdEnd } = getDateRanges()
 
     // Group data by circle
-    const circleMap = new Map<string, { achievement: number; target: number }>()
+    const circleMap = new Map<string, {
+      mtdTarget: number
+      mtdActual: number
+      ytdTarget: number
+      ytdActual: number
+    }>()
 
     // Single pass through rows
     for (const row of rows) {
       const circle = normalizeCircle(row.region_circle)
       
-      const data = circleMap.get(circle) || { achievement: 0, target: 0 }
-      
-      // Count achievement (cumulative: rfs_af <= end of current month)
-      if (isOnOrBeforeEndOfMonth(row.rfs_af, endOfMonth)) {
-        data.achievement++
+      const data = circleMap.get(circle) || {
+        mtdTarget: 0,
+        mtdActual: 0,
+        ytdTarget: 0,
+        ytdActual: 0
       }
       
-      // Count target (cumulative: mocn_activation_forecast <= end of current month)
-      if (isOnOrBeforeEndOfMonth(row.mocn_activation_forecast, endOfMonth)) {
-        data.target++
+      // MTD calculations (current month only)
+      if (isInRange(row.mocn_activation_forecast, mtdStart, mtdEnd)) {
+        data.mtdTarget++
+      }
+      if (isInRange(row.rfs_af, mtdStart, mtdEnd)) {
+        data.mtdActual++
+      }
+      
+      // YTD calculations (current year only)
+      if (isInRange(row.mocn_activation_forecast, ytdStart, ytdEnd)) {
+        data.ytdTarget++
+      }
+      if (isInRange(row.rfs_af, ytdStart, ytdEnd)) {
+        data.ytdActual++
       }
       
       circleMap.set(circle, data)
@@ -97,12 +149,18 @@ export function CircleAchievementCard({ rows, isLoading = false }: CircleAchieve
     const result: CircleData[] = Array.from(circleMap.entries())
       .map(([circle, data]) => ({
         circle,
-        achievement: data.achievement,
-        target: data.target,
-        remaining: data.target - data.achievement
+        mtdTarget: data.mtdTarget,
+        mtdActual: data.mtdActual,
+        mtdRemaining: data.mtdTarget - data.mtdActual,
+        ytdTarget: data.ytdTarget,
+        ytdActual: data.ytdActual,
+        ytdRemaining: data.ytdTarget - data.ytdActual
       }))
-      .filter(item => item.target > 0 || item.achievement > 0) // Only show circles with data
-      .sort((a, b) => b.target - a.target) // Sort by target descending
+      .filter(item => 
+        item.mtdTarget > 0 || item.mtdActual > 0 || 
+        item.ytdTarget > 0 || item.ytdActual > 0
+      ) // Only show circles with data
+      .sort((a, b) => b.ytdTarget - a.ytdTarget) // Sort by YTD target descending
 
     return result
   }, [rows, isLoading])
@@ -111,26 +169,16 @@ export function CircleAchievementCard({ rows, isLoading = false }: CircleAchieve
   const totals = useMemo(() => {
     return circleData.reduce(
       (acc, item) => ({
-        achievement: acc.achievement + item.achievement,
-        target: acc.target + item.target,
-        remaining: acc.remaining + item.remaining
+        mtdTarget: acc.mtdTarget + item.mtdTarget,
+        mtdActual: acc.mtdActual + item.mtdActual,
+        mtdRemaining: acc.mtdRemaining + item.mtdRemaining,
+        ytdTarget: acc.ytdTarget + item.ytdTarget,
+        ytdActual: acc.ytdActual + item.ytdActual,
+        ytdRemaining: acc.ytdRemaining + item.ytdRemaining
       }),
-      { achievement: 0, target: 0, remaining: 0 }
+      { mtdTarget: 0, mtdActual: 0, mtdRemaining: 0, ytdTarget: 0, ytdActual: 0, ytdRemaining: 0 }
     )
   }, [circleData])
-
-  // Get remaining color based on value
-  const getRemainingColor = (remaining: number) => {
-    if (remaining <= 0) return "text-green-400"
-    if (remaining <= 20) return "text-yellow-400"
-    return "text-orange-400"
-  }
-
-  const getRemainingBg = (remaining: number) => {
-    if (remaining <= 0) return "bg-green-500/10"
-    if (remaining <= 20) return "bg-yellow-500/10"
-    return "bg-orange-500/10"
-  }
 
   if (isLoading) {
     return (
@@ -141,76 +189,77 @@ export function CircleAchievementCard({ rows, isLoading = false }: CircleAchieve
   }
 
   return (
-    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'calc(var(--wb-card-padding) - 4px)' }}>
-      {/* Header - Same style as other cards */}
-      <div className="flex items-center gap-2 mb-1 flex-shrink-0">
-        <div className="bg-cyan-500/20 p-0.5 rounded-lg">
-          <Target className="h-3 w-3 text-cyan-400" />
-        </div>
-        <div className="text-[10px] font-semibold bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full">
-          Circle Achievement
-        </div>
-      </div>
-
-      {/* Table - Compact but readable */}
-      <div className="flex-1 flex flex-col justify-center">
-        <table className="w-full text-[8px] border-collapse">
-          <thead>
-            <tr>
-              <th className="text-left py-0.5 px-1.5 text-white/60 font-medium bg-white/5 rounded-tl-lg">
-                Circle
-              </th>
-              <th className="text-center py-0.5 px-1.5 text-white/60 font-medium bg-green-500/10">
-                Ach. ≤{currentMonth}
-              </th>
-              <th className="text-center py-0.5 px-1.5 text-white/60 font-medium bg-cyan-500/10">
-                Target ≤{currentMonth}
-              </th>
-              <th className="text-center py-0.5 px-1.5 text-white/60 font-medium bg-orange-500/10 rounded-tr-lg">
-                Rem.
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {circleData.map((item) => (
-              <tr key={item.circle} className="border-t border-white/5">
-                <td className="py-0.5 px-1.5 text-white/80 font-medium">
-                  {item.circle}
-                </td>
-                <td className="py-0.5 px-1.5 text-center text-green-400 font-semibold bg-green-500/5">
-                  {item.achievement.toLocaleString()}
-                </td>
-                <td className="py-0.5 px-1.5 text-center text-cyan-400 font-semibold bg-cyan-500/5">
-                  {item.target.toLocaleString()}
-                </td>
-                <td className={`py-0.5 px-1.5 text-center font-semibold ${getRemainingColor(item.remaining)} ${getRemainingBg(item.remaining)}`}>
-                  {item.remaining.toLocaleString()}
-                </td>
-              </tr>
-            ))}
-            
-            {/* Total Row */}
-            <tr className="border-t border-white/20 bg-white/5">
-              <td className="py-0.5 px-1.5 text-white font-bold rounded-bl-lg">Total</td>
-              <td className="py-0.5 px-1.5 text-center text-green-300 font-bold">
-                {totals.achievement.toLocaleString()}
-              </td>
-              <td className="py-0.5 px-1.5 text-center text-cyan-300 font-bold">
-                {totals.target.toLocaleString()}
-              </td>
-              <td className={`py-0.5 px-1.5 text-center font-bold rounded-br-lg ${getRemainingColor(totals.remaining)}`}>
-                {totals.remaining.toLocaleString()}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
-        {circleData.length === 0 && (
-          <div className="flex-1 flex items-center justify-center text-white/40 text-[8px]">
-            No data available
+    <div className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0 p-1.5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-1 flex-shrink-0">
+        <div className="flex items-center gap-1">
+          <div className="bg-cyan-500/20 p-0.5 rounded">
+            <Target className="h-2.5 w-2.5 text-cyan-400" />
           </div>
-        )}
+          <span className="text-[8px] font-semibold text-cyan-300">Circle Achievement</span>
+        </div>
+        {/* Glossary */}
+        <div className="flex items-center gap-2 text-[6px]">
+          <span className="text-cyan-400 font-medium">T<span className="text-white/50">=Target</span></span>
+          <span className="text-green-400 font-medium">A<span className="text-white/50">=Actual</span></span>
+          <span className="text-orange-400 font-medium">R<span className="text-white/50">=Remaining</span></span>
+        </div>
       </div>
+
+      {/* Table - fit content, no flex-1 to avoid blank space */}
+      <table className="w-full text-[7px] border-collapse table-fixed">
+        <thead>
+          <tr>
+            <th rowSpan={2} className="text-left py-0.5 px-1 text-white/60 font-medium bg-white/5 w-[20%]">
+              Circle
+            </th>
+            <th colSpan={3} className="text-center py-0.5 px-0.5 text-white/80 font-semibold bg-indigo-500/15 w-[40%]">
+              MTD {currentMonth}
+            </th>
+            <th colSpan={3} className="text-center py-0.5 px-0.5 text-white/80 font-semibold bg-purple-500/15 w-[40%]">
+              YTD {currentYear}
+            </th>
+          </tr>
+          <tr>
+            <th className="text-center py-0.5 px-0.5 text-cyan-400/80 font-medium bg-cyan-500/10">T</th>
+            <th className="text-center py-0.5 px-0.5 text-green-400/80 font-medium bg-green-500/10">A</th>
+            <th className="text-center py-0.5 px-0.5 text-orange-400/80 font-medium bg-orange-500/10">R</th>
+            <th className="text-center py-0.5 px-0.5 text-cyan-400/80 font-medium bg-cyan-500/10">T</th>
+            <th className="text-center py-0.5 px-0.5 text-green-400/80 font-medium bg-green-500/10">A</th>
+            <th className="text-center py-0.5 px-0.5 text-orange-400/80 font-medium bg-orange-500/10">R</th>
+          </tr>
+        </thead>
+        <tbody>
+          {circleData.map((item) => (
+            <tr key={item.circle} className="border-t border-white/5">
+              <td className="py-0.5 px-1 text-white/80 font-medium truncate" title={item.circle}>
+                {item.circle}
+              </td>
+              <td className="py-0.5 px-0.5 text-center text-cyan-400 font-semibold">{item.mtdTarget}</td>
+              <td className={`py-0.5 px-0.5 text-center font-semibold ${getAchievementColor(item.mtdActual, item.mtdTarget)}`}>{item.mtdActual}</td>
+              <td className={`py-0.5 px-0.5 text-center font-semibold ${getRemainingColor(item.mtdRemaining)}`}>{item.mtdRemaining}</td>
+              <td className="py-0.5 px-0.5 text-center text-cyan-400 font-semibold">{item.ytdTarget}</td>
+              <td className={`py-0.5 px-0.5 text-center font-semibold ${getAchievementColor(item.ytdActual, item.ytdTarget)}`}>{item.ytdActual}</td>
+              <td className={`py-0.5 px-0.5 text-center font-semibold ${getRemainingColor(item.ytdRemaining)}`}>{item.ytdRemaining}</td>
+            </tr>
+          ))}
+          <tr className="border-t border-white/20 bg-white/5">
+            <td className="py-0.5 px-1 text-white font-bold">Total</td>
+            <td className="py-0.5 px-0.5 text-center text-cyan-300 font-bold">{totals.mtdTarget}</td>
+            <td className={`py-0.5 px-0.5 text-center font-bold ${getAchievementColor(totals.mtdActual, totals.mtdTarget)}`}>{totals.mtdActual}</td>
+            <td className={`py-0.5 px-0.5 text-center font-bold ${getRemainingColor(totals.mtdRemaining)}`}>{totals.mtdRemaining}</td>
+            <td className="py-0.5 px-0.5 text-center text-cyan-300 font-bold">{totals.ytdTarget}</td>
+            <td className={`py-0.5 px-0.5 text-center font-bold ${getAchievementColor(totals.ytdActual, totals.ytdTarget)}`}>{totals.ytdActual}</td>
+            <td className={`py-0.5 px-0.5 text-center font-bold ${getRemainingColor(totals.ytdRemaining)}`}>{totals.ytdRemaining}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {circleData.length === 0 && (
+        <div className="py-2 text-center text-white/40 text-[7px]">
+          No data available
+        </div>
+      )}
     </div>
   )
 }

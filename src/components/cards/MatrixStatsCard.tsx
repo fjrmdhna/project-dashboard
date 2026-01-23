@@ -17,6 +17,7 @@ export interface Row {
   hotnews_af?: string | null
   endorse_af?: string | null
   pac_accepted_af?: string | null
+  patp_accepted_af?: string | null
   vendor_name?: string
   program_report?: string
   imp_ttp?: string
@@ -153,7 +154,8 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
     const hotnews = rows.filter(row => row.hotnews_af).length
     const endorse = rows.filter(row => row.endorse_af).length
     const pac = rows.filter(row => row.pac_accepted_af).length
-    const patp = patpCount
+    // Use patpCount from props if provided, otherwise calculate from rows
+    const patp = patpCount > 0 ? patpCount : rows.filter(row => row.patp_accepted_af).length
 
     return {
       totalSites,

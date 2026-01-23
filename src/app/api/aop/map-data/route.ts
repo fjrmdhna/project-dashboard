@@ -178,7 +178,12 @@ async function fetchMapDataFromDatabase(
     }
 
     if (ranScores.length > 0) {
-      query = query.in('ran_score', ranScores)
+      // Use case-insensitive matching for ran_score (ilike with OR conditions)
+      // Since ran_score values might have different casing in database
+      const ranScoreConditions = ranScores
+        .map(rs => `ran_score.ilike.%${rs.trim()}%`)
+        .join(',')
+      query = query.or(ranScoreConditions)
     }
 
     if (years.length > 0) {

@@ -158,13 +158,13 @@ export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city', dat
   // Agregasi data untuk chart - OPTIMIZED: Use pre-aggregated data if available
   const chartData = useMemo(() => {
     // OPTIMIZATION: If pre-aggregated data is available, use it (O(1) instead of O(n))
-    if (aggregatedByCircle && variant === 'circle') {
-      const result: ChartItem[] = Array.from(aggregatedByCircle.entries()).map(([circle, data]) => {
+    if (aggregatedByCircle && (variant === 'circle' || variant === 'city')) {
+      const result: ChartItem[] = Array.from(aggregatedByCircle.entries()).map(([location, data]) => {
         const actCount = data.activated
         const nyCount = data.total - actCount
         return {
-          city: '',
-          circle: normalizeCircle(circle),
+          city: variant === 'circle' ? '' : location,
+          circle: variant === 'circle' ? normalizeCircle(location) : '',
           ny: Math.abs(nyCount),
           act: actCount > 0 ? Math.abs(actCount) : null,
           total: data.total

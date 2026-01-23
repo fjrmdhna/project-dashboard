@@ -13,7 +13,7 @@ import ProgressCurveLineChart from "@/components/charts/ProgressCurveLineChart"
 import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
 import { TopIssueCard } from "@/components/cards/TopIssueCard"
 import { GapStatusCard } from "@/components/cards/GapStatusCard"
-import { CircleListCard } from "@/components/cards/NewFeatureCard"
+import { AgingPoCard } from "@/components/cards/AgingPoCard"
 import { CircleAchievementCard } from "@/components/cards/CircleAchievementCard"
 import { Wallboard1080 } from "@/layouts/Wallboard1080"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -408,7 +408,7 @@ export default function AopPage() {
     dataVariant="aop" 
     aggregatedByCircle={deferredAggregated?.byCircle}
   />
-  const gapStatusCard = <GapStatusCard rows={rows} aggregatedGaps={deferredAggregated?.gaps} />
+  const gapStatusCard = <GapStatusCard rows={rows} isLoading={aopLoading} />
   const progressCurve = (
     <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} yearFilter={2026} />
   )
@@ -426,7 +426,7 @@ export default function AopPage() {
       isLoading={aopLoading}
     />
   )
-  const circleList = <CircleListCard rows={rows} />
+  const agingPo = <AgingPoCard rows={rows} isLoading={aopLoading} />
   const circleAchievement = <CircleAchievementCard rows={rows} isLoading={aopLoading} />
 
   const header = <ProgramHeader title="Dashboard AOP" dateLabel={formattedDate} mapHref="/aop/map" />
@@ -442,7 +442,7 @@ export default function AopPage() {
       dailyRunrate={dailyRunrate}
       top5Issue={topIssueCard}
       nanoCluster={gapStatusCard}
-      newFeature={circleList}
+      newFeature={agingPo}
       leaderboard={circleAchievement}
     />
   )
@@ -584,7 +584,7 @@ export default function AopPage() {
           </div>
 
           {renderMobileCard(gapStatusCard, 200)}
-          {renderMobileCard(circleList, 200)}
+          {renderMobileCard(agingPo, 200)}
           {renderMobileCard(circleAchievement, 280)}
         </section>
       </main>
