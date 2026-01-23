@@ -23,7 +23,8 @@ type Row = {
 }
 
 // Pre-aggregated data from useAopData hook (OPTIMIZATION)
-type AggregatedByCircle = Map<string, { total: number; ready: number; activated: number; rfi: number }>
+// rfi is optional because Hermes 5G doesn't use it
+type AggregatedByCircle = Map<string, { total: number; ready: number; activated: number; rfi?: number }>
 
 // Tipe data untuk props komponen
 type Props = {

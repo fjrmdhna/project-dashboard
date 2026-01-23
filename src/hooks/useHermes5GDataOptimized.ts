@@ -145,7 +145,6 @@ function filterDataClientSide(
   let rejectedBySearch = 0
   
   const result = data.filter(row => {
-    let passed = true
     
     // Vendor filter
     if (vendorNames.length > 0 && !vendorNames.includes(row.vendor_name || '')) {

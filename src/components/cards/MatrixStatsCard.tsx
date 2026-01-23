@@ -18,9 +18,9 @@ export interface Row {
   endorse_af?: string | null
   pac_accepted_af?: string | null
   patp_accepted_af?: string | null
-  vendor_name?: string
-  program_report?: string
-  imp_ttp?: string
+  vendor_name?: string | null
+  program_report?: string | null
+  imp_ttp?: string | null
   lat?: number | null
   long?: number | null
 }
@@ -31,8 +31,12 @@ export interface MatrixStatsCardProps {
   variant?: "default" | "aop"
   stats?: {
     totalSites?: number
+    // AOP variant stats
     rfi?: number
     crfi?: number
+    // Hermes 5G variant stats
+    caf?: number
+    // Common stats
     mos?: number
     install?: number
     rfs?: number
