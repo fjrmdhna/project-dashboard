@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { ReactNode } from "react"
 
 interface ProgramHeaderProps {
   title: string
@@ -7,6 +8,7 @@ interface ProgramHeaderProps {
   mapLabel?: string
   mapHref?: string
   backHref?: string
+  exportButton?: ReactNode
 }
 
 export function ProgramHeader({
@@ -15,7 +17,8 @@ export function ProgramHeader({
   overviewLabel = "Overview",
   mapLabel = "Map",
   mapHref,
-  backHref = "/"
+  backHref = "/",
+  exportButton
 }: ProgramHeaderProps) {
   const formattedDate =
     dateLabel ??
@@ -53,6 +56,7 @@ export function ProgramHeader({
       <div className="-mr-9 mt-2 flex flex-col items-end gap-2 text-right">
         <div className="text-sm font-medium text-white">{formattedDate}</div>
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.32em]">
+          {exportButton}
           <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-3 py-1 font-semibold text-[#34D399]">
             {overviewLabel}
           </span>

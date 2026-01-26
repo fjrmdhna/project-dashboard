@@ -35,7 +35,7 @@ interface CompactMapPoint {
   c?: string  // nanoCluster
 }
 
-const NUM_TO_STATUS: StatusLabel[] = ['SOW', 'RFI', 'INSTALL', 'ON_AIR']
+const NUM_TO_STATUS: StatusLabel[] = ['SOW', 'RFI', 'CRFI', 'MOS', 'ON_AIR']
 
 // Convert compact point to full point
 function expandPoint(cp: CompactMapPoint): HermesMapPoint {
@@ -74,34 +74,40 @@ interface MapApiError {
 
 type MapApiResponse = MapApiSuccess | MapApiError
 
-const STATUS_ORDER: StatusLabel[] = ['ON_AIR', 'INSTALL', 'RFI', 'SOW']
+const STATUS_ORDER: StatusLabel[] = ['ON_AIR', 'MOS', 'CRFI', 'RFI', 'SOW']
 
 const DEFAULT_COUNTS: Record<StatusLabel, number> = {
   ON_AIR: 0,
-  INSTALL: 0,
+  MOS: 0,
+  CRFI: 0,
   RFI: 0,
   SOW: 0,
   ACTIVE: 0,  // Keep for backward compatibility
-  READY: 0    // Keep for backward compatibility
+  READY: 0,   // Keep for backward compatibility
+  INSTALL: 0  // Keep for backward compatibility
 }
 
 const DEFAULT_COLORS: Record<StatusLabel, string> = {
-  ON_AIR: '#22C55E',   // Hijau untuk ON_AIR
-  INSTALL: '#38BDF8',  // Biru untuk INSTALL
-  RFI: '#FACC15',      // Kuning untuk RFI
-  SOW: '#F97316',      // Orange untuk SOW
+  ON_AIR: '#22C55E',   // Green
+  MOS: '#8B5CF6',      // Purple/Violet (more distinct from green)
+  CRFI: '#3B82F6',     // Blue
+  RFI: '#FACC15',      // Yellow
+  SOW: '#F97316',      // Orange
   ACTIVE: '#22C55E',   // Keep for backward compatibility
-  READY: '#38BDF8'     // Keep for backward compatibility
+  READY: '#38BDF8',    // Keep for backward compatibility
+  INSTALL: '#38BDF8'   // Keep for backward compatibility
 }
 
 // Status label display mapping
 const STATUS_DISPLAY_LABELS: Record<StatusLabel, string> = {
   ON_AIR: 'On-Air',
-  INSTALL: 'Install',
+  MOS: 'MOS',
+  CRFI: 'CRFI',
   RFI: 'RFI',
   SOW: 'SOW',
   ACTIVE: 'On-Air',  // Map ACTIVE to On-Air for display
-  READY: 'Install'   // Map READY to Install for display
+  READY: 'Install',  // Map READY to Install for display
+  INSTALL: 'Install' // Keep for backward compatibility
 }
 
 const INITIAL_FILTER: FilterValue = {
@@ -201,6 +207,9 @@ export default function AopMapPage() {
       })
       debouncedFilterValue.year?.forEach((value) => {
         params.append('year', value)
+      })
+      debouncedFilterValue.priority_congest_urgent?.forEach((value) => {
+        params.append('priority_congest_urgent', value)
       })
       debouncedFilterValue.status.forEach((value) => {
         params.append('status', value)
@@ -456,9 +465,10 @@ export default function AopMapPage() {
               <p className="font-semibold uppercase tracking-[0.26em] text-white/80">Status Legend</p>
               <ul className="mt-3 space-y-2">
                 <li><span className="font-semibold text-white">On-Air</span> - Site is fully activated (rfs_af).</li>
-                <li><span className="font-semibold text-white">Install</span> - Site installation completed (ic_000040_af).</li>
+                <li><span className="font-semibold text-white">MOS</span> - MOS milestone achieved (mos_af).</li>
+                <li><span className="font-semibold text-white">CRFI</span> - RFI accepted (rfi_accepted).</li>
                 <li><span className="font-semibold text-white">RFI</span> - RFI received (ic_000010_af).</li>
-                <li><span className="font-semibold text-white">SOW</span> - Total registered scope of work.</li>
+                <li><span className="font-semibold text-white">SOW</span> - Total registered scope of work (system_key).</li>
               </ul>
               {invalidCoordinates > 0 && (
                 <div className="mt-3 pt-3 border-t border-white/10">

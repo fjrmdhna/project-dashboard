@@ -352,6 +352,28 @@ const formatRanScoreValue = (value: string) =>
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 
+/**
+ * Normalize priority_congest_urgent value
+ * Groups values containing "prio lebaran" (case-insensitive) into "Prio Lebaran"
+ * @param value The priority value to normalize
+ * @returns Normalized priority value
+ */
+export function normalizePriorityCongestUrgentValue(value: string): string {
+  if (!value) return value
+  
+  // Normalize multiple spaces to single space before checking
+  const normalizedSpaces = value.replace(/\s+/g, ' ').trim()
+  const lowerValue = normalizedSpaces.toLowerCase()
+  
+  // Check for "prio lebaran" keyword (case-insensitive, handles multiple spaces) -> "Prio Lebaran"
+  if (lowerValue.includes('prio lebaran')) {
+    return 'Prio Lebaran'
+  }
+  
+  // Return original value for others (no normalization)
+  return value
+}
+
 // In-memory cache untuk filter options dengan TTL
 const filterOptionsCache = new Map<string, { data: any, timestamp: number }>()
 const FILTER_OPTIONS_CACHE_TTL = 10 * 60 * 1000 // 10 menit
@@ -441,6 +463,10 @@ export async function getAopFilterOptions(forceRefresh = false) {
                 // Use Title Case untuk ran_score agar konsisten (no grouping)
                 formatted = formatRanScoreValue(trimmed)
                 normalizedKey = formatted.toLowerCase()
+              } else if (column === 'priority_congest_urgent') {
+                // Normalize priority_congest_urgent: group by "Prio Lebaran"
+                formatted = normalizePriorityCongestUrgentValue(trimmed)
+                normalizedKey = formatted.toLowerCase()
               } else {
                 formatted = trimmed
                 normalizedKey = trimmed.toLowerCase()
@@ -480,13 +506,14 @@ export async function getAopFilterOptions(forceRefresh = false) {
 
   // OPTIMIZED: Fetch semua columns secara paralel dengan pagination per column
   // Setiap column akan di-fetch dengan pagination untuk memastikan semua data ter-fetch
-  const [vendors, programs, circles, siteCategories, ranScores, years] = await Promise.all([
+  const [vendors, programs, circles, siteCategories, ranScores, years, priorityCongestUrgent] = await Promise.all([
     fetchDistinctValuesOptimized('vendor_name'),
     fetchDistinctValuesOptimized('program_report'),
     fetchDistinctValuesOptimized('region_circle'),
     fetchDistinctValuesOptimized('site_category'),
     fetchDistinctValuesOptimized('ran_score'),
-    fetchDistinctValuesOptimized('year')
+    fetchDistinctValuesOptimized('year'),
+    fetchDistinctValuesOptimized('priority_congest_urgent')
   ])
 
   const result = {
@@ -495,7 +522,8 @@ export async function getAopFilterOptions(forceRefresh = false) {
     circles,
     siteCategories,
     ranScores,
-    years: years.sort((a, b) => b.localeCompare(a)) // Sort years descending (newest first)
+    years: years.sort((a, b) => b.localeCompare(a)), // Sort years descending (newest first)
+    priorityCongestUrgent
   }
 
   // Cache hasil

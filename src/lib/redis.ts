@@ -195,6 +195,7 @@ export interface FilterParams {
   siteCategories?: string[]
   ranScores?: string[]
   years?: string[]
+  priorityCongestUrgent?: string[]
   search?: string
 }
 
@@ -212,6 +213,7 @@ export function getFilterHash(filters: FilterParams): string {
     s: filters.siteCategories?.slice().sort() || [],
     r: filters.ranScores?.slice().sort() || [],
     y: filters.years?.slice().sort() || [],
+    pcu: filters.priorityCongestUrgent?.slice().sort() || [],
     q: (filters.search || '').toLowerCase().trim()
   }
 
@@ -238,6 +240,7 @@ export function isEmptyFilter(filters: FilterParams): boolean {
     (!filters.siteCategories || filters.siteCategories.length === 0) &&
     (!filters.ranScores || filters.ranScores.length === 0) &&
     (!filters.years || filters.years.length === 0) &&
+    (!filters.priorityCongestUrgent || filters.priorityCongestUrgent.length === 0) &&
     (!filters.search || filters.search.trim() === '')
   )
 }

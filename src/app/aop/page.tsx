@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState, useEffect, useTransition, useDeferredValue, type ReactNode, type CSSProperties } from "react"
-import { ChevronDown, SlidersHorizontal } from "lucide-react"
+import { ChevronDown, SlidersHorizontal, Download } from "lucide-react"
 
 import { FilterBar, type FilterValue } from "@/components/filters/FilterBar"
 import { useDebounce } from "@/hooks/useDebounce"
@@ -221,7 +221,10 @@ const INITIAL_FILTER: FilterValue = {
   nano_cluster: [],
   status: [],
   circle: [],
-  site_category: []
+  site_category: [],
+  ran_score: [],
+  year: [],
+  priority_congest_urgent: []
 }
 
 export default function AopPage() {
@@ -230,6 +233,9 @@ export default function AopPage() {
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   const isMobile = useIsMobile()
   const [isPending, startTransition] = useTransition()
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportStatus, setExportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
 
   // Debounce filter untuk unified debouncing (300ms seperti Hermes 5G)
   const debouncedFilterValue = useDebounce(filterValue, 300)
@@ -242,6 +248,7 @@ export default function AopPage() {
   const stableSiteCategories = useMemo(() => debouncedFilterValue.site_category || [], [debouncedFilterValue.site_category])
   const stableRanScores = useMemo(() => debouncedFilterValue.ran_score || [], [debouncedFilterValue.ran_score])
   const stableYears = useMemo(() => debouncedFilterValue.year || [], [debouncedFilterValue.year])
+  const stablePriorityCongestUrgent = useMemo(() => debouncedFilterValue.priority_congest_urgent || [], [debouncedFilterValue.priority_congest_urgent])
   const stableSearch = debouncedFilterValue.q || ''
 
   // Fetch data from API menggunakan debounced filter with stable references
@@ -252,6 +259,7 @@ export default function AopPage() {
     siteCategories: stableSiteCategories,
     ranScores: stableRanScores,
     years: stableYears,
+    priorityCongestUrgent: stablePriorityCongestUrgent,
     search: stableSearch
   })
   
@@ -309,15 +317,18 @@ export default function AopPage() {
     []
   )
 
-  // Calculate active filter count
+  // Calculate active filter count (include ran_score, year, priority_congest_urgent)
   const activeFilterCount = (
     (filterValue.q ? 1 : 0) +
-    filterValue.vendor_name.length +
-    filterValue.program_report.length +
-    filterValue.imp_ttp.length +
-    filterValue.nano_cluster.length +
+    (filterValue.vendor_name?.length || 0) +
+    (filterValue.program_report?.length || 0) +
+    (filterValue.imp_ttp?.length || 0) +
+    (filterValue.nano_cluster?.length || 0) +
     (filterValue.circle?.length ?? 0) +
-    (filterValue.site_category?.length ?? 0)
+    (filterValue.site_category?.length ?? 0) +
+    (filterValue.ran_score?.length ?? 0) +
+    (filterValue.year?.length ?? 0) +
+    (filterValue.priority_congest_urgent?.length ?? 0)
   )
   const hasActiveFilters = activeFilterCount > 0
 
@@ -338,6 +349,114 @@ export default function AopPage() {
 
   const handleFilterReset = () => {
     setFilterValue(INITIAL_FILTER)
+  }
+
+  // Build export params from current filter
+  const buildExportParams = () => {
+    const params = new URLSearchParams()
+    
+    if (filterValue.q) {
+      params.set('q', filterValue.q)
+    }
+    
+    filterValue.vendor_name?.forEach((value) => {
+      params.append('vendor_name', value)
+    })
+    
+    filterValue.program_report?.forEach((value) => {
+      params.append('program_report', value)
+    })
+    
+    filterValue.circle?.forEach((value) => {
+      params.append('region_circle', value)
+    })
+    
+    filterValue.site_category?.forEach((value) => {
+      params.append('site_category', value)
+    })
+    
+    filterValue.ran_score?.forEach((value) => {
+      params.append('ran_score', value)
+    })
+    
+    filterValue.year?.forEach((value) => {
+      params.append('year', value)
+    })
+    
+    filterValue.priority_congest_urgent?.forEach((value) => {
+      params.append('priority_congest_urgent', value)
+    })
+    
+    params.set('type', 'aop')
+    
+    return params
+  }
+
+  const handleExport = async () => {
+    try {
+      setExportStatus(null)
+      setIsExporting(true)
+
+      const params = buildExportParams()
+      const response = await fetch(`/api/aop/export?${params.toString()}`)
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to export data.'
+        const contentType = response.headers.get('Content-Type') || response.headers.get('content-type') || ''
+
+        try {
+          if (contentType.includes('application/json')) {
+            const payload = await response.json()
+            if (payload?.message) {
+              errorMessage = payload.message
+            }
+          } else {
+            const text = await response.text()
+            if (text) {
+              errorMessage = text
+            }
+          }
+        } catch {
+          // ignore parse failure and fall back to the default message
+        }
+
+        throw new Error(errorMessage)
+      }
+
+      const blob = await response.blob()
+      const disposition = response.headers.get('Content-Disposition') || response.headers.get('content-disposition')
+      let filename = 'aop-export.xlsx'
+
+      if (disposition) {
+        const match = disposition.match(/filename="?([^";]+)"?/i)
+        if (match?.[1]) {
+          filename = match[1]
+        }
+      }
+
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      setExportStatus({
+        type: 'success',
+        message: 'AOP data downloaded successfully.'
+      })
+    } catch (error) {
+      console.error('Failed to export AOP data', error)
+      const message = error instanceof Error ? error.message : 'An error occurred during export.'
+      setExportStatus({
+        type: 'error',
+        message
+      })
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const filterPanel = (
@@ -429,7 +548,28 @@ export default function AopPage() {
   const agingPo = <AgingPoCard rows={rows} isLoading={aopLoading} />
   const circleAchievement = <CircleAchievementCard rows={rows} isLoading={aopLoading} />
 
-  const header = <ProgramHeader title="Dashboard AOP" dateLabel={formattedDate} mapHref="/aop/map" />
+  // Export button component
+  const exportButton = (
+    <button
+      type="button"
+      onClick={handleExport}
+      disabled={isExporting}
+      className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-60 uppercase tracking-[0.32em]"
+      title={isExporting ? 'Exporting...' : 'Export to Excel'}
+    >
+      <Download className="h-3 w-3" />
+      {isExporting ? 'Exporting...' : 'Export'}
+    </button>
+  )
+
+  const header = (
+    <ProgramHeader 
+      title="Dashboard AOP" 
+      dateLabel={formattedDate} 
+      mapHref="/aop/map"
+      exportButton={exportButton}
+    />
+  )
 
   const wallboardView = (
     <Wallboard1080

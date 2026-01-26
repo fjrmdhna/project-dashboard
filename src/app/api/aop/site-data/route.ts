@@ -73,6 +73,7 @@ const MINIMAL_COLUMNS = [
   'rfs_bf',            // Legacy Baseline - kept for backward compatibility
   'rfs_ff',            // Forecast - ProgressCurve, VendorLeaderboard, DailyRunrate
   'rfs_af',            // Actual - ProgressCurve, ActivatedCard, VendorLeaderboard, DailyRunrate
+  'ready_for_acpt_date', // RFA - MatrixStatsCard (Ready for Acceptance)
   'rfi_accepted',      // CAF stats
   'mos_af',            // MOS stats
   'project_name',      // AgingPoCard - project grouping
@@ -83,6 +84,7 @@ const MINIMAL_COLUMNS = [
   'endorse_af',        // Endorse stats
   'pac_accepted_af',   // PAC stats
   'issue_category',    // TopIssue - client-side calculation
+  'priority_congest_urgent', // Priority filter
 ]
 
 // Get columns based on mode
@@ -112,6 +114,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       rfs_bf: row.rfs_bf || null,
       rfs_ff: row.rfs_ff || null,
       rfs_af: row.rfs_af || null,
+      ready_for_acpt_date: row.ready_for_acpt_date || null,
       rfc_approved: row.rfc_approved || null,
       hotnews_af: row.hotnews_af || null,
       endorse_af: row.endorse_af || null,
@@ -119,6 +122,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       issue_category: row.issue_category || null,
       project_name: row.project_name || null,
       po_date: row.po_date || null,
+      priority_congest_urgent: row.priority_congest_urgent || null,
     }))
   }
   
@@ -141,6 +145,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
     hotnews_af: row.hotnews_af || null,
     endorse_af: row.endorse_af || null,
     pac_accepted_af: row.pac_accepted_af || null,
+    priority_congest_urgent: row.priority_congest_urgent || null,
     site_id: row.site_id || null,
     site_name: row.site_name || null,
     lat: row.latitude || null,

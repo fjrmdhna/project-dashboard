@@ -5,6 +5,7 @@ import { Clock, AlertTriangle } from "lucide-react"
 
 // Type for row data
 interface Row {
+  system_key?: string | null
   project_name?: string | null
   po_date?: string | null
   rfs_af?: string | null
@@ -22,9 +23,9 @@ interface ProjectAgingData {
   poAgingCount: number // Number of POs that are aging (no rfs_af)
   oldestAgingDays: number // Oldest PO aging in days
   poNullCount: number  // Number of rows with null po_date
-  totalPo: number      // Total POs in project
-  completedPo: number  // POs with rfs_af filled
-  completedPct: number // Percentage of completed POs
+  totalScope: number   // Total system_key (total scope) in project
+  completedScope: number // system_key with rfs_af filled
+  completedPct: number // Percentage of completed scope (rfs_af / total scope)
 }
 
 // Calculate days between two dates
@@ -88,9 +89,11 @@ interface ProjectItemProps {
   oldestAgingDays: number
   poNullCount: number
   completedPct: number
+  totalScope: number
+  completedScope: number
 }
 
-function ProjectItem({ projectName, poAgingCount, oldestAgingDays, poNullCount, completedPct }: ProjectItemProps) {
+function ProjectItem({ projectName, poAgingCount, oldestAgingDays, poNullCount, completedPct, totalScope, completedScope }: ProjectItemProps) {
   const agingColor = getAgingColor(oldestAgingDays)
   
   return (
@@ -110,7 +113,7 @@ function ProjectItem({ projectName, poAgingCount, oldestAgingDays, poNullCount, 
       </div>
       <div className="flex items-center gap-2 ml-2">
         {/* Completion percentage */}
-        <div className={`text-[9px] font-bold ${getCompletionColor(completedPct)}`} title="Completion rate (rfs_af filled)">
+        <div className={`text-[9px] font-bold ${getCompletionColor(completedPct)}`} title={`Completion rate: ${completedScope}/${totalScope} system_key with rfs_af`}>
           {completedPct.toFixed(0)}%
         </div>
         {/* Oldest aging days */}
@@ -142,14 +145,15 @@ export function AgingPoCard({ rows, isLoading = false, className = "" }: AgingPo
       poAgingCount: number
       oldestAgingDays: number
       poNullCount: number
-      totalPo: number
-      completedPo: number
+      totalScope: number      // Total unique system_key
+      completedScope: number  // system_key with rfs_af
+      systemKeyStatus: Map<string, boolean> // Track if system_key has rfs_af (completed)
     }>()
 
     // Single pass through rows
     for (const row of rows) {
       const rawProjectName = row.project_name
-      if (!rawProjectName) continue // Skip rows without project name
+      if (!rawProjectName || !row.system_key) continue // Skip rows without project name or system_key
       
       const normalizedKey = normalizeProjectName(rawProjectName)
       const displayName = formatProjectName(rawProjectName)
@@ -159,31 +163,40 @@ export function AgingPoCard({ rows, isLoading = false, className = "" }: AgingPo
         poAgingCount: 0,
         oldestAgingDays: 0,
         poNullCount: 0,
-        totalPo: 0,
-        completedPo: 0
+        totalScope: 0,
+        completedScope: 0,
+        systemKeyStatus: new Map<string, boolean>()
       }
       
-      // Count total POs (rows with po_date)
-      const hasPoDate = isValidDate(row.po_date)
-      if (hasPoDate) {
-        data.totalPo++
-      }
-      
-      // Check if rfs_af is filled (completed)
+      // Track system_key and its completion status
       const hasRfsAf = isValidDate(row.rfs_af)
+      const currentStatus = data.systemKeyStatus.get(row.system_key)
       
-      if (hasRfsAf) {
-        // Count completed POs (only if they have po_date)
-        if (hasPoDate) {
-          data.completedPo++
+      if (currentStatus === undefined) {
+        // First time seeing this system_key
+        data.systemKeyStatus.set(row.system_key, hasRfsAf)
+        data.totalScope++
+        if (hasRfsAf) {
+          data.completedScope++
         }
       } else {
-        // Not completed - check aging
-        if (!row.po_date || !isValidDate(row.po_date)) {
+        // Update completion status: system_key is completed if ANY row has rfs_af
+        if (!currentStatus && hasRfsAf) {
+          data.systemKeyStatus.set(row.system_key, true)
+          data.completedScope++
+        }
+      }
+      
+      // Check aging PO: only count if system_key is NOT completed AND has po_date
+      const isCompleted = data.systemKeyStatus.get(row.system_key) || false
+      if (!isCompleted) {
+        const hasPoDate = isValidDate(row.po_date)
+        
+        if (!hasPoDate) {
           data.poNullCount++
         } else {
-          // Calculate aging
-          const agingDays = calculateAgingDays(row.po_date)
+          // Calculate aging for this PO (hasPoDate already validated)
+          const agingDays = calculateAgingDays(row.po_date as string)
           data.poAgingCount++
           
           // Track oldest (max) aging
@@ -204,9 +217,9 @@ export function AgingPoCard({ rows, isLoading = false, className = "" }: AgingPo
         poAgingCount: data.poAgingCount,
         oldestAgingDays: data.oldestAgingDays,
         poNullCount: data.poNullCount,
-        totalPo: data.totalPo,
-        completedPo: data.completedPo,
-        completedPct: data.totalPo > 0 ? (data.completedPo / data.totalPo) * 100 : 0
+        totalScope: data.totalScope,
+        completedScope: data.completedScope,
+        completedPct: data.totalScope > 0 ? (data.completedScope / data.totalScope) * 100 : 0
       }))
       // Sort by oldest aging days descending (project with oldest PO first)
       .sort((a, b) => b.oldestAgingDays - a.oldestAgingDays)
@@ -220,14 +233,14 @@ export function AgingPoCard({ rows, isLoading = false, className = "" }: AgingPo
       (acc, item) => ({
         poAgingCount: acc.poAgingCount + item.poAgingCount,
         poNullCount: acc.poNullCount + item.poNullCount,
-        totalPo: acc.totalPo + item.totalPo,
-        completedPo: acc.completedPo + item.completedPo
+        totalScope: acc.totalScope + item.totalScope,
+        completedScope: acc.completedScope + item.completedScope
       }),
-      { poAgingCount: 0, poNullCount: 0, totalPo: 0, completedPo: 0 }
+      { poAgingCount: 0, poNullCount: 0, totalScope: 0, completedScope: 0 }
     )
     return {
       ...sums,
-      completedPct: sums.totalPo > 0 ? (sums.completedPo / sums.totalPo) * 100 : 0
+      completedPct: sums.totalScope > 0 ? (sums.completedScope / sums.totalScope) * 100 : 0
     }
   }, [projectData])
 
@@ -253,7 +266,7 @@ export function AgingPoCard({ rows, isLoading = false, className = "" }: AgingPo
         </div>
         <div className="flex items-center gap-1.5">
           {/* Total completion percentage */}
-          <div className="bg-green-500/10 px-1.5 py-0.5 rounded-sm flex items-center" title="Overall completion rate">
+          <div className="bg-green-500/10 px-1.5 py-0.5 rounded-sm flex items-center" title={`Overall completion rate: ${totals.completedScope}/${totals.totalScope} system_key with rfs_af`}>
             <div className={`text-[9px] font-bold ${getCompletionColor(totals.completedPct)}`}>
               {totals.completedPct.toFixed(0)}%
             </div>
@@ -309,6 +322,8 @@ export function AgingPoCard({ rows, isLoading = false, className = "" }: AgingPo
                 oldestAgingDays={project.oldestAgingDays}
                 poNullCount={project.poNullCount}
                 completedPct={project.completedPct}
+                totalScope={project.totalScope}
+                completedScope={project.completedScope}
               />
             ))}
           </div>

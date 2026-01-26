@@ -13,6 +13,7 @@ export interface Row {
   imp_integ_af?: string | null
   rfs_af?: string | null
   rfs_forecast_lock?: string | null
+  ready_for_acpt_date?: string | null  // RFA - Ready for Acceptance (AOP)
   rfc_approved?: string | null
   hotnews_af?: string | null
   endorse_af?: string | null
@@ -40,6 +41,7 @@ export interface MatrixStatsCardProps {
     mos?: number
     install?: number
     rfs?: number
+    rfa?: number   // RFA - Ready for Acceptance (ready_for_acpt_date)
     activated?: number
     rfc?: number
     hotnews?: number
@@ -69,6 +71,7 @@ const AOP_METRIC_CONFIG = [
   { key: "mos", label: "MOS" },
   { key: "install", label: "INSTALL" },
   { key: "rfs", label: "RFS" },
+  { key: "rfa", label: "RFA" },
   { key: "rfc", label: "RFC" },
   { key: "patp", label: "PATP" },
   { key: "hotnews", label: "HN" },
@@ -89,10 +92,10 @@ function MetricItem({
 }) {
   return (
     <div className="flex flex-col items-center text-center min-w-[56px] justify-center">
-      <span className="text-[11px] font-semibold text-white leading-tight">
+      <span className="text-lg font-bold leading-none text-white">
         {value.toLocaleString()}
       </span>
-      <span className="text-[7px] uppercase tracking-[0.16em] text-[#90A0C4] leading-tight">
+      <span className="text-[8px] uppercase tracking-[0.18em] text-[#90A0C4] leading-tight">
         {label}
       </span>
     </div>
@@ -111,6 +114,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
         mos: providedStats.mos ?? rows.filter(row => row.mos_af).length,
         install: providedStats.install ?? rows.filter(row => row.ic_000040_af).length,
         rfs: providedStats.rfs ?? providedStats.activated ?? rows.filter(row => row.rfs_af).length,
+        rfa: providedStats.rfa ?? rows.filter(row => row.ready_for_acpt_date).length,
         rfc: providedStats.rfc ?? rows.filter(row => row.rfc_approved).length,
         patp: patpCount,
         hotnews: providedStats.hotnews ?? rows.filter(row => row.hotnews_af).length,
@@ -128,6 +132,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
       const mos = rows.filter(row => row.mos_af).length
       const install = rows.filter(row => row.ic_000040_af).length
       const rfs = rows.filter(row => row.rfs_af).length
+      const rfa = rows.filter(row => row.ready_for_acpt_date).length
       const rfc = rows.filter(row => row.rfc_approved).length
       const hotnews = rows.filter(row => row.hotnews_af).length
       const endorse = rows.filter(row => row.endorse_af).length
@@ -141,6 +146,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
         mos,
         install,
         rfs,
+        rfa,
         rfc,
         patp,
         hotnews,
@@ -186,6 +192,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
         mos: stats.mos,
         install: stats.install,
         rfs: stats.rfs!,
+        rfa: stats.rfa ?? 0,
         rfc: stats.rfc,
         patp: stats.patp,
         hotnews: stats.hotnews,

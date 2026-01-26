@@ -27,12 +27,31 @@ function normalizeSiteCategoryForFilter(value: string | null | undefined): strin
   return lowerValue
 }
 
+// Helper function to normalize priority_congest_urgent for filtering
+// Must match the normalization in supabase.ts
+function normalizePriorityCongestUrgentForFilter(value: string | null | undefined): string {
+  if (!value) return ''
+  
+  // Normalize multiple spaces to single space before checking
+  const normalizedSpaces = value.replace(/\s+/g, ' ').trim()
+  const lowerValue = normalizedSpaces.toLowerCase()
+  
+  // Check for "prio lebaran" keyword (case-insensitive, handles multiple spaces) -> "prio lebaran"
+  if (lowerValue.includes('prio lebaran')) {
+    return 'prio lebaran'
+  }
+  
+  // Return lowercase normalized value for others
+  return lowerValue
+}
+
 export interface AopSiteData extends MatrixRow {
   rfc_approved?: string | null
   pac_accepted_af?: string | null
   region_circle?: string | null
   site_category?: string | null
   ran_score?: string | null
+  priority_congest_urgent?: string | null
   mocn_activation_forecast?: string | null  // Baseline for ProgressCurve
   rfs_bf?: string | null                    // Legacy baseline
   rfs_ff?: string | null
@@ -69,18 +88,12 @@ export interface TopIssueItem {
 }
 
 // Pre-aggregated data for charts (prevents 41k iterations in each component)
+// ProgressCurveLineChart uses rows + mocn_activation_forecast directly; no progressCurve here.
 export interface AopAggregatedData {
   // For FiveGReadinessCard & FiveGActivatedCard
   byCircle: Map<string, { total: number; ready: number; activated: number; rfi: number }>
   // For VendorLeaderboardCard
   byVendor: Map<string, { total: number; ready: number; activated: number; forecast: number }>
-  // For ProgressCurveLineChart
-  progressCurve: {
-    totalBaseline: number
-    totalForecast: number
-    totalActual: number
-    byMonth: Map<string, { baseline: number; forecast: number; actual: number }>
-  }
   // For GapStatusCard
   gaps: {
     sowToRfi: number
@@ -95,6 +108,8 @@ export interface AopAggregatedData {
     top5Count: number
     totalCount: number
   }
+  // Stats computed in same pass as aggregation (avoids extra calculateStatsFromFilteredData pass)
+  stats: AopDataStats
 }
 
 export interface UseAopDataReturn {
@@ -113,6 +128,7 @@ export interface UseAopDataOptions {
   siteCategories?: string[]
   ranScores?: string[]
   years?: string[]
+  priorityCongestUrgent?: string[]
   search?: string
   autoFetch?: boolean
 }
@@ -141,6 +157,7 @@ function filterDataClientSide(
   siteCategories: string[],
   ranScores: string[],
   years: string[],
+  priorityCongestUrgent: string[],
   search: string
 ): AopSiteData[] {
   if (!data || data.length === 0) return []
@@ -148,13 +165,14 @@ function filterDataClientSide(
   // If no filters, return all data
   const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
                      circles.length > 0 || siteCategories.length > 0 || 
-                     ranScores.length > 0 || years.length > 0 || search.length > 0
+                     ranScores.length > 0 || years.length > 0 || 
+                     priorityCongestUrgent.length > 0 || search.length > 0
   
   if (!hasFilters) return data
   
   const searchLower = search.toLowerCase()
   
-  return data.filter(row => {
+  const filtered = data.filter((row) => {
     // Vendor filter
     if (vendorNames.length > 0 && !vendorNames.includes(row.vendor_name || '')) {
       return false
@@ -193,6 +211,15 @@ function filterDataClientSide(
       return false
     }
     
+    // Priority Congest Urgent filter (normalized matching)
+    // Filter values are normalized (e.g., "Prio Lebaran")
+    // Row values need to be normalized before comparison
+    if (priorityCongestUrgent.length > 0) {
+      const normalizedRowPriority = normalizePriorityCongestUrgentForFilter(row.priority_congest_urgent)
+      const matchesPriority = priorityCongestUrgent.some(p => normalizedRowPriority === normalizePriorityCongestUrgentForFilter(p))
+      if (!matchesPriority) return false
+    }
+    
     // Search filter
     if (searchLower) {
       const searchFields = [
@@ -207,6 +234,8 @@ function filterDataClientSide(
     
     return true
   })
+  
+  return filtered
 }
 
 // Issue colors for top 5 issues
@@ -220,15 +249,17 @@ const EXCLUDED_ISSUES = [
   '18c. 5g integration done'
 ]
 
-// OPTIMIZATION: Single-pass aggregation for ALL chart components
-// This prevents multiple O(n) iterations in each component
+// OPTIMIZATION: Single-pass aggregation for ALL chart components + stats
+// ProgressCurveLineChart uses rows + mocn_activation_forecast directly, not aggregated here.
 function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
   const byCircle = new Map<string, { total: number; ready: number; activated: number; rfi: number }>()
   const byVendor = new Map<string, { total: number; ready: number; activated: number; forecast: number }>()
-  const byMonth = new Map<string, { baseline: number; forecast: number; actual: number }>()
-  
-  let totalBaseline = 0, totalForecast = 0, totalActual = 0
   let sowToRfi = 0, rfiToCrfi = 0, crfiToOa = 0
+  
+  // Stats (merged from calculateStatsFromFilteredData to avoid extra pass)
+  const uniqueClusters = new Set<string>()
+  let caf = 0, mos = 0, install = 0, readiness = 0, activated = 0
+  let rfc = 0, hotnews = 0, endorse = 0, pac = 0
   
   // Daily runrate maps (last 7 days)
   const today = new Date()
@@ -267,119 +298,7 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
     if (row.rfs_ff) vendorData.forecast++
     byVendor.set(vendor, vendorData)
     
-    // === Progress curve aggregation ===
-    if (row.rfs_bf) {
-      totalBaseline++
-      const month = row.rfs_bf.substring(0, 7) // YYYY-MM
-      const monthData = byMonth.get(month) || { baseline: 0, forecast: 0, actual: 0 }
-      monthData.baseline++
-      byMonth.set(month, monthData)
-    }
-    if (row.rfs_ff) {
-      totalForecast++
-      const month = row.rfs_ff.substring(0, 7)
-      const monthData = byMonth.get(month) || { baseline: 0, forecast: 0, actual: 0 }
-      monthData.forecast++
-      byMonth.set(month, monthData)
-      
-      // Daily runrate - forecast
-      try {
-        const dateKey = row.rfs_ff.substring(0, 10) // YYYY-MM-DD
-        if (dateSet.has(dateKey)) {
-          forecastByDate.set(dateKey, (forecastByDate.get(dateKey) || 0) + 1)
-        }
-      } catch { /* skip invalid dates */ }
-    }
-    if (row.rfs_af) {
-      totalActual++
-      const month = row.rfs_af.substring(0, 7)
-      const monthData = byMonth.get(month) || { baseline: 0, forecast: 0, actual: 0 }
-      monthData.actual++
-      byMonth.set(month, monthData)
-      
-      // Daily runrate - actual
-      try {
-        const dateKey = row.rfs_af.substring(0, 10) // YYYY-MM-DD
-        if (dateSet.has(dateKey)) {
-          actualByDate.set(dateKey, (actualByDate.get(dateKey) || 0) + 1)
-        }
-      } catch { /* skip invalid dates */ }
-    }
-    
-    // === Gap status aggregation ===
-    const hasSystemKey = !!(row.system_key && String(row.system_key).trim() !== '')
-    const hasInstall = !!(row.ic_000040_af && String(row.ic_000040_af).trim() !== '')
-    const hasCaf = !!(row.caf_approved && String(row.caf_approved).trim() !== '')
-    const hasActivated = !!(row.rfs_af && String(row.rfs_af).trim() !== '')
-    
-    if (hasSystemKey && !hasInstall) sowToRfi++
-    if (hasInstall && !hasCaf) rfiToCrfi++
-    if (hasCaf && !hasActivated) crfiToOa++
-    
-    // === Issue category aggregation ===
-    if (row.issue_category) {
-      const category = row.issue_category.trim()
-      const categoryLower = category.toLowerCase()
-      // Skip excluded categories
-      if (category && !EXCLUDED_ISSUES.some(ex => categoryLower.includes(ex))) {
-        issueCount.set(category, (issueCount.get(category) || 0) + 1)
-        totalIssueCount++
-      }
-    }
-  }
-  
-  // Build daily runrate array
-  const dailyRunrate: DailyRunrateItem[] = last7Days.map(({ dateKey, formatted }) => ({
-    date: formatted,
-    forecast: forecastByDate.get(dateKey) || 0,
-    actual: actualByDate.get(dateKey) || 0
-  }))
-  
-  // Build top 5 issues
-  const sortedIssues = Array.from(issueCount.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([category, count], index) => ({
-      category,
-      count,
-      color: ISSUE_COLORS[index % ISSUE_COLORS.length]
-    }))
-  
-  const top5Count = sortedIssues.reduce((sum, item) => sum + item.count, 0)
-  
-  return {
-    byCircle,
-    byVendor,
-    progressCurve: {
-      totalBaseline,
-      totalForecast,
-      totalActual,
-      byMonth
-    },
-    gaps: {
-      sowToRfi,
-      rfiToCrfi,
-      crfiToOa
-    },
-    dailyRunrate,
-    topIssues: {
-      issues: sortedIssues,
-      top5Count,
-      totalCount: totalIssueCount
-    }
-  }
-}
-
-// Calculate stats from filtered data - runs on client side
-function calculateStatsFromFilteredData(data: AopSiteData[]): AopDataStats {
-  if (!data || data.length === 0) return EMPTY_STATS
-  
-  const uniqueClusters = new Set<string>()
-  let caf = 0, mos = 0, install = 0, readiness = 0, activated = 0
-  let rfc = 0, hotnews = 0, endorse = 0, pac = 0
-  
-  // Single pass through data for all stats
-  for (const row of data) {
+    // === Stats (same as calculateStatsFromFilteredData, avoids 2nd pass) ===
     if (row.caf_approved) caf++
     if (row.mos_af) mos++
     if (row.ic_000040_af) install++
@@ -390,25 +309,81 @@ function calculateStatsFromFilteredData(data: AopSiteData[]): AopDataStats {
     if (row.endorse_af) endorse++
     if (row.pac_accepted_af) pac++
     if (row.region_circle) uniqueClusters.add(row.region_circle)
+    
+    // === Daily runrate (forecast from rfs_ff, actual from rfs_af) ===
+    if (row.rfs_ff) {
+      try {
+        const dateKey = row.rfs_ff.substring(0, 10)
+        if (dateSet.has(dateKey)) forecastByDate.set(dateKey, (forecastByDate.get(dateKey) || 0) + 1)
+      } catch { /* skip */ }
+    }
+    if (row.rfs_af) {
+      try {
+        const dateKey = row.rfs_af.substring(0, 10)
+        if (dateSet.has(dateKey)) actualByDate.set(dateKey, (actualByDate.get(dateKey) || 0) + 1)
+      } catch { /* skip */ }
+    }
+    
+    // === Gap status aggregation ===
+    const hasSystemKey = !!(row.system_key && String(row.system_key).trim() !== '')
+    const hasInstall = !!(row.ic_000040_af && String(row.ic_000040_af).trim() !== '')
+    const hasCaf = !!(row.caf_approved && String(row.caf_approved).trim() !== '')
+    const hasActivated = !!(row.rfs_af && String(row.rfs_af).trim() !== '')
+    if (hasSystemKey && !hasInstall) sowToRfi++
+    if (hasInstall && !hasCaf) rfiToCrfi++
+    if (hasCaf && !hasActivated) crfiToOa++
+    
+    // === Issue category aggregation ===
+    if (row.issue_category) {
+      const category = row.issue_category.trim()
+      const categoryLower = category.toLowerCase()
+      if (category && !EXCLUDED_ISSUES.some(ex => categoryLower.includes(ex))) {
+        issueCount.set(category, (issueCount.get(category) || 0) + 1)
+        totalIssueCount++
+      }
+    }
   }
   
+  const dailyRunrate: DailyRunrateItem[] = last7Days.map(({ dateKey, formatted }) => ({
+    date: formatted,
+    forecast: forecastByDate.get(dateKey) || 0,
+    actual: actualByDate.get(dateKey) || 0
+  }))
+  
+  const sortedIssues = Array.from(issueCount.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([category, count], index) => ({
+      category,
+      count,
+      color: ISSUE_COLORS[index % ISSUE_COLORS.length]
+    }))
+  const top5Count = sortedIssues.reduce((sum, item) => sum + item.count, 0)
+  
   return {
-    totalSites: data.length,
-    caf,
-    mos,
-    install,
-    readiness,
-    activated,
-    rfc,
-    hotnews,
-    endorse,
-    pac,
-    nanoClusters: uniqueClusters.size
+    byCircle,
+    byVendor,
+    gaps: { sowToRfi, rfiToCrfi, crfiToOa },
+    dailyRunrate,
+    topIssues: { issues: sortedIssues, top5Count, totalCount: totalIssueCount },
+    stats: {
+      totalSites: data.length,
+      caf,
+      mos,
+      install,
+      readiness,
+      activated,
+      rfc,
+      hotnews,
+      endorse,
+      pac,
+      nanoClusters: uniqueClusters.size
+    }
   }
 }
 
 export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
-  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], ranScores = [], years = [], search = '' } = options
+  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], ranScores = [], years = [], priorityCongestUrgent = [], search = '' } = options
 
   // OPTIMIZATION: Always fetch ALL data (no filter) and filter client-side
   // This makes filter changes instant instead of waiting 15-20s for API
@@ -464,28 +439,30 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
     
     const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
                        circles.length > 0 || siteCategories.length > 0 || 
-                       ranScores.length > 0 || years.length > 0 || search.length > 0
+                       ranScores.length > 0 || years.length > 0 || 
+                       priorityCongestUrgent.length > 0 || search.length > 0
     
     // If no filters, use base data and calculate aggregation
     const dataToUse = hasFilters 
-      ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, ranScores, years, search)
+      ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, ranScores, years, priorityCongestUrgent, search)
       : baseData.data
     
-    // Calculate stats (single pass)
-    const stats = hasFilters 
-      ? calculateStatsFromFilteredData(dataToUse) 
-      : baseData.stats
+    // Safety check: ensure dataToUse is always an array
+    if (!dataToUse || !Array.isArray(dataToUse)) {
+      console.error('[useAopData] dataToUse is not an array:', dataToUse)
+      return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
+    }
     
-    // Pre-aggregate data for all chart components (single pass)
-    // This prevents each component from iterating 41k rows
+    // Pre-aggregate (single pass includes stats) — when hasFilters: 2 passes total (filter + aggregate)
     const agg = aggregateDataSinglePass(dataToUse)
+    const stats = hasFilters ? agg.stats : baseData.stats
     
     return { 
       filteredData: dataToUse, 
       filteredStats: stats,
       aggregated: agg
     }
-  }, [baseData, vendorNames, programReports, circles, siteCategories, ranScores, years, search])
+  }, [baseData, vendorNames, programReports, circles, siteCategories, ranScores, years, priorityCongestUrgent, search])
 
   // Refetch function
   const refetch = useCallback(async () => {

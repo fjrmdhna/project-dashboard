@@ -18,6 +18,7 @@ export interface FilterValue {
   circle?: string[]
   site_category?: string[] // Site category filter for AOP
   ran_score?: string[] // RAN Score filter for AOP
+  priority_congest_urgent?: string[] // Priority filter for AOP
 }
 
 // Props untuk FilterBar
@@ -40,6 +41,7 @@ interface FilterOptions {
   circles: string[]
   siteCategories?: string[] // Site categories for AOP
   ranScores?: string[] // RAN Scores for AOP
+  priorityCongestUrgent?: string[] // Priority filter for AOP
 }
 
 // Fungsi helper untuk memendekkan teks yang terlalu panjang
@@ -63,7 +65,8 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     years: [],
     circles: [],
     siteCategories: [],
-    ranScores: []
+    ranScores: [],
+    priorityCongestUrgent: []
   })
   
   // State untuk loading
@@ -97,7 +100,8 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               years: data.data.years || [],
               circles: data.data.circles || [],
               siteCategories: data.data.siteCategories || [],
-              ranScores: data.data.ranScores || []
+              ranScores: data.data.ranScores || [],
+              priorityCongestUrgent: data.data.priorityCongestUrgent || []
             }
             
             // For AOP variant: detect stale cache by checking if siteCategories are normalized
@@ -115,6 +119,24 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               
               if (hasUnnormalizedValues) {
                 console.log('[FilterBar] Detected stale siteCategories cache, forcing refresh...')
+                hasRetried = true
+                await fetchOptions(true)
+                return
+              }
+            }
+            
+            // For AOP variant: detect stale cache by checking if priorityCongestUrgent are normalized
+            // Normalized priorityCongestUrgent should only have "Prio Lebaran" for values containing "prio lebaran"
+            // If we see long values like "Prio Lebaran - Forecast Below 3 - P1", cache is stale
+            if (variant === 'aop' && !hasRetried && newOptions.priorityCongestUrgent && newOptions.priorityCongestUrgent.length > 0) {
+              const hasUnnormalizedValues = newOptions.priorityCongestUrgent.some((pcu: string) => {
+                const lower = pcu.toLowerCase()
+                // Check if value contains "prio lebaran" but is not normalized to "Prio Lebaran"
+                return lower.includes('prio lebaran') && pcu !== 'Prio Lebaran'
+              })
+              
+              if (hasUnnormalizedValues) {
+                console.log('[FilterBar] Detected stale priorityCongestUrgent cache, forcing refresh...')
                 hasRetried = true
                 await fetchOptions(true)
                 return
@@ -200,11 +222,17 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     onChange({ ...value, ran_score: selected })
   }, [onChange, value])
   
+  // Handler untuk Priority Congest Urgent selection (AOP variant)
+  const handlePriorityCongestUrgentChange = useCallback((selected: string[]) => {
+    console.log('Priority Congest Urgent filter changed:', selected)
+    onChange({ ...value, priority_congest_urgent: selected })
+  }, [onChange, value])
+  
   // Handler untuk reset semua filter
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [], ran_score: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [], ran_score: [], priority_congest_urgent: [] })
   }
 
   // Handler untuk remove individual filter
@@ -232,12 +260,13 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.circle?.length || 0) > 0 ||
     (value.status?.length || 0) > 0 ||
     (value.site_category?.length || 0) > 0 ||
-    (value.ran_score?.length || 0) > 0
+    (value.ran_score?.length || 0) > 0 ||
+    (value.priority_congest_urgent?.length || 0) > 0
 
-  // Grid layout berbeda untuk variant AOP (6 filter: vendor, program, circle, site_category, ran_score, year) vs default (7 filter dengan region dan year)
+  // Grid layout berbeda untuk variant AOP (7 filter: vendor, program, circle, site_category, ran_score, year, priority) vs default (7 filter dengan region dan year)
   const gridClass =
     variant === "aop"
-      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(6,minmax(0,1fr))_auto] md:items-center md:gap-2"
+      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(7,minmax(0,1fr))_auto] md:items-center md:gap-2"
       : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(6,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
   return (
@@ -369,6 +398,16 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.year ?? []}
               placeholder="Year"
               onChange={handleYearChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 md:col-span-1"
+            />
+            {/* Priority Congest Urgent Filter */}
+            <MultiSelect
+              options={options.priorityCongestUrgent || []}
+              selected={value.priority_congest_urgent ?? []}
+              placeholder="Priority"
+              onChange={handlePriorityCongestUrgentChange}
               disabled={isLoading}
               width="w-full"
               className="col-span-2 md:col-span-1"
@@ -543,6 +582,20 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               <X
                 className="h-2 w-2 cursor-pointer"
                 onClick={() => removeFilter('ran_score', ranScore)}
+              />
+            </div>
+          ))}
+
+          {value.priority_congest_urgent?.map(priority => (
+            <div
+              key={`priority-${priority}`}
+              className="bg-violet-500/20 text-violet-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`Priority: ${priority}`}
+            >
+              <span>P: {truncateText(priority, 12)}</span>
+              <X
+                className="h-2 w-2 cursor-pointer"
+                onClick={() => removeFilter('priority_congest_urgent', priority)}
               />
             </div>
           ))}

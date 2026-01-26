@@ -12,17 +12,19 @@ import {
 const STATUS_LABEL = {
   sow: 'SOW',
   rfi: 'RFI',
-  install: 'INSTALL',
+  crfi: 'CRFI',
+  mos: 'MOS',
   onAir: 'ON_AIR'
 } as const
 
 type StatusLabel = typeof STATUS_LABEL[keyof typeof STATUS_LABEL]
 
 const STATUS_COLOR_MAP: Record<StatusLabel, string> = {
-  [STATUS_LABEL.onAir]: '#22C55E',
-  [STATUS_LABEL.install]: '#38BDF8',
-  [STATUS_LABEL.rfi]: '#FACC15',
-  [STATUS_LABEL.sow]: '#F97316'
+  [STATUS_LABEL.onAir]: '#22C55E',   // Green
+  [STATUS_LABEL.mos]: '#8B5CF6',     // Purple/Violet (more distinct from green)
+  [STATUS_LABEL.crfi]: '#3B82F6',    // Blue
+  [STATUS_LABEL.rfi]: '#FACC15',     // Yellow
+  [STATUS_LABEL.sow]: '#F97316'      // Orange
 }
 
 interface MapPoint {
@@ -49,10 +51,10 @@ interface MapDataResponse {
 // Minimal columns for map display - reduces payload significantly
 const MAP_COLUMNS = [
   'system_key',
-  'ic_000010_af',  // For status resolution
-  'ic_000040_af',  // For status resolution
-  'imp_integ_af',  // For status resolution
-  'rfs_af',        // For status resolution
+  'ic_000010_af',  // RFI
+  'rfi_accepted',  // CRFI
+  'mos_af',        // MOS
+  'rfs_af',        // ON_AIR
   'latitude',
   'longitude',
   'vendor_name',
@@ -67,8 +69,8 @@ const MAP_COLUMNS = [
 const FILTER_COLUMNS = [
   'system_key',
   'ic_000010_af',
-  'ic_000040_af',
-  'imp_integ_af',
+  'rfi_accepted',
+  'mos_af',
   'rfs_af',
   'latitude',
   'longitude',
@@ -80,7 +82,8 @@ const FILTER_COLUMNS = [
   'region_circle',
   'site_category',
   'ran_score',
-  'year'
+  'year',
+  'priority_congest_urgent'
 ].join(',')
 
 function parseCoordinate(value: unknown): number | null {
@@ -97,12 +100,17 @@ function parseCoordinate(value: unknown): number | null {
 }
 
 function resolveStatus(row: any): StatusLabel {
+  // Priority: ON_AIR > MOS > CRFI > RFI > SOW
   if (row.rfs_af) {
     return STATUS_LABEL.onAir
   }
 
-  if (row.ic_000040_af || row.imp_integ_af) {
-    return STATUS_LABEL.install
+  if (row.mos_af) {
+    return STATUS_LABEL.mos
+  }
+
+  if (row.rfi_accepted) {
+    return STATUS_LABEL.crfi
   }
 
   if (row.ic_000010_af) {
@@ -120,12 +128,14 @@ async function fetchMapDataFromDatabase(
   siteCategories: string[],
   ranScores: string[],
   years: string[],
+  priorityCongestUrgent: string[],
   q: string
 ): Promise<any[]> {
   // Determine if we need filter columns
   const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
                      circles.length > 0 || siteCategories.length > 0 || 
-                     ranScores.length > 0 || years.length > 0 || q.length > 0
+                     ranScores.length > 0 || years.length > 0 || 
+                     priorityCongestUrgent.length > 0 || q.length > 0
   
   const columns = hasFilters ? FILTER_COLUMNS : MAP_COLUMNS
 
@@ -190,6 +200,14 @@ async function fetchMapDataFromDatabase(
       query = query.in('year', years)
     }
 
+    if (priorityCongestUrgent.length > 0) {
+      // Use case-insensitive matching for priority_congest_urgent (ilike with OR conditions)
+      const priorityConditions = priorityCongestUrgent
+        .map(pcu => `priority_congest_urgent.ilike.%${pcu.trim()}%`)
+        .join(',')
+      query = query.or(priorityConditions)
+    }
+
     if (q) {
       query = query.or(`system_key.ilike.%${q}%,site_id.ilike.%${q}%,site_name.ilike.%${q}%,vendor_name.ilike.%${q}%`)
     }
@@ -226,7 +244,7 @@ async function fetchMapDataFromDatabase(
 // Compact point format for reduced payload
 interface CompactMapPoint {
   i: string   // id (system_key)
-  s: number   // status (0=SOW, 1=RFI, 2=INSTALL, 3=ON_AIR)
+  s: number   // status (0=SOW, 1=RFI, 2=CRFI, 3=MOS, 4=ON_AIR)
   a: number   // lat
   o: number   // long
   v?: string  // vendorName
@@ -240,15 +258,17 @@ interface CompactMapPoint {
 const STATUS_TO_NUM: Record<StatusLabel, number> = {
   [STATUS_LABEL.sow]: 0,
   [STATUS_LABEL.rfi]: 1,
-  [STATUS_LABEL.install]: 2,
-  [STATUS_LABEL.onAir]: 3
+  [STATUS_LABEL.crfi]: 2,
+  [STATUS_LABEL.mos]: 3,
+  [STATUS_LABEL.onAir]: 4
 }
 
 // Process data to map points and counts - with compact format option
 function processMapData(allData: any[], statusFilters: string[], compact: boolean = true): MapDataResponse | { points: CompactMapPoint[], counts: Record<StatusLabel, number>, total: number, colors: Record<StatusLabel, string>, invalidCoordinates: number, compact: true } {
   const counts: Record<StatusLabel, number> = {
     [STATUS_LABEL.onAir]: 0,
-    [STATUS_LABEL.install]: 0,
+    [STATUS_LABEL.mos]: 0,
+    [STATUS_LABEL.crfi]: 0,
     [STATUS_LABEL.rfi]: 0,
     [STATUS_LABEL.sow]: 0
   }
@@ -342,6 +362,7 @@ export async function GET(request: NextRequest) {
     const siteCategories = searchParams.getAll('site_category') || []
     const ranScores = searchParams.getAll('ran_score') || []
     const years = searchParams.getAll('year') || []
+    const priorityCongestUrgent = searchParams.getAll('priority_congest_urgent') || []
     const statusFilters = searchParams.getAll('status') || []
 
     // Create filter params for cache key (include status filters)
@@ -352,6 +373,7 @@ export async function GET(request: NextRequest) {
       siteCategories,
       ranScores,
       years,
+      priorityCongestUrgent,
       search: q
     }
 
@@ -385,6 +407,7 @@ export async function GET(request: NextRequest) {
       siteCategories,
       ranScores,
       years,
+      priorityCongestUrgent,
       q
     )
 

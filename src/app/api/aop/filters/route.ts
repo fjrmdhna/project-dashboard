@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAopFilterOptions } from '@/lib/supabase'
+import { getAopFilterOptions, clearAopFilterOptionsCache } from '@/lib/supabase'
 import { getCacheOrFetch, deleteCache, CACHE_KEYS, CACHE_TTL } from '@/lib/redis'
 
 export async function GET(request: NextRequest) {
@@ -8,10 +8,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const forceRefresh = searchParams.get('refresh') === 'true'
     
-    // If force refresh, delete Redis cache first
+    // If force refresh, delete Redis cache and in-memory cache first
     if (forceRefresh) {
-      console.log('[AOP Filters API] Force refresh requested, invalidating Redis cache...')
+      console.log('[AOP Filters API] Force refresh requested, invalidating all caches...')
       await deleteCache(CACHE_KEYS.AOP_FILTERS)
+      clearAopFilterOptionsCache()
     }
 
     // Use Redis cache for filter options (high TTL - data jarang berubah)

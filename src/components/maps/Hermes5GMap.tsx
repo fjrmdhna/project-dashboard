@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import L, { type Map as LeafletMap, type LayerGroup, type CircleMarker } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-export type StatusLabel = 'SOW' | 'RFI' | 'READY' | 'ACTIVE' | 'INSTALL' | 'ON_AIR'
+export type StatusLabel = 'SOW' | 'RFI' | 'CRFI' | 'MOS' | 'READY' | 'ACTIVE' | 'INSTALL' | 'ON_AIR'
 
 export interface HermesMapPoint {
   id: string
@@ -80,7 +80,7 @@ export function Hermes5GMap({ points, colors, loading = false, error = null }: H
   const layerRef = useRef<LayerGroup | null>(null)
 
   const orderedPoints = useMemo(() => {
-    const order: StatusLabel[] = ['ACTIVE', 'READY', 'RFI', 'SOW']
+    const order: StatusLabel[] = ['ON_AIR', 'MOS', 'CRFI', 'ACTIVE', 'READY', 'INSTALL', 'RFI', 'SOW']
     const rank = order.reduce<Record<StatusLabel, number>>((acc, status, index) => {
       acc[status] = index
       return acc
@@ -127,12 +127,14 @@ export function Hermes5GMap({ points, colors, loading = false, error = null }: H
 
   const palette = useMemo(
     () => ({
-      ACTIVE: colors.ACTIVE ?? '#22C55E',  // Hijau untuk ACTIVE
-      READY: colors.READY ?? '#2563EB',    // Biru untuk READY
-      RFI: colors.RFI ?? '#FACC15',        // Kuning untuk RFI
-      SOW: colors.SOW ?? '#EF4444',        // Merah untuk SOW
-      INSTALL: colors.INSTALL ?? '#8B5CF6', // Ungu untuk INSTALL
-      ON_AIR: colors.ON_AIR ?? '#06B6D4'   // Cyan untuk ON_AIR
+      ON_AIR: colors.ON_AIR ?? '#22C55E',   // Green untuk ON_AIR
+      MOS: colors.MOS ?? '#8B5CF6',         // Purple untuk MOS
+      CRFI: colors.CRFI ?? '#3B82F6',       // Blue untuk CRFI
+      RFI: colors.RFI ?? '#FACC15',         // Yellow untuk RFI
+      SOW: colors.SOW ?? '#F97316',         // Orange untuk SOW
+      ACTIVE: colors.ACTIVE ?? '#22C55E',   // Keep for backward compatibility
+      READY: colors.READY ?? '#38BDF8',     // Keep for backward compatibility
+      INSTALL: colors.INSTALL ?? '#38BDF8'  // Keep for backward compatibility
     }),
     [colors]
   )
