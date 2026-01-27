@@ -9,7 +9,6 @@ import { SearchInput } from "@/components/home/SearchInput"
 import { SectionHeader } from "@/components/home/SectionHeader"
 import { HeroHighlight, NavigationAction, ProjectCardData } from "@/types/home"
 import { getProjectProgress } from "@/lib/project-progress"
-import { EXCLUDED_PROGRAM_REPORTS } from "@/lib/hermes-5g-constants"
 
 const heroHighlight: HeroHighlight = {
   eyebrow: "Explore",
@@ -29,12 +28,10 @@ const navActions: NavigationAction[] = [
 
 export default async function Home() {
   // Fetch progress real untuk Hermes 5G
-  // Menggunakan exclude filter yang sama dengan Matrix Statistics di dashboard Hermes 5G
+  // All data included - no exclusions
   let hermesProgress = 0
   try {
-    const hermesProgressData = await getProjectProgress("site_data_5g", {
-      exclude_program_reports: [...EXCLUDED_PROGRAM_REPORTS],
-    })
+    const hermesProgressData = await getProjectProgress("site_data_5g")
     hermesProgress = hermesProgressData.progress
   } catch (error) {
     console.error("Error fetching Hermes 5G progress:", error)

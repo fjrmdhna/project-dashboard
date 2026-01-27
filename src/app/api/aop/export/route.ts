@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { SITE_DATA_AOP_SELECT_COLUMNS, SITE_DATA_AOP_HEADERS } from '@/lib/site-data-aop-columns'
+import { normalizeRanScoreValue } from '@/lib/supabase'
 
 const EXPORT_ROW_LIMIT = 50000
 
@@ -57,11 +58,24 @@ function buildFilterQuery(searchParams: URLSearchParams) {
   }
 
   if (ranScores.length > 0) {
-    // Use exact match (case-insensitive) like client-side filtering
-    // Client-side uses: rowRanScore === rs.toLowerCase() (exact match)
-    // So we use ilike without wildcards for exact case-insensitive match
+    // Normalize ran_score values and build query conditions
+    // Handle "Co - Expansion" normalization: match all variations containing "co - expansion"
     const ranScoreConditions = ranScores
-      .map(rs => `ran_score.ilike.${rs.trim()}`)
+      .map(rs => {
+        const normalized = normalizeRanScoreValue(rs.trim())
+        const lowerNormalized = normalized.toLowerCase()
+        
+        // If normalized to "Co - Expansion", match all variations
+        // Pattern: match "co", optional spaces/dashes, "expansion" (case-insensitive)
+        if (lowerNormalized === 'co - expansion') {
+          // Match variations like: "CO - Expansion", "Co - Expansion", "co-expansion", etc.
+          // Use pattern that matches "co" followed by optional spaces/dashes and "expansion"
+          return `ran_score.ilike.%co%expansion%`
+        }
+        
+        // For other values, use exact match (case-insensitive)
+        return `ran_score.ilike.${normalized}`
+      })
       .join(',')
     query = query.or(ranScoreConditions)
   }

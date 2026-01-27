@@ -45,6 +45,24 @@ function normalizePriorityCongestUrgentForFilter(value: string | null | undefine
   return lowerValue
 }
 
+// Helper function to normalize ran_score for filtering
+// Must match the normalization in supabase.ts
+function normalizeRanScoreForFilter(value: string | null | undefined): string {
+  if (!value) return ''
+  
+  // Normalize multiple spaces to single space before checking
+  const normalizedSpaces = value.replace(/\s+/g, ' ').trim()
+  const lowerValue = normalizedSpaces.toLowerCase()
+  
+  // Check for "co - expansion" keyword (case-insensitive, handles multiple spaces) -> "co - expansion"
+  if (lowerValue.includes('co - expansion')) {
+    return 'co - expansion'
+  }
+  
+  // Return lowercase normalized value for others
+  return lowerValue
+}
+
 export interface AopSiteData extends MatrixRow {
   rfc_approved?: string | null
   pac_accepted_af?: string | null
@@ -199,10 +217,12 @@ function filterDataClientSide(
       if (!matchesCategory) return false
     }
     
-    // RAN Score filter (case-insensitive, no normalization)
+    // RAN Score filter (normalized matching)
+    // Filter values are normalized (e.g., "Co - Expansion")
+    // Row values need to be normalized before comparison
     if (ranScores.length > 0) {
-      const rowRanScore = (row.ran_score || '').toLowerCase().trim()
-      const matchesRanScore = ranScores.some(rs => rowRanScore === rs.toLowerCase())
+      const normalizedRowRanScore = normalizeRanScoreForFilter(row.ran_score)
+      const matchesRanScore = ranScores.some(rs => normalizedRowRanScore === normalizeRanScoreForFilter(rs))
       if (!matchesRanScore) return false
     }
     

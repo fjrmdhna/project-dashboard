@@ -1,6 +1,5 @@
-export const EXCLUDED_PROGRAM_REPORTS = [
-  'Hermes H1 Project 5G : 1202 sites'
-] as const
+// No longer excluding any program reports - all data should be included
+export const EXCLUDED_PROGRAM_REPORTS = [] as const
 
 export const shouldExcludeProgramReport = (value?: string | null): boolean => {
   if (!value) {

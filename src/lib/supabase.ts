@@ -222,7 +222,7 @@ export async function getSiteData5G(
   if (!data || !Array.isArray(data)) {
     return {
       data: [] as SiteData5G[],
-      count: count || 0
+      count: 0
     }
   }
 
@@ -252,9 +252,11 @@ export async function getSiteData5G(
     })
   }
   
+  // BEST PRACTICE: Use filteredData.length as count to ensure accuracy
+  // This ensures count matches the actual data returned after all filters are applied
   return {
     data: filteredData,
-    count: count || 0
+    count: filteredData.length
   }
 }
 
@@ -265,16 +267,11 @@ export async function getFilterOptions() {
     .select('vendor_name')
     .not('vendor_name', 'is', null)
 
-  let programQuery = supabase
+  // All programs included - no exclusions
+  const { data: programs, error: programError } = await supabase
     .from('site_data_5g')
     .select('program_report')
     .not('program_report', 'is', null)
-
-  EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-    programQuery = programQuery.neq('program_report', excludedProgram)
-  })
-
-  const { data: programs, error: programError } = await programQuery
 
   const { data: cities, error: cityError } = await supabase
     .from('site_data_5g')
@@ -298,7 +295,7 @@ export async function getFilterOptions() {
 
   return {
     vendors: [...new Set(vendors.map(v => v.vendor_name))].sort(),
-    programs: [...new Set(filterExcludedProgramReports(programs?.map(p => p.program_report)))].sort(),
+    programs: [...new Set(programs?.map(p => p.program_report) || [])].sort(), // All programs included - no exclusions
     cities: [...new Set(cities.map(c => c.imp_ttp))].sort(),
     nanoClusters: [...new Set(nanoClusters.map(nc => nc.nano_cluster))].sort(),
     ranScores: [...new Set((ranScores || []).map(rs => rs.ran_score).filter((value): value is string => Boolean(value)))].sort()
@@ -341,8 +338,34 @@ export function normalizeSiteCategoryValue(value: string): string {
 }
 
 /**
+ * Normalize ran_score value to grouped categories
+ * Groups values containing "co - expansion" (case-insensitive) -> "Co - Expansion"
+ * Other values remain as Title Case
+ */
+export function normalizeRanScoreValue(value: string): string {
+  if (!value) return value
+  
+  // Normalize multiple spaces to single space before checking
+  const normalizedSpaces = value.replace(/\s+/g, ' ').trim()
+  const lowerValue = normalizedSpaces.toLowerCase()
+  
+  // Check for "co - expansion" keyword (case-insensitive, handles multiple spaces) -> "Co - Expansion"
+  if (lowerValue.includes('co - expansion')) {
+    return 'Co - Expansion'
+  }
+  
+  // Return Title Case for others
+  return normalizedSpaces
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+/**
  * Format ran_score value with Title Case for display consistency
  * No grouping/normalization - returns as-is with proper casing
+ * @deprecated Use normalizeRanScoreValue instead for consistency
  */
 const formatRanScoreValue = (value: string) =>
   value
@@ -460,8 +483,8 @@ export async function getAopFilterOptions(forceRefresh = false) {
                 formatted = normalizeSiteCategoryValue(trimmed)
                 normalizedKey = formatted.toLowerCase()
               } else if (column === 'ran_score') {
-                // Use Title Case untuk ran_score agar konsisten (no grouping)
-                formatted = formatRanScoreValue(trimmed)
+                // Normalize ran_score: group by "Co - Expansion"
+                formatted = normalizeRanScoreValue(trimmed)
                 normalizedKey = formatted.toLowerCase()
               } else if (column === 'priority_congest_urgent') {
                 // Normalize priority_congest_urgent: group by "Prio Lebaran"

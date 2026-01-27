@@ -143,6 +143,24 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               }
             }
             
+            // For AOP variant: detect stale cache by checking if ranScores are normalized
+            // Normalized ranScores should only have "Co - Expansion" for values containing "co - expansion"
+            // If we see long values like "CO - Expansion - Forecast", cache is stale
+            if (variant === 'aop' && !hasRetried && newOptions.ranScores && newOptions.ranScores.length > 0) {
+              const hasUnnormalizedValues = newOptions.ranScores.some((rs: string) => {
+                const lower = rs.toLowerCase()
+                // Check if value contains "co - expansion" but is not normalized to "Co - Expansion"
+                return lower.includes('co - expansion') && rs !== 'Co - Expansion'
+              })
+              
+              if (hasUnnormalizedValues) {
+                console.log('[FilterBar] Detected stale ranScores cache, forcing refresh...')
+                hasRetried = true
+                await fetchOptions(true)
+                return
+              }
+            }
+            
             setOptions(newOptions)
           }
         }

@@ -342,18 +342,12 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
       .not('vendor_name', 'is', null)
       .neq('vendor_name', '');
     
-    // Get unique programs from program_report
-    let programQuery = supabase
+    // Get unique programs from program_report (no exclusions - all programs included)
+    const { data: programsData, error: programsError } = await supabase
       .from('site_data_5g')
       .select('program_report')
       .not('program_report', 'is', null)
       .neq('program_report', '');
-
-    EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-      programQuery = programQuery.neq('program_report', excludedProgram);
-    });
-
-    const { data: programsData, error: programsError } = await programQuery;
     
     // Get unique cities from imp_ttp
     const { data: citiesData, error: citiesError } = await supabase
@@ -397,7 +391,7 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     
     const data: FilterOptionsData = {
       vendors: [...new Set(vendorsData?.map(row => row.vendor_name) || [])].sort(),
-      programs: [...new Set(filterExcludedProgramReports(programsData?.map(row => row.program_report)))].sort(),
+      programs: [...new Set(programsData?.map(row => row.program_report) || [])].sort(), // All programs included - no exclusions
       cities: [...new Set(citiesData?.map(row => row.imp_ttp) || [])].sort(),
       nanoClusters: [...new Set(nanoClustersData?.map(row => row.nano_cluster) || [])].sort(),
       regions: [...new Set(regionsData?.map(row => row.region) || [])].sort(),
@@ -444,24 +438,21 @@ export async function getReadinessChartData(filters?: {
   ranScores?: string[];
 }): Promise<ReadinessChartResponse> {
   try {
-    const sanitizedProgramReports = filterExcludedProgramReports(filters?.programReports);
+    // All program reports included - no exclusions
+    const programReports = filters?.programReports || [];
 
     // Build Supabase query with filters
     let query = supabase
       .from('site_data_5g')
       .select('imp_ttp, imp_integ_af, ran_score')
       .not('imp_ttp', 'is', null);
-
-    EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-      query = query.neq('program_report', excludedProgram);
-    });
     
     // Apply filters (multi-value)
     if (filters?.vendorNames && filters.vendorNames.length > 0) {
       query = query.in('vendor_name', filters.vendorNames)
     }
-    if (sanitizedProgramReports.length > 0) {
-      query = query.in('program_report', sanitizedProgramReports)
+    if (programReports.length > 0) {
+      query = query.in('program_report', programReports)
     }
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
@@ -529,24 +520,21 @@ export async function getActivatedChartData(filters?: {
   ranScores?: string[];
 }): Promise<ActivatedChartResponse> {
   try {
-    const sanitizedProgramReports = filterExcludedProgramReports(filters?.programReports);
+    // All program reports included - no exclusions
+    const programReports = filters?.programReports || [];
 
     // Build Supabase query with filters
     let query = supabase
       .from('site_data_5g')
       .select('imp_ttp, rfs_af, ran_score')
       .not('imp_ttp', 'is', null);
-
-    EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-      query = query.neq('program_report', excludedProgram);
-    });
     
     // Apply filters (multi-value)
     if (filters?.vendorNames && filters.vendorNames.length > 0) {
       query = query.in('vendor_name', filters.vendorNames)
     }
-    if (sanitizedProgramReports.length > 0) {
-      query = query.in('program_report', sanitizedProgramReports)
+    if (programReports.length > 0) {
+      query = query.in('program_report', programReports)
     }
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
@@ -614,24 +602,21 @@ export async function getProgressCurveData(filters?: {
   ranScores?: string[];
 }): Promise<ProgressCurveResponse> {
   try {
-    const sanitizedProgramReports = filterExcludedProgramReports(filters?.programReports);
+    // All program reports included - no exclusions
+    const programReports = filters?.programReports || [];
 
     // Build Supabase query with filters
     let query = supabase
       .from('site_data_5g')
       .select('rfs_forecast_lock, imp_integ_af, rfs_af, ran_score')
       .not('rfs_forecast_lock', 'is', null);
-
-    EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-      query = query.neq('program_report', excludedProgram);
-    });
     
     // Apply filters (multi-value)
     if (filters?.vendorNames && filters.vendorNames.length > 0) {
       query = query.in('vendor_name', filters.vendorNames)
     }
-    if (sanitizedProgramReports.length > 0) {
-      query = query.in('program_report', sanitizedProgramReports)
+    if (programReports.length > 0) {
+      query = query.in('program_report', programReports)
     }
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
@@ -736,7 +721,8 @@ export async function getDailyRunrateData(filters?: {
   cityFilter?: string;
 }): Promise<DailyRunrateResponse> {
   try {
-    const sanitizedProgramFilter = filters?.programFilter && filters.programFilter !== 'all' && !shouldExcludeProgramReport(filters.programFilter)
+    // All program reports included - no exclusions
+    const programFilter = filters?.programFilter && filters.programFilter !== 'all'
       ? filters.programFilter
       : undefined;
 
@@ -744,18 +730,14 @@ export async function getDailyRunrateData(filters?: {
     let query = supabase
       .from('site_data_5g')
       .select('imp_integ_af, rfs_af');
-
-    EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-      query = query.neq('program_report', excludedProgram);
-    });
     
     // Apply filters
     if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
       query = query.eq('vendor_name', filters.vendorFilter);
     }
     
-    if (sanitizedProgramFilter) {
-      query = query.eq('program_report', sanitizedProgramFilter);
+    if (programFilter) {
+      query = query.eq('program_report', programFilter);
     }
     
     if (filters?.cityFilter && filters.cityFilter !== 'all') {
@@ -827,23 +809,20 @@ export async function getDataAlignmentData(filters?: {
   impTtps?: string[];
 }): Promise<DataAlignmentResponse> {
   try {
-    const sanitizedProgramReports = filterExcludedProgramReports(filters?.programReports);
+    // All program reports included - no exclusions
+    const programReports = filters?.programReports || [];
 
     // Build Supabase query with filters
     let query = supabase
       .from('site_data_5g')
       .select('caf_approved, mos_af, ic_000040_af, imp_integ_af, rfs_af, rfc_approved, hotnews_af, endorse_af');
-
-    EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-      query = query.neq('program_report', excludedProgram);
-    });
     
     // Apply filters (multi-value)
     if (filters?.vendorNames && filters.vendorNames.length > 0) {
       query = query.in('vendor_name', filters.vendorNames)
     }
-    if (sanitizedProgramReports.length > 0) {
-      query = query.in('program_report', sanitizedProgramReports)
+    if (programReports.length > 0) {
+      query = query.in('program_report', programReports)
     }
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
@@ -914,7 +893,8 @@ export async function getTop5IssueData(filters?: {
   cityFilter?: string;
 }): Promise<Top5IssueResponse> {
   try {
-    const sanitizedProgramFilter = filters?.programFilter && filters.programFilter !== 'all' && !shouldExcludeProgramReport(filters.programFilter)
+    // All program reports included - no exclusions
+    const programFilter = filters?.programFilter && filters.programFilter !== 'all'
       ? filters.programFilter
       : undefined;
 
@@ -924,18 +904,14 @@ export async function getTop5IssueData(filters?: {
       .select('issue_category')
       .not('issue_category', 'is', null)
       .neq('issue_category', '');
-
-    EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-      query = query.neq('program_report', excludedProgram);
-    });
     
     // Apply filters
     if (filters?.vendorFilter && filters.vendorFilter !== 'all') {
       query = query.eq('vendor_name', filters.vendorFilter);
     }
     
-    if (sanitizedProgramFilter) {
-      query = query.eq('program_report', sanitizedProgramFilter);
+    if (programFilter) {
+      query = query.eq('program_report', programFilter);
     }
     
     if (filters?.cityFilter && filters.cityFilter !== 'all') {
@@ -1011,7 +987,8 @@ export async function getNanoClusterData(filters?: {
   ranScores?: string[];
 }): Promise<NanoClusterResponse> {
   try {
-    const sanitizedProgramReports = filterExcludedProgramReports(filters?.programReports);
+    // All program reports included - no exclusions
+    const programReports = filters?.programReports || [];
 
     // Build Supabase query with filters
     let query = supabase
@@ -1019,17 +996,13 @@ export async function getNanoClusterData(filters?: {
       .select('nano_cluster, imp_integ_af, rfs_af, ran_score')
       .not('nano_cluster', 'is', null)
       .neq('nano_cluster', '');
-
-    EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-      query = query.neq('program_report', excludedProgram);
-    });
     
     // Apply filters (multi-value)
     if (filters?.vendorNames && filters.vendorNames.length > 0) {
       query = query.in('vendor_name', filters.vendorNames)
     }
-    if (sanitizedProgramReports.length > 0) {
-      query = query.in('program_report', sanitizedProgramReports)
+    if (programReports.length > 0) {
+      query = query.in('program_report', programReports)
     }
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)

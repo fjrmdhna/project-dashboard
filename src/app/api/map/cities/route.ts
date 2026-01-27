@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { EXCLUDED_PROGRAM_REPORTS } from '@/lib/hermes-5g-constants'
 
 // Mapping koordinat untuk kota-kota Indonesia yang umum
 const CITY_COORDINATES: Record<string, { lat: number; lng: number }> = {
@@ -73,19 +72,12 @@ function calculateStatus(row: {
 
 export async function GET(request: NextRequest) {
   try {
-    // Get distinct imp_ttp values with aggregated data
-    let query = supabase
+    // Get distinct imp_ttp values with aggregated data (all data included - no exclusions)
+    const { data, error } = await supabase
       .from('site_data_5g')
       .select('imp_ttp, lat, long, rfs_af, imp_integ_af, ic_000040_af, mos_af')
       .not('imp_ttp', 'is', null)
       .neq('imp_ttp', '')
-
-    // Exclude excluded program reports
-    EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-      query = query.neq('program_report', excludedProgram)
-    })
-
-    const { data, error } = await query
 
     if (error) {
       console.error('Supabase Error:', error)
