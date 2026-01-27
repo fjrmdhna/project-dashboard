@@ -1124,10 +1124,13 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
     return result;
   }, [rows, buckets, anchorDate]);
   
-  // Detect format from aggregated data
+  // Detect format from original rows data (consistent with aggregate function)
+  // This ensures format detection matches the aggregation logic
   const isAopFormat = useMemo(() => {
-    return data.length > 0 && (data[0].baseline !== null || data[0].actual !== null);
-  }, [data]);
+    if (!rows || rows.length === 0) return false;
+    // Check if any row has AOP format fields (mocn_activation_forecast or rfs_ff)
+    return rows.some(row => row.mocn_activation_forecast || row.rfs_ff);
+  }, [rows]);
 
   return (
     <div className={`rounded-lg bg-[#0F1630]/80 border border-white/5 p-0.5 w-full h-full flex flex-col min-w-0 ${className ?? ''}`}>

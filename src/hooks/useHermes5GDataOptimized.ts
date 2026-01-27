@@ -5,6 +5,7 @@ import type { Row as MatrixRow } from '@/components/cards/MatrixStatsCard'
 import { useApiCache } from './useApiCache'
 import { fetchWithRetry } from '@/lib/api-utils'
 import { format, subDays } from 'date-fns'
+import { getProgramReportsForDisplayName, getDisplayNameForProgramReport } from '@/lib/hermes-program-mapping'
 
 export interface Hermes5GSiteData extends MatrixRow {
   rfc_approved?: string | null
@@ -134,6 +135,26 @@ function filterDataClientSide(
   
   const searchLower = search.toLowerCase()
   
+  // Expand display names to actual program_report values
+  // Get all unique program_report values from data
+  const allProgramReportsInData = [...new Set(data.map(row => row.program_report).filter((pr): pr is string => Boolean(pr)))]
+  
+  // Expand display names to program_report patterns
+  const expandedProgramReports = new Set<string>()
+  for (const programFilter of programReports) {
+    // Check if it's a display name (mapped) or actual program_report
+    const expanded = getProgramReportsForDisplayName(programFilter, allProgramReportsInData)
+    if (expanded.length > 0) {
+      // It's a display name, add all expanded program_reports
+      expanded.forEach(pr => expandedProgramReports.add(pr))
+    } else {
+      // It's not a display name (unmapped), use as-is
+      expandedProgramReports.add(programFilter)
+    }
+  }
+  
+  const expandedProgramReportsArray = Array.from(expandedProgramReports)
+  
   let filteredCount = 0
   let rejectedByVendor = 0
   let rejectedByProgram = 0
@@ -152,8 +173,8 @@ function filterDataClientSide(
       return false
     }
     
-    // Program filter
-    if (programReports.length > 0 && !programReports.includes(row.program_report || '')) {
+    // Program filter - use expanded program reports
+    if (expandedProgramReportsArray.length > 0 && !expandedProgramReportsArray.includes(row.program_report || '')) {
       rejectedByProgram++
       return false
     }

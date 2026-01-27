@@ -116,6 +116,8 @@ export async function getSiteData5G(
     'ic_000040_af',
     'imp_integ_af',
     'rfs_af',
+    'rfs_ff',            // Forecast - ProgressCurve, VendorLeaderboard, DailyRunrate
+    'rfs_bf',            // Legacy baseline - kept for backward compatibility
     'rfs_forecast_lock',
     'rfc_approved',
     'mocn_activation_forecast',

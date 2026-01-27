@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react"
 import { Search, Tag, X } from "lucide-react"
 import { MultiSelect } from "@/components/ui/MultiSelect"
 import { useDebounce } from "@/hooks/useDebounce"
+import { getDisplayNameForProgramReport } from "@/lib/hermes-program-mapping"
 
 // Tipe filter value
 export interface FilterValue {
@@ -83,6 +84,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     async function fetchOptions(forceRefresh = false) {
       try {
         setIsLoading(true)
+        // Force refresh on initial load to ensure fresh data with new mapping
         const url = forceRefresh ? `${endpoint}?refresh=true` : endpoint
         const response = await fetch(url)
         

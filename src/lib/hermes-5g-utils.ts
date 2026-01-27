@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { EXCLUDED_PROGRAM_REPORTS, filterExcludedProgramReports, shouldExcludeProgramReport } from './hermes-5g-constants';
+import { getAllDisplayNames, getUnmappedProgramReports } from './hermes-program-mapping';
 
 // Hermes 5G Data Interface
 export interface Hermes5GData {
@@ -389,9 +390,22 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
       throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message || nanoClustersError?.message || regionsError?.message || yearsError?.message || ranScoresError?.message}`);
     }
     
+    // Get all unique program_report values from database
+    const allProgramReports = [...new Set(programsData?.map(row => row.program_report) || [])]
+    
+    // Get display names from mapping configuration
+    const mappedDisplayNames = getAllDisplayNames()
+    
+    // Get unmapped program reports (those not in mapping config)
+    const unmappedProgramReports = getUnmappedProgramReports(allProgramReports)
+    
+    // Combine mapped display names with unmapped program reports
+    // Display names first (prioritized), then unmapped ones
+    const programOptions = [...mappedDisplayNames, ...unmappedProgramReports].sort()
+    
     const data: FilterOptionsData = {
       vendors: [...new Set(vendorsData?.map(row => row.vendor_name) || [])].sort(),
-      programs: [...new Set(programsData?.map(row => row.program_report) || [])].sort(), // All programs included - no exclusions
+      programs: programOptions, // Display names + unmapped program reports
       cities: [...new Set(citiesData?.map(row => row.imp_ttp) || [])].sort(),
       nanoClusters: [...new Set(nanoClustersData?.map(row => row.nano_cluster) || [])].sort(),
       regions: [...new Set(regionsData?.map(row => row.region) || [])].sort(),

@@ -42,3 +42,11 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# Windows reserved names (cannot be indexed by Git)
+nul
+CON
+PRN
+AUX
+COM[1-9]
+LPT[1-9]
