@@ -83,6 +83,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     
     async function fetchOptions(forceRefresh = false) {
       try {
+        const t0 = Date.now()
         setIsLoading(true)
         // Force refresh on initial load to ensure fresh data with new mapping
         const url = forceRefresh ? `${endpoint}?refresh=true` : endpoint
@@ -211,6 +212,30 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
             }
             
             setOptions(newOptions)
+
+            const t1 = Date.now()
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sessionId: 'debug-session',
+                runId: 'initial',
+                hypothesisId: 'H3',
+                location: 'src/components/filters/FilterBar.tsx:84-159',
+                message: 'FilterBar options loaded',
+                data: {
+                  durationMs: t1 - t0,
+                  endpoint: url,
+                  vendors: newOptions.vendors.length,
+                  programs: newOptions.programs.length,
+                  cities: newOptions.cities.length,
+                  nanoClusters: newOptions.nanoClusters.length
+                },
+                timestamp: Date.now()
+              })
+            }).catch(() => {})
+            // #endregion
           }
         }
       } catch (error) {
@@ -330,11 +355,11 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.ran_score?.length || 0) > 0 ||
     (value.priority_congest_urgent?.length || 0) > 0
 
-  // Grid layout berbeda untuk variant AOP (7 filter: vendor, program, circle, site_category, ran_score, year, priority) vs default (7 filter dengan region dan year)
+  // Grid layout: AOP 7 filters; default (Hermes) 8 filters: vendor, program, city, cluster, circle, year, site_category
   const gridClass =
     variant === "aop"
       ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(7,minmax(0,1fr))_auto] md:items-center md:gap-2"
-      : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(6,minmax(0,1fr))_auto] md:items-center md:gap-2"
+      : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(7,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
   return (
     <div className="h-full flex flex-col min-w-0">
@@ -420,6 +445,16 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.year || []}
               placeholder="Year"
               onChange={handleYearChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 md:col-span-1"
+            />
+
+            <MultiSelect
+              options={options.siteCategories || []}
+              selected={value.site_category ?? []}
+              placeholder="Site Category"
+              onChange={handleSiteCategoryChange}
               disabled={isLoading}
               width="w-full"
               className="col-span-2 md:col-span-1"
@@ -579,20 +614,6 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               <X 
                 className="h-2 w-2 cursor-pointer" 
                 onClick={() => removeFilter('nano_cluster', cluster)} 
-              />
-            </div>
-          ))}
-
-          {value.circle?.map(circle => (
-            <div 
-              key={`circle-${circle}`} 
-              className="bg-pink-500/20 text-pink-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
-              title={`Circle: ${circle}`}
-            >
-              <span>C: {truncateText(circle, 10)}</span>
-              <X 
-                className="h-2 w-2 cursor-pointer" 
-                onClick={() => removeFilter('circle', circle)} 
               />
             </div>
           ))}

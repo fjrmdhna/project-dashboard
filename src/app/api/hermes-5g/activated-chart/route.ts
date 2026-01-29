@@ -1,29 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getActivatedChartData } from '@/lib/hermes-5g-utils'
-import { parseFilterParams } from '@/lib/filters'
+import { NextResponse } from 'next/server'
 
-export async function GET(request: NextRequest) {
-  try {
-    // Get filter parameters from query string
-    const url = new URL(request.url)
-    const { vendorNames, programReports, impTtps } = parseFilterParams(url)
-    const result = await getActivatedChartData({
-      vendorNames,
-      programReports,
-      impTtps,
-      ranScores: [] // ran_score filter removed - no longer used
-    })
-    
-    return NextResponse.json(result)
-  } catch (error) {
-    console.error('Error in activated chart API:', error)
-    return NextResponse.json(
-      { 
-        status: 'error', 
-        message: 'Failed to fetch activated chart data',
-        timestamp: new Date().toISOString()
-      },
-      { status: 500 }
-    )
-  }
-} 
+/** @deprecated Use hermesAggregated from useHermes5GDataOptimized (byCity) instead. */
+export async function GET() {
+  return NextResponse.json(
+    {
+      status: 'deprecated',
+      message: 'Use hermesAggregated.byCity from useHermes5GDataOptimized instead.',
+      migrated: 'hermesAggregated'
+    },
+    { status: 410 }
+  )
+}

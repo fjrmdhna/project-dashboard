@@ -41,7 +41,9 @@ const MINIMAL_COLUMNS = [
   'nano_cluster',      // Readiness/Activated cards + Filter
   'ran_score',         // RAN Score filter
   'year',              // Year filter
-  'region',            // Region filter
+  'region',            // Region filter (deprecated)
+  'region_circle',     // Circle filter
+  'site_category',     // Site category filter
   'ic_000040_af',      // Install stats
   'imp_integ_af',      // Readiness - VendorLeaderboard
   'mocn_activation_forecast', // Baseline - ProgressCurve
@@ -103,6 +105,8 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       ran_score: row.ran_score || null,
       year: row.year || null,
       region: row.region || null,
+      region_circle: row.region_circle || null,
+      site_category: row.site_category || null,
       // Stats fields
       caf_approved: row.caf_approved || null,
       mos_af: row.mos_af || null,

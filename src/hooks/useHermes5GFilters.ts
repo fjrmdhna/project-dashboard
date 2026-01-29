@@ -37,6 +37,7 @@ interface UseHermes5GFiltersReturn {
     vendorFilter: string
     programFilter: string
     cityFilter: string
+    searchFilter?: string
   }
   tableFilters: {
     search: string

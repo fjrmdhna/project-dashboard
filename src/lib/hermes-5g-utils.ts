@@ -187,6 +187,16 @@ export interface FilterOptionsData {
   circles: string[] // New: circles from region_circle
   years: string[]
   ranScores: string[]
+  siteCategories: string[] // Site category filter (Hermes / AOP)
+}
+
+// Normalize site_category for filter options (consistent with AOP: New Site / Expansion)
+const normalizeSiteCategoryValue = (value: string): string => {
+  if (!value) return value
+  const lowerValue = value.toLowerCase().trim()
+  if (lowerValue.includes('new')) return 'New Site'
+  if (lowerValue.includes('existing') || lowerValue.includes('upgrade')) return 'Expansion'
+  return value.trim().toLowerCase().replace(/\b\w/g, char => char.toUpperCase())
 }
 
 export interface FilterOptionsResponse {
@@ -342,8 +352,16 @@ export async function getHermes5GStats() {
 }
 
 // Get Available Filter Options
-export async function getFilterOptions(): Promise<FilterOptionsResponse> {
+const FILTER_OPTIONS_CACHE_TTL_MS = 5 * 60 * 1000
+let filterOptionsCache: { fetchedAt: number; value: FilterOptionsResponse } | null = null
+
+export async function getFilterOptions(options: { forceRefresh?: boolean } = {}): Promise<FilterOptionsResponse> {
   try {
+    const now = Date.now()
+    if (!options.forceRefresh && filterOptionsCache && (now - filterOptionsCache.fetchedAt) < FILTER_OPTIONS_CACHE_TTL_MS) {
+      return filterOptionsCache.value
+    }
+
     // Get unique vendors from vendor_name
     const { data: vendorsData, error: vendorsError } = await supabase
       .from('site_data_5g')
@@ -393,9 +411,16 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
       .not('ran_score', 'is', null)
       .neq('ran_score', '');
     
-    if (vendorsError || programsError || citiesError || nanoClustersError || circlesError || yearsError || ranScoresError) {
-      console.error('Supabase Error:', vendorsError || programsError || citiesError || nanoClustersError || circlesError || yearsError || ranScoresError);
-      throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message || nanoClustersError?.message || circlesError?.message || yearsError?.message || ranScoresError?.message}`);
+    // Get unique site categories from site_category
+    const { data: siteCategoriesData, error: siteCategoriesError } = await supabase
+      .from('site_data_5g')
+      .select('site_category')
+      .not('site_category', 'is', null)
+      .neq('site_category', '');
+    
+    if (vendorsError || programsError || citiesError || nanoClustersError || circlesError || yearsError || ranScoresError || siteCategoriesError) {
+      console.error('Supabase Error:', vendorsError || programsError || citiesError || nanoClustersError || circlesError || yearsError || ranScoresError || siteCategoriesError);
+      throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message || nanoClustersError?.message || circlesError?.message || yearsError?.message || ranScoresError?.message || siteCategoriesError?.message}`);
     }
     
     // Get all unique program_report values from database
@@ -430,6 +455,23 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     })
     const normalizedCircles = Array.from(circlesMap.values()).sort()
     
+    // Normalize site_category: use Map with normalized key (New Site / Expansion) to avoid duplicates
+    const siteCategoriesMap = new Map<string, string>()
+    siteCategoriesData?.forEach(row => {
+      const rawValue = row.site_category
+      if (rawValue && typeof rawValue === 'string') {
+        const trimmed = rawValue.trim()
+        if (trimmed) {
+          const formatted = normalizeSiteCategoryValue(trimmed)
+          const normalizedKey = formatted.toLowerCase()
+          if (!siteCategoriesMap.has(normalizedKey)) {
+            siteCategoriesMap.set(normalizedKey, formatted)
+          }
+        }
+      }
+    })
+    const normalizedSiteCategories = Array.from(siteCategoriesMap.values()).sort()
+    
     const data: FilterOptionsData = {
       vendors: [...new Set(vendorsData?.map(row => row.vendor_name) || [])].sort(),
       programs: programOptions, // Display names + unmapped program reports
@@ -444,19 +486,22 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
             .map(row => row.ran_score)
             .filter((value): value is string => Boolean(value))
         )
-      ].sort()
+      ].sort(),
+      siteCategories: normalizedSiteCategories
     };
     
     console.log('Filter options from Supabase:', data);
     
-    return {
+    const response: FilterOptionsResponse = {
       status: 'success',
       data,
       timestamp: new Date().toISOString()
     };
+    filterOptionsCache = { fetchedAt: now, value: response }
+    return response
   } catch (error) {
     console.error('Error getting filter options:', error);
-    return {
+    const response: FilterOptionsResponse = {
       status: 'error',
       data: {
         vendors: [],
@@ -466,10 +511,14 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
         regions: [],
         circles: [],
         years: [],
-        ranScores: []
+        ranScores: [],
+        siteCategories: []
       },
       timestamp: new Date().toISOString()
     };
+    // Cache error responses briefly to prevent hammering Supabase in failure loops
+    filterOptionsCache = { fetchedAt: Date.now(), value: response }
+    return response
   }
 }
 

@@ -30,6 +30,10 @@ interface MapPoint {
   issueCategory?: string | null
   nanoCluster?: string | null
   isExcluded?: boolean
+  region?: string | null
+  region_circle?: string | null
+  year?: string | null
+  site_category?: string | null
 }
 
 function parseCoordinate(value: unknown): number | null {
@@ -63,6 +67,7 @@ function resolveStatus(row: SiteData5G): StatusLabel {
 
 export async function GET(request: NextRequest) {
   try {
+    const t0 = Date.now()
     const { searchParams } = new URL(request.url)
 
     const q = searchParams.get('q') || ''
@@ -74,6 +79,7 @@ export async function GET(request: NextRequest) {
     const years = searchParams.getAll('year') || []
     const statusFilters = searchParams.getAll('status') || []
 
+    // Single query: excluded-program query removed (logs showed excludedCount always 0; halves server time)
     const { data } = await getSiteData5G({
       vendor_name: vendorNames.length ? vendorNames : undefined,
       program_report: programReports.length ? programReports : undefined,
@@ -86,10 +92,35 @@ export async function GET(request: NextRequest) {
       limit: 20000
     })
 
-    const { data: excludedData } = await getSiteData5G(
-      { limit: 20000 },
-      { includeExcludedProgramReports: true, onlyExcludedProgramReports: true }
-    )
+    const tAfterDb = Date.now()
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'post-fix',
+        hypothesisId: 'H1',
+        location: 'src/app/api/hermes-5g/map-data/route.ts',
+        message: 'map-data Supabase query completed',
+        data: {
+          durationMs: tAfterDb - t0,
+          mainCount: data.length,
+          filters: {
+            vendorNamesCount: vendorNames.length,
+            programReportsCount: programReports.length,
+            impTtpsCount: impTtps.length,
+            nanoClustersCount: nanoClusters.length,
+            regionsCount: regions.length,
+            yearsCount: years.length,
+            statusFiltersCount: statusFilters.length
+          }
+        },
+        timestamp: Date.now()
+      })
+    }).catch(() => {})
+    // #endregion
 
     const counts: Record<StatusLabel, number> = {
       [STATUS_LABEL.active]: 0,
@@ -100,7 +131,6 @@ export async function GET(request: NextRequest) {
 
     const points: MapPoint[] = []
     let invalidCoordinatesCount = 0
-    const seenIds = new Set<string>()
 
     for (const row of data) {
       const lat = parseCoordinate(row.lat)
@@ -125,40 +155,22 @@ export async function GET(request: NextRequest) {
         programReport: row.program_report ?? null,
         impTtp: row.imp_ttp ?? null,
         issueCategory: (row as any).issue_category ?? null,
-        nanoCluster: row.nano_cluster ?? null
-      })
-
-      seenIds.add(row.system_key)
-    }
-
-    for (const row of excludedData) {
-      if (seenIds.has(row.system_key)) {
-        continue
-      }
-
-      const lat = parseCoordinate(row.lat)
-      const long = parseCoordinate(row.long)
-
-      if (lat === null || long === null) {
-        invalidCoordinatesCount++
-        continue
-      }
-
-      points.push({
-        id: row.system_key,
-        status: resolveStatus(row),
-        lat,
-        long,
-        vendorName: row.vendor_name ?? null,
-        siteName: row.site_name ?? null,
-        siteId: row.site_id ?? null,
-        programReport: row.program_report ?? null,
-        impTtp: row.imp_ttp ?? null,
-        issueCategory: (row as any).issue_category ?? null,
         nanoCluster: row.nano_cluster ?? null,
-        isExcluded: true
+        region: (row as any).region ?? null,
+        region_circle: (row as any).region_circle ?? null,
+        year: (row as any).year ?? null,
+        site_category: (row as any).site_category ?? null
       })
     }
+
+    const durationMs = Date.now() - t0
+    // Lightweight runtime evidence for map performance
+    console.log('[hermes-5g/map-data] success', {
+      durationMs,
+      mainCount: data.length,
+      points: points.length,
+      invalidCoordinates: invalidCoordinatesCount
+    })
 
     return NextResponse.json({
       status: 'success',

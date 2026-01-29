@@ -27,6 +27,9 @@ interface UseApiCacheReturn<T> {
 // Global memory cache
 const memoryCache = new Map<string, CacheEntry<any>>()
 
+// Global in-flight dedup (prevents double-fetch across hook instances / StrictMode)
+const inFlightPromises = new Map<string, Promise<any>>()
+
 // Cleanup expired entries periodically
 setInterval(() => {
   const now = Date.now()
@@ -168,11 +171,6 @@ export function useApiCache<T>(
       }
     }
 
-    // Cancel previous request for this cacheKey
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
-
     // Check cache first (unless forced)
     if (!force) {
       const cached = getCachedData()
@@ -182,6 +180,39 @@ export function useApiCache<T>(
         setLoading(false) // Ensure loading is false when using cache
         return
       }
+    }
+
+    // Global in-flight dedup: if another instance is already fetching this key, await it.
+    // This prevents StrictMode double-mount / multiple consumers from issuing duplicate requests.
+    if (!force) {
+      const existing = inFlightPromises.get(cacheKey)
+      if (existing) {
+        fetchingRef.current.add(cacheKey)
+        if (!background) setLoading(true)
+        setError(null)
+        try {
+          const result = await existing
+          // If cacheKey changed mid-flight, ignore
+          if (lastCacheKeyRef.current !== cacheKey) return
+          setData(result)
+          setCachedData(result, null)
+          setLastFetched(Date.now())
+          setError(null)
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+          setError(errorMessage)
+          console.error(`API Cache Error (joined) for ${cacheKey}:`, err)
+        } finally {
+          fetchingRef.current.delete(cacheKey)
+          if (!background) setLoading(false)
+        }
+        return
+      }
+    }
+
+    // Cancel previous request for this hook instance
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
     }
 
     // Mark as fetching and record fetch time
@@ -205,7 +236,13 @@ export function useApiCache<T>(
         setTimeout(() => reject(new Error('Request timeout after 60 seconds')), 60000)
       })
       
-      const result = await Promise.race([fetchFn(), timeoutPromise])
+      const fetchPromise = Promise.race([fetchFn(), timeoutPromise])
+      // Register in-flight promise globally (only if not forced)
+      if (!force) {
+        inFlightPromises.set(cacheKey, fetchPromise)
+      }
+
+      const result = await fetchPromise
       
       // Check if request was aborted or cacheKey changed
       if (controller.signal.aborted || lastCacheKeyRef.current !== cacheKey) {
@@ -236,6 +273,17 @@ export function useApiCache<T>(
       // Don't set data to null on error - keep previous data if available
       console.error(`API Cache Error for ${cacheKey}:`, err)
     } finally {
+      // Clear global in-flight promise if it matches our promise
+      if (!force) {
+        const current = inFlightPromises.get(cacheKey)
+        // Only delete if it's the same promise reference we set
+        // (prevents races if a new fetch started later)
+        if (current) {
+          // best-effort: delete regardless; inFlight map is only used as a dedup hint
+          inFlightPromises.delete(cacheKey)
+        }
+      }
+
       // Always clean up fetchingRef
       fetchingRef.current.delete(cacheKey)
       

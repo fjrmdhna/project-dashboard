@@ -1,9 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { RefreshCw } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import { useApiCache } from '@/hooks/useApiCache'
 
 const Hermes5GMap = dynamic(() => import('@/components/maps/Hermes5GMap').then(mod => ({ default: mod.default })), {
   ssr: false,
@@ -20,6 +21,8 @@ const Hermes5GMap = dynamic(() => import('@/components/maps/Hermes5GMap').then(m
 import type { HermesMapPoint, StatusLabel } from '@/components/maps/Hermes5GMap'
 import { useFilter } from '@/contexts/FilterContext'
 import { FilterBar, FilterValue } from '@/components/filters/FilterBar'
+import { getProgramReportsForDisplayName } from '@/lib/hermes-program-mapping'
+import { normalizeSiteCategoryValue } from '@/lib/supabase'
 
 interface MapApiSuccess {
   status: 'success'
@@ -85,35 +88,183 @@ function formatTimestamp(timestamp: string | null) {
 export default function Hermes5GMapPage() {
   // Menggunakan shared filter context
   const filterContext = useFilter()
-  
-  const [points, setPoints] = useState<HermesMapPoint[]>([])
-  const [counts, setCounts] = useState<Record<StatusLabel, number>>(() => ({ ...DEFAULT_COUNTS }))
-  const [totalCounts, setTotalCounts] = useState<Record<StatusLabel, number>>(() => ({ ...DEFAULT_COUNTS })) // Total counts untuk status summary
-  const [colors, setColors] = useState<Record<StatusLabel, string>>(() => ({ ...DEFAULT_COLORS }))
-  const [invalidCoordinates, setInvalidCoordinates] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [isFilterLoading, setIsFilterLoading] = useState(false) // State khusus untuk filter loading (hanya saat filter berubah)
-  const [hasInitialLoad, setHasInitialLoad] = useState(false) // Track initial load completion
-  const [error, setError] = useState<string | null>(null)
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
-  const [showExcluded, setShowExcluded] = useState(true)
-  
-  // Convert filter context to FilterValue format - support multiselect
-  const currentFilter: FilterValue = useMemo(() => ({
-    q: filterContext.searchTerm,
-    vendor_name: filterContext.vendorFilter !== 'all' ? filterContext.vendorFilter.split(',').filter(Boolean) : [],
-    program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
-    imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
-    nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
-    region: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [],
-    year: filterContext.yearFilter !== 'all' ? filterContext.yearFilter.split(',').filter(Boolean) : [],
-    status: filterContext.statusFilters || []
-  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.statusFilters])
 
-  const visiblePoints = useMemo(
-    () => (showExcluded ? points : points.filter(point => !point.isExcluded)),
-    [points, showExcluded]
+  // Fetch full map data once (no filter), cache and filter client-side for instant filter changes
+  const fetchMapAll = useCallback(async () => {
+    const res = await fetch('/api/hermes-5g/map-data', { cache: 'no-store' })
+    const json: MapApiResponse = await res.json()
+    if (json.status !== 'success') {
+      throw new Error(json.message || 'Failed to load map data')
+    }
+    return json
+  }, [])
+
+  const { data: cachedMapResponse, loading, error, refetch } = useApiCache<MapApiSuccess>(
+    'hermes-map-all-v1',
+    fetchMapAll,
+    {
+      staleTime: 5 * 60 * 1000,
+      cacheTime: 15 * 60 * 1000,
+      refetchOnMount: false,
+      validateFn: (d) => {
+        const res = d as MapApiSuccess
+        return !!res?.status && res.status === 'success' && Array.isArray(res.data?.points) && res.data?.colors != null && typeof res.data?.invalidCoordinates === 'number'
+      }
+    }
   )
+
+  const hasInitialLoad = !!cachedMapResponse
+  const lastUpdated = cachedMapResponse?.timestamp ?? null
+  const invalidCoordinates = cachedMapResponse?.data?.invalidCoordinates ?? 0
+  const colors = useMemo(
+    () => cachedMapResponse?.data?.colors ?? DEFAULT_COLORS,
+    [cachedMapResponse?.data?.colors]
+  )
+
+  // Convert debounced filter context to FilterValue format - support multiselect
+  const currentFilter: FilterValue = useMemo(() => {
+    const debounced = filterContext.debouncedFilters || filterContext
+    return {
+      q: debounced.searchTerm,
+      vendor_name: debounced.vendorFilter !== 'all' ? debounced.vendorFilter.split(',').filter(Boolean) : [],
+      program_report: debounced.programFilter !== 'all' ? debounced.programFilter.split(',').filter(Boolean) : [],
+      imp_ttp: debounced.cityFilter !== 'all' ? debounced.cityFilter.split(',').filter(Boolean) : [],
+      nano_cluster: debounced.nanoClusterFilter !== 'all' ? debounced.nanoClusterFilter.split(',').filter(Boolean) : [],
+      region: debounced.regionFilter !== 'all' ? debounced.regionFilter.split(',').filter(Boolean) : [],
+      year: debounced.yearFilter !== 'all' ? debounced.yearFilter.split(',').filter(Boolean) : [],
+      circle: debounced.circleFilter !== 'all' ? debounced.circleFilter.split(',').filter(Boolean) : [],
+      site_category: debounced.siteCategoryFilter !== 'all' ? debounced.siteCategoryFilter.split(',').filter(Boolean) : [],
+      status: debounced.statusFilters || []
+    }
+  }, [filterContext.debouncedFilters])
+
+  // Client-side filter: apply currentFilter to cached points (no extra fetch)
+  const { points, counts, totalCounts } = useMemo(() => {
+    const raw = cachedMapResponse?.data
+    if (!raw?.points?.length) {
+      return {
+        points: [] as HermesMapPoint[],
+        counts: { ...DEFAULT_COUNTS },
+        totalCounts: { ...DEFAULT_COUNTS }
+      }
+    }
+    const q = (currentFilter.q ?? '').toLowerCase().trim()
+    const vendorSet = currentFilter.vendor_name?.length ? new Set(currentFilter.vendor_name) : null
+    const impTtpSet = currentFilter.imp_ttp?.length ? new Set(currentFilter.imp_ttp) : null
+    const nanoSet = currentFilter.nano_cluster?.length ? new Set(currentFilter.nano_cluster) : null
+    const regionSet = currentFilter.region?.length ? new Set(currentFilter.region) : null
+    const yearSet = currentFilter.year?.length ? new Set(currentFilter.year) : null
+    const statusSet = currentFilter.status?.length ? new Set(currentFilter.status) : null
+
+    // Program: expand display names to actual program_report values (filter options use display names)
+    const allProgramReports = [...new Set(raw.points.map((p: HermesMapPoint) => p.programReport).filter(Boolean))] as string[]
+    let programSet: Set<string> | null = null
+    if (currentFilter.program_report?.length) {
+      const expanded = new Set<string>()
+      for (const displayOrRaw of currentFilter.program_report) {
+        const resolved = getProgramReportsForDisplayName(displayOrRaw, allProgramReports)
+        if (resolved.length) resolved.forEach((r: string) => expanded.add(r))
+        else expanded.add(displayOrRaw)
+      }
+      programSet = expanded.size ? expanded : null
+    }
+
+    // Circle: normalize to Title Case for comparison (same as filter options)
+    const normalizeCircle = (v: string) => v.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+    const circleSet =
+      currentFilter.circle?.length ?
+        new Set(currentFilter.circle.map(normalizeCircle)) : null
+
+    // Site category: normalize to "New Site" / "Expansion" for comparison
+    const siteCategorySet =
+      currentFilter.site_category?.length
+        ? new Set(currentFilter.site_category.map((sc: string) => normalizeSiteCategoryValue(sc).toLowerCase()))
+        : null
+
+    const filtered = raw.points.filter((p: HermesMapPoint) => {
+      if (vendorSet && !vendorSet.has(p.vendorName ?? '')) return false
+      if (programSet && !programSet.has(p.programReport ?? '')) return false
+      if (impTtpSet && !impTtpSet.has(p.impTtp ?? '')) return false
+      if (nanoSet && !nanoSet.has(p.nanoCluster ?? '')) return false
+      if (regionSet && !regionSet.has(p.region ?? '')) return false
+      if (yearSet && !yearSet.has(p.year ?? '')) return false
+      if (circleSet) {
+        const pCircle = normalizeCircle(p.region_circle ?? '')
+        if (!pCircle || !circleSet.has(pCircle)) return false
+      }
+      if (siteCategorySet) {
+        const pCat = normalizeSiteCategoryValue(p.site_category ?? '').toLowerCase()
+        if (!pCat || !siteCategorySet.has(pCat)) return false
+      }
+      if (statusSet && !statusSet.has(p.status)) return false
+      if (q) {
+        const searchable = [p.id, p.vendorName, p.programReport].filter(Boolean).join(' ').toLowerCase()
+        if (!searchable.includes(q)) return false
+      }
+      return true
+    })
+
+    const countsByStatus: Record<string, number> = { ...DEFAULT_COUNTS }
+    filtered.forEach((p: HermesMapPoint) => {
+      countsByStatus[p.status] = (countsByStatus[p.status] ?? 0) + 1
+    })
+
+    // Total counts for summary: same filters but without status filter
+    const totalFiltered =
+      !statusSet || statusSet.size === 0
+        ? filtered
+        : raw.points.filter((p: HermesMapPoint) => {
+            if (vendorSet && !vendorSet.has(p.vendorName ?? '')) return false
+            if (programSet && !programSet.has(p.programReport ?? '')) return false
+            if (impTtpSet && !impTtpSet.has(p.impTtp ?? '')) return false
+            if (nanoSet && !nanoSet.has(p.nanoCluster ?? '')) return false
+            if (regionSet && !regionSet.has(p.region ?? '')) return false
+            if (yearSet && !yearSet.has(p.year ?? '')) return false
+            if (circleSet) {
+              const pCircle = normalizeCircle(p.region_circle ?? '')
+              if (!pCircle || !circleSet.has(pCircle)) return false
+            }
+            if (siteCategorySet) {
+              const pCat = normalizeSiteCategoryValue(p.site_category ?? '').toLowerCase()
+              if (!pCat || !siteCategorySet.has(pCat)) return false
+            }
+            if (q) {
+              const searchable = [p.id, p.vendorName, p.programReport].filter(Boolean).join(' ').toLowerCase()
+              if (!searchable.includes(q)) return false
+            }
+            return true
+          })
+    const totalCountsByStatus: Record<string, number> = { ...DEFAULT_COUNTS }
+    totalFiltered.forEach((p: HermesMapPoint) => {
+      totalCountsByStatus[p.status] = (totalCountsByStatus[p.status] ?? 0) + 1
+    })
+
+    // #region agent log
+    if (cachedMapResponse && filtered.length >= 0) {
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'post-fix',
+          hypothesisId: 'H2',
+          location: 'src/app/hermes-5g/map/page.tsx',
+          message: 'Hermes5GMap client-side filter applied',
+          data: { cachedPoints: raw.points.length, filteredPoints: filtered.length },
+          timestamp: Date.now()
+        })
+      }).catch(() => {})
+    }
+    // #endregion
+
+    return {
+      points: filtered as HermesMapPoint[],
+      counts: countsByStatus as Record<StatusLabel, number>,
+      totalCounts: totalCountsByStatus as Record<StatusLabel, number>
+    }
+  }, [cachedMapResponse, currentFilter])
+
+  const visiblePoints = useMemo(() => points, [points])
 
   const totalSitesForSummary = useMemo(() => {
     return Object.values(totalCounts).reduce((sum, count) => sum + count, 0)
@@ -125,132 +276,13 @@ export default function Hermes5GMapPage() {
     const isSelected = currentStatuses.includes(status)
     
     if (isSelected) {
-      // Remove status dari filter
       const newStatuses = currentStatuses.filter(s => s !== status)
       filterContext.setStatusFilters(newStatuses)
     } else {
-      // Add status ke filter
       const newStatuses = [...currentStatuses, status]
       filterContext.setStatusFilters(newStatuses)
     }
   }, [filterContext])
-
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true)
-      setIsFilterLoading(true) // Set filter loading state
-      setError(null)
-
-      // Build URL with current filter
-      const params = new URLSearchParams()
-      if (currentFilter.q) {
-        params.set('q', currentFilter.q)
-      }
-      currentFilter.vendor_name.forEach((value) => {
-        params.append('vendor_name', value)
-      })
-      currentFilter.program_report.forEach((value) => {
-        params.append('program_report', value)
-      })
-      currentFilter.imp_ttp.forEach((value) => {
-        params.append('imp_ttp', value)
-      })
-      currentFilter.nano_cluster.forEach((value) => {
-        params.append('nano_cluster', value)
-      })
-      currentFilter.region?.forEach((value) => {
-        params.append('region', value)
-      })
-      currentFilter.year?.forEach((value) => {
-        params.append('year', value)
-      })
-      currentFilter.status.forEach((value) => {
-        params.append('status', value)
-      })
-
-      const url = `/api/hermes-5g/map-data?${params.toString()}`
-      console.log('Loading map data with filter:', currentFilter)
-      console.log('Map API URL:', url)
-      const response = await fetch(url, { cache: 'no-store' })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const payload: MapApiResponse = await response.json()
-
-      if (payload.status !== 'success') {
-        throw new Error(payload.message || 'Failed to load map data')
-      }
-
-      setPoints(payload.data.points)
-      setCounts(payload.data.counts as Record<StatusLabel, number>)
-      setColors(payload.data.colors as Record<StatusLabel, string>)
-      setInvalidCoordinates(payload.data.invalidCoordinates || 0)
-      setLastUpdated(payload.timestamp)
-      setHasInitialLoad(true) // Mark initial load as complete
-
-      // Load total counts for status summary (without status filter)
-      if (currentFilter.status.length > 0) {
-        try {
-          const totalParams = new URLSearchParams()
-          if (currentFilter.q) {
-            totalParams.set('q', currentFilter.q)
-          }
-          currentFilter.vendor_name.forEach((value) => {
-            totalParams.append('vendor_name', value)
-          })
-          currentFilter.program_report.forEach((value) => {
-            totalParams.append('program_report', value)
-          })
-          currentFilter.imp_ttp.forEach((value) => {
-            totalParams.append('imp_ttp', value)
-          })
-          currentFilter.nano_cluster.forEach((value) => {
-            totalParams.append('nano_cluster', value)
-          })
-          currentFilter.region?.forEach((value) => {
-            totalParams.append('region', value)
-          })
-          currentFilter.year?.forEach((value) => {
-            totalParams.append('year', value)
-          })
-          // Don't include status filter for total counts
-
-          const totalUrl = `/api/hermes-5g/map-data?${totalParams.toString()}`
-          const totalResponse = await fetch(totalUrl, { cache: 'no-store' })
-          
-          if (totalResponse.ok) {
-            const totalPayload: MapApiResponse = await totalResponse.json()
-            if (totalPayload.status === 'success') {
-              setTotalCounts(totalPayload.data.counts as Record<StatusLabel, number>)
-            }
-          }
-        } catch (err) {
-          console.warn('Failed to load total counts for status summary:', err)
-          // Keep existing totalCounts if failed
-        }
-      } else {
-        // If no status filter, use the same counts
-        setTotalCounts(payload.data.counts as Record<StatusLabel, number>)
-      }
-    } catch (err) {
-      console.error('Failed to load Hermes 5G map data:', err)
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
-      setPoints([])
-      setCounts({ ...DEFAULT_COUNTS })
-      setTotalCounts({ ...DEFAULT_COUNTS })
-      setColors({ ...DEFAULT_COLORS })
-      setInvalidCoordinates(0)
-    } finally {
-      setLoading(false)
-      setIsFilterLoading(false) // Clear filter loading state
-    }
-  }, [currentFilter])
-
-  useEffect(() => {
-    void loadData()
-  }, [loadData])
 
   const headerTitle = 'Hermes 5G Progress Map'
 
@@ -266,58 +298,25 @@ export default function Hermes5GMapPage() {
     )
   }
 
-  // Handler untuk perubahan filter
   const handleFilterChange = (newFilters: FilterValue) => {
-    console.log("Filter changed:", newFilters)
-    // Set filter loading state immediately untuk memberikan feedback visual yang cepat
-    setIsFilterLoading(true)
-    // Update filter context - support multiselect by joining arrays
     filterContext.setSearchTerm(newFilters.q)
-    filterContext.setVendorFilter(newFilters.vendor_name.length > 0 ? newFilters.vendor_name.join(',') : 'all')
-    filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report.join(',') : 'all')
-    filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp.join(',') : 'all')
-    filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster.join(',') : 'all')
-    filterContext.setRegionFilter(newFilters.region && newFilters.region.length > 0 ? newFilters.region.join(',') : 'all')
-    filterContext.setYearFilter(newFilters.year && newFilters.year.length > 0 ? newFilters.year.join(',') : 'all')
-    // ran_score filter removed - no longer used
-    // loadData akan dipanggil otomatis oleh useEffect ketika currentFilter berubah
+    filterContext.setVendorFilter(newFilters.vendor_name?.length ? newFilters.vendor_name.join(',') : 'all')
+    filterContext.setProgramFilter(newFilters.program_report?.length ? newFilters.program_report.join(',') : 'all')
+    filterContext.setCityFilter(newFilters.imp_ttp?.length ? newFilters.imp_ttp.join(',') : 'all')
+    filterContext.setNanoClusterFilter(newFilters.nano_cluster?.length ? newFilters.nano_cluster.join(',') : 'all')
+    filterContext.setRegionFilter(newFilters.region?.length ? newFilters.region.join(',') : 'all')
+    filterContext.setYearFilter(newFilters.year?.length ? newFilters.year.join(',') : 'all')
+    filterContext.setCircleFilter(newFilters.circle?.length ? newFilters.circle.join(',') : 'all')
+    filterContext.setSiteCategoryFilter(newFilters.site_category?.length ? newFilters.site_category.join(',') : 'all')
   }
 
-  // Handler untuk reset filter
   const handleFilterReset = () => {
-    console.log("Filters reset")
-    // Set filter loading state untuk memberikan feedback visual
-    setIsFilterLoading(true)
     filterContext.resetFilters()
-    // loadData akan dipanggil otomatis oleh useEffect ketika currentFilter berubah
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#070F2B] via-[#050B1B] to-[#050B1B] text-white relative">
-      {/* Loading Overlay dengan Blur Effect - hanya muncul saat filter loading (setelah initial load) */}
-      {isFilterLoading && hasInitialLoad && (
-        <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-[#050B1B]/90 backdrop-blur-md transition-all duration-300 ease-in-out"
-          aria-live="polite"
-          aria-busy="true"
-          role="status"
-          style={{ pointerEvents: 'auto' }}
-        >
-          <div className="flex flex-col items-center gap-4">
-            <div className="relative flex h-16 w-16 items-center justify-center">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full border border-emerald-400/30" />
-              <span className="absolute inline-flex h-[60px] w-[60px] rounded-full border border-white/10" />
-              <span className="h-12 w-12 animate-spin rounded-full border-2 border-transparent border-l-emerald-300 border-t-cyan-300" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-white">Loading map data...</p>
-              <p className="mt-1 text-xs text-white/60">Applying filters</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <header className={`border-b border-white/10 bg-[#0B1533]/70 backdrop-blur transition-opacity duration-300 ${isFilterLoading ? 'opacity-40' : ''}`}>
+      <header className="border-b border-white/10 bg-[#0B1533]/70 backdrop-blur transition-opacity duration-300">
         <div className="mx-auto flex max-w-[1440px] flex-col gap-3 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -358,7 +357,7 @@ export default function Hermes5GMapPage() {
             <div>{formatTimestamp(lastUpdated)}</div>
             <button
               type="button"
-              onClick={() => void loadData()}
+              onClick={() => void refetch()}
               className="flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-white/80 transition hover:bg-white/10"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -368,7 +367,7 @@ export default function Hermes5GMapPage() {
         </div>
       </header>
 
-      <main className={`mx-auto flex h-[calc(100vh-120px)] max-w-[1440px] flex-col gap-5 px-6 py-5 lg:h-[calc(100vh-140px)] transition-opacity duration-300 ${isFilterLoading ? 'opacity-30' : ''}`} style={{ pointerEvents: isFilterLoading ? 'none' : 'auto' }}>
+      <main className="mx-auto flex h-[calc(100vh-120px)] max-w-[1440px] flex-col gap-5 px-6 py-5 lg:h-[calc(100vh-140px)] transition-opacity duration-300">
         {/* Filter Bar */}
         <div className="rounded-2xl border border-white/10 bg-[#0B1533]/60 p-4">
           <FilterBar
@@ -386,32 +385,30 @@ export default function Hermes5GMapPage() {
           <aside className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#0B1533]/60 p-5">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-[0.28em] text-white/70">Status Summary</h2>
-              <p className="mt-1 text-2xl font-bold text-white">{totalSitesForSummary.toLocaleString('en-US')} Sites</p>
-              {invalidCoordinates > 0 && (
-                <div className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <svg className="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
-                    </svg>
-                    <span className="text-xs font-medium text-amber-200">
-                      {invalidCoordinates} sites with invalid coordinates
-                    </span>
-                  </div>
+              {loading || !hasInitialLoad ? (
+                <div className="mt-2 flex items-center gap-2 text-xs text-white/60">
+                  <span className="inline-flex h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-transparent" />
+                  <span>Loading summary...</span>
                 </div>
+              ) : (
+                <>
+                  <p className="mt-1 text-2xl font-bold text-white">
+                    {totalSitesForSummary.toLocaleString('en-US')} Sites
+                  </p>
+                  {invalidCoordinates > 0 && (
+                    <div className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <svg className="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                        <span className="text-xs font-medium text-amber-200">
+                          {invalidCoordinates} sites with invalid coordinates
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
-              <label
-                htmlFor="toggle-excluded-markers"
-                className="mt-3 flex cursor-pointer items-center gap-2 text-xs font-medium text-white/70"
-              >
-                <input
-                  id="toggle-excluded-markers"
-                  type="checkbox"
-                  checked={showExcluded}
-                  onChange={(event) => setShowExcluded(event.target.checked)}
-                  className="h-4 w-4 rounded border-white/30 bg-transparent text-white focus:ring-0"
-                />
-                <span>Show Hermes H1 markers</span>
-              </label>
             </div>
 
             <div className="space-y-3 text-sm">
@@ -457,13 +454,10 @@ export default function Hermes5GMapPage() {
                 <li><span className="font-semibold text-white">RFI</span> - CAF acceptance received.</li>
                 <li><span className="font-semibold text-white">SOW</span> - Total registered scope of work.</li>
               </ul>
-              <p className="mt-3 text-white/60">
-                Grey markers highlight <span className="font-semibold text-white">Hermes H1 Project 5G : 1202 sites</span>. Use the toggle above to include or hide them on the map.
-              </p>
               {invalidCoordinates > 0 && (
                 <div className="mt-3 pt-3 border-t border-white/10">
                   <p className="text-amber-300 font-medium">
-                    âš ï¸ {invalidCoordinates} sites excluded from map due to invalid coordinates
+                    {invalidCoordinates} sites are excluded from the map because of invalid coordinates.
                   </p>
                 </div>
               )}

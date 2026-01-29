@@ -92,6 +92,14 @@ export function FilterProvider({ children }: FilterProviderProps) {
     setFiltersState(prev => ({ ...prev, regionFilter: region }))
   }, [])
 
+  const setCircleFilter = useCallback((circle: string) => {
+    setFiltersState(prev => ({ ...prev, circleFilter: circle }))
+  }, [])
+
+  const setSiteCategoryFilter = useCallback((siteCategory: string) => {
+    setFiltersState(prev => ({ ...prev, siteCategoryFilter: siteCategory }))
+  }, [])
+
   const setYearFilter = useCallback((year: string) => {
     setFiltersState(prev => ({ ...prev, yearFilter: year }))
   }, [])
@@ -125,6 +133,8 @@ export function FilterProvider({ children }: FilterProviderProps) {
     setSearchTerm,
     setStatusFilter,
     setRegionFilter,
+    setCircleFilter,
+    setSiteCategoryFilter,
     setStatusFilters,
     resetFilters,
     setFilters

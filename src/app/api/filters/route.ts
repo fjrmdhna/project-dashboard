@@ -1,5 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFilterOptions } from '@/lib/hermes-5g-utils';
+import { getCache, setCache } from '@/lib/redis';
+
+type CachedHermesFilterOptions = {
+  data: {
+    vendors: string[];
+    programs: string[];
+    cities: string[];
+    nanoClusters: string[];
+    regions: string[];
+    circles: string[];
+    years: string[];
+    ranScores: string[];
+    siteCategories: string[];
+  };
+  timestamp: string;
+};
+
+const FILTER_OPTIONS_CACHE_KEY = 'hermes:filter-options:v1';
+const FILTER_OPTIONS_CACHE_TTL_SECONDS = 300;
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,9 +28,23 @@ export async function GET(request: NextRequest) {
     
     if (forceRefresh) {
       console.log('[Hermes Filters API] Force refresh requested, fetching fresh data...');
+    } else {
+      const cached = await getCache<CachedHermesFilterOptions>(FILTER_OPTIONS_CACHE_KEY);
+      if (cached?.data) {
+        return NextResponse.json({
+          status: 'success',
+          data: cached.data,
+          timestamp: cached.timestamp,
+          cached: true,
+        }, {
+          headers: {
+            'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
+          }
+        });
+      }
     }
     
-    const filterOptions = await getFilterOptions();
+    const filterOptions = await getFilterOptions({ forceRefresh });
     
     if (filterOptions.status === 'error') {
       return NextResponse.json(
@@ -20,8 +53,7 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    return NextResponse.json({
-      status: 'success',
+    const responsePayload: CachedHermesFilterOptions = {
       data: {
         vendors: filterOptions.data.vendors,
         programs: filterOptions.data.programs,
@@ -31,8 +63,18 @@ export async function GET(request: NextRequest) {
         circles: filterOptions.data.circles, // New: circles from region_circle
         years: filterOptions.data.years,
         ranScores: filterOptions.data.ranScores,
+        siteCategories: filterOptions.data.siteCategories ?? [],
       },
       timestamp: new Date().toISOString(),
+    };
+
+    // Cache success response (non-blocking)
+    setCache(FILTER_OPTIONS_CACHE_KEY, responsePayload, FILTER_OPTIONS_CACHE_TTL_SECONDS).catch(() => {});
+
+    return NextResponse.json({
+      status: 'success',
+      data: responsePayload.data,
+      timestamp: responsePayload.timestamp,
       cached: !forceRefresh,
     }, {
       headers: {

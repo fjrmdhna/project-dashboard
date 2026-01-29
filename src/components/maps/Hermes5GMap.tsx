@@ -19,6 +19,10 @@ export interface HermesMapPoint {
   issueCategory?: string | null
   nanoCluster?: string | null
   isExcluded?: boolean
+  region?: string | null
+  region_circle?: string | null
+  year?: string | null
+  site_category?: string | null
 }
 
 export interface Hermes5GMapProps {

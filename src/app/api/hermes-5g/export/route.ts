@@ -15,6 +15,7 @@ function buildFilterQuery(searchParams: URLSearchParams) {
   const impTtps = searchParams.getAll('imp_ttp')
   const nanoClusters = searchParams.getAll('nano_cluster')
   const regionCircles = searchParams.getAll('region_circle') // Circle filter from region_circle
+  const siteCategories = searchParams.getAll('site_category')
   const years = searchParams.getAll('year')
   const search = searchParams.get('q')
 
@@ -59,6 +60,23 @@ function buildFilterQuery(searchParams: URLSearchParams) {
     query = query.in('year', years)
   }
 
+  // Site category filter - normalized matching (New Site / Expansion)
+  if (siteCategories.length > 0) {
+    const siteCategoryConditions = siteCategories
+      .map(sc => {
+        const lower = sc.trim().toLowerCase()
+        if (lower === 'new site') {
+          return 'site_category.ilike.%new%'
+        }
+        if (lower === 'expansion') {
+          return 'site_category.ilike.%existing%,site_category.ilike.%upgrade%'
+        }
+        return `site_category.ilike.%${sc.trim()}%`
+      })
+      .join(',')
+    query = query.or(siteCategoryConditions)
+  }
+
   if (search && search.trim().length > 0) {
     const like = `%${search.trim()}%`
     query = query.or(
@@ -98,15 +116,9 @@ function formatDateValue(value: unknown): unknown {
   return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`
 }
 
-function applyMilestoneFilter(query: SupabaseQuery, type: string) {
-  if (type === 'activation') {
-    return query.or('site_status.ilike.%activation%,rfs_af.not.is.null,5g_activation_date.not.is.null')
-  }
-
-  if (type === 'on-air') {
-    return query.or('site_status.ilike.%on air%,imp_integ_af.not.is.null,5g_readiness_date.not.is.null')
-  }
-
+// Export returns ALL rows matching filters (same as Matrix total).
+// Do not restrict by milestone so export count matches dashboard "TOTAL SITES".
+function applyMilestoneFilter(query: SupabaseQuery, _type: string) {
   return query
 }
 
@@ -143,6 +155,7 @@ export async function GET(request: NextRequest) {
     }
 
     let query = buildFilterQuery(searchParams)
+    // No milestone filter: export all filtered rows so count matches Matrix "TOTAL SITES"
     query = applyMilestoneFilter(query, type)
     query = query.range(0, EXPORT_ROW_LIMIT - 1)
 

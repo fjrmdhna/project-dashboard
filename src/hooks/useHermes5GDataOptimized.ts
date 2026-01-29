@@ -14,6 +14,7 @@ export interface Hermes5GSiteData extends MatrixRow {
   imp_ttp?: string | null
   nano_cluster?: string | null
   ran_score?: string | null
+  site_category?: string | null
   mocn_activation_forecast?: string | null  // Baseline for ProgressCurve
   rfs_bf?: string | null                    // Legacy baseline
   rfs_ff?: string | null
@@ -94,6 +95,7 @@ export interface UseHermes5GDataOptions {
   years?: string[]
   regions?: string[] // Deprecated: kept for backward compatibility, use circles instead
   circles?: string[] // New: circles from region_circle
+  siteCategories?: string[] // Site category filter (New Site / Expansion)
   search?: string
   autoFetch?: boolean
 }
@@ -114,6 +116,15 @@ const EMPTY_STATS: Hermes5GDataStats = {
   nanoClusters: 0
 }
 
+// Normalize site_category for filter matching (consistent with AOP: New Site / Expansion)
+function normalizeSiteCategoryForFilter(value: string | null | undefined): string {
+  if (!value) return ''
+  const lowerValue = value.toLowerCase().trim()
+  if (lowerValue.includes('new')) return 'new site'
+  if (lowerValue.includes('existing') || lowerValue.includes('upgrade')) return 'expansion'
+  return lowerValue
+}
+
 // Client-side filter function - much faster than API call
 function filterDataClientSide(
   data: Hermes5GSiteData[],
@@ -125,6 +136,7 @@ function filterDataClientSide(
   years: string[],
   regions: string[], // Deprecated: kept for backward compatibility
   circles: string[], // New: circles from region_circle
+  siteCategories: string[],
   search: string
 ): Hermes5GSiteData[] {
   if (!data || data.length === 0) return []
@@ -132,11 +144,32 @@ function filterDataClientSide(
   // If no filters, return all data
   const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
                      impTtps.length > 0 || nanoClusters.length > 0 || 
-                     ranScores.length > 0 || years.length > 0 || regions.length > 0 || circles.length > 0 || search.length > 0
+                     ranScores.length > 0 || years.length > 0 || regions.length > 0 || circles.length > 0 || siteCategories.length > 0 || search.length > 0
   
   if (!hasFilters) return data
   
   const searchLower = search.toLowerCase()
+
+  // Precompute lookup structures (avoid O(k) scans per-row)
+  const vendorSet = vendorNames.length > 0 ? new Set(vendorNames) : null
+  const impTtpSet = impTtps.length > 0 ? new Set(impTtps) : null
+  const nanoClusterSet = nanoClusters.length > 0 ? new Set(nanoClusters) : null
+  const yearSet = years.length > 0 ? new Set(years) : null
+  const ranScoreLowerSet =
+    ranScores.length > 0 ? new Set(ranScores.map(rs => rs.toLowerCase().trim())) : null
+
+  const normalizeCircle = (value: string): string => {
+    if (!value) return ''
+    return value.trim().toLowerCase().replace(/\b\w/g, char => char.toUpperCase())
+  }
+
+  const normalizedFilterCircles =
+    circles.length > 0 ? circles.map(c => normalizeCircle(c)) : []
+
+  const normalizedFilterSiteCategories =
+    siteCategories.length > 0 ? siteCategories.map(sc => normalizeSiteCategoryForFilter(sc)) : []
+  const siteCategorySet =
+    normalizedFilterSiteCategories.length > 0 ? new Set(normalizedFilterSiteCategories) : null
   
   // Expand display names to actual program_report values
   // Get all unique program_report values from data
@@ -157,6 +190,8 @@ function filterDataClientSide(
   }
   
   const expandedProgramReportsArray = Array.from(expandedProgramReports)
+  const expandedProgramReportsSet =
+    expandedProgramReportsArray.length > 0 ? new Set(expandedProgramReportsArray) : null
   
   let filteredCount = 0
   let rejectedByVendor = 0
@@ -167,47 +202,47 @@ function filterDataClientSide(
   let rejectedByYear = 0
   let rejectedByRegion = 0
   let rejectedBySearch = 0
+  let rejectedBySiteCategory = 0
   
   const result = data.filter(row => {
     
     // Vendor filter
-    if (vendorNames.length > 0 && !vendorNames.includes(row.vendor_name || '')) {
+    if (vendorSet && !vendorSet.has(row.vendor_name || '')) {
       rejectedByVendor++
       return false
     }
     
     // Program filter - use expanded program reports
-    if (expandedProgramReportsArray.length > 0 && !expandedProgramReportsArray.includes(row.program_report || '')) {
+    if (expandedProgramReportsSet && !expandedProgramReportsSet.has(row.program_report || '')) {
       rejectedByProgram++
       return false
     }
     
     // City filter (imp_ttp)
-    if (impTtps.length > 0 && !impTtps.includes(row.imp_ttp || '')) {
+    if (impTtpSet && !impTtpSet.has(row.imp_ttp || '')) {
       rejectedByCity++
       return false
     }
     
     // Nano cluster filter
-    if (nanoClusters.length > 0 && !nanoClusters.includes(row.nano_cluster || '')) {
+    if (nanoClusterSet && !nanoClusterSet.has(row.nano_cluster || '')) {
       rejectedByCluster++
       return false
     }
     
     // RAN Score filter (case-insensitive)
-    if (ranScores.length > 0) {
+    if (ranScoreLowerSet) {
       const rowRanScore = (row.ran_score || '').toLowerCase().trim()
-      const matchesRanScore = ranScores.some(rs => rowRanScore === rs.toLowerCase())
-      if (!matchesRanScore) {
+      if (!ranScoreLowerSet.has(rowRanScore)) {
         rejectedByRanScore++
         return false
       }
     }
     
     // Year filter
-    if (years.length > 0) {
+    if (yearSet) {
       const rowYear = row.year || ''
-      if (!rowYear || !years.includes(rowYear)) {
+      if (!rowYear || !yearSet.has(rowYear)) {
         rejectedByYear++
         return false
       }
@@ -215,14 +250,8 @@ function filterDataClientSide(
     
     // Circle filter (from region_circle) - takes priority over deprecated region filter
     // Normalize both filter values and row values to Title Case for consistent matching
-    if (circles.length > 0) {
-      const normalizeCircle = (value: string): string => {
-        if (!value) return ''
-        return value.trim().toLowerCase().replace(/\b\w/g, char => char.toUpperCase())
-      }
-      
+    if (normalizedFilterCircles.length > 0) {
       const normalizedRowCircle = normalizeCircle(row.region_circle || '')
-      const normalizedFilterCircles = circles.map(c => normalizeCircle(c))
       const matchesCircle = normalizedFilterCircles.some(c => normalizedRowCircle === c || normalizedRowCircle.includes(c))
       
       if (!matchesCircle) {
@@ -233,6 +262,15 @@ function filterDataClientSide(
       // Deprecated: fallback to region filter for backward compatibility
       rejectedByRegion++
       return false
+    }
+    
+    // Site category filter (normalized: New Site / Expansion)
+    if (siteCategorySet) {
+      const normalizedRowCategory = normalizeSiteCategoryForFilter(row.site_category)
+      if (!siteCategorySet.has(normalizedRowCategory)) {
+        rejectedBySiteCategory++
+        return false
+      }
     }
     
     // Search filter
@@ -414,6 +452,190 @@ function aggregateDataSinglePass(data: Hermes5GSiteData[]): Hermes5GAggregatedDa
   }
 }
 
+type Hermes5GAggregationResult = {
+  aggregated: Hermes5GAggregatedData
+  stats: Hermes5GDataStats
+}
+
+// Aggregate + compute stats in a single pass (aligns with AOP best practice)
+function aggregateDataSinglePassWithStats(data: Hermes5GSiteData[]): Hermes5GAggregationResult {
+  const byCity = new Map<string, { total: number; ready: number; activated: number }>()
+  const byNanoCluster = new Map<string, { total: number; ready: number; activated: number }>()
+  const byVendor = new Map<string, { total: number; ready: number; activated: number; forecast: number }>()
+  const byMonth = new Map<string, { baseline: number; forecast: number; actual: number }>()
+
+  let totalBaseline = 0, totalForecast = 0, totalActual = 0
+
+  // Stats (merged from calculateStatsFromFilteredData to avoid extra pass)
+  const uniqueClusters = new Set<string>()
+  let caf = 0, mos = 0, install = 0, readiness = 0, activated = 0
+  let rfc = 0, hotnews = 0, endorse = 0, pac = 0, patp = 0
+
+  // Daily runrate maps (last 7 days)
+  const today = new Date()
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const date = subDays(today, 6 - i)
+    return {
+      dateKey: format(date, 'yyyy-MM-dd'),
+      formatted: format(date, 'dd-MMM-yy')
+    }
+  })
+  const dateSet = new Set(last7Days.map(d => d.dateKey))
+  const forecastByDate = new Map<string, number>()
+  const actualByDate = new Map<string, number>()
+
+  // Issue category count
+  const issueCount = new Map<string, number>()
+  let totalIssueCount = 0
+
+  // Single pass through all data
+  for (const row of data) {
+    // === Stats ===
+    if (row.caf_approved) caf++
+    if (row.mos_af) mos++
+    if (row.ic_000040_af) install++
+    if (row.imp_integ_af) readiness++
+    if (row.rfs_af) activated++
+    if (row.rfc_approved) rfc++
+    if (row.hotnews_af) hotnews++
+    if (row.endorse_af) endorse++
+    if (row.pac_accepted_af) pac++
+    if (row.patp_accepted_af) patp++
+    if (row.nano_cluster) uniqueClusters.add(row.nano_cluster)
+
+    // === City aggregation (for FiveGReadinessCard & FiveGActivatedCard) ===
+    const city = (row.imp_ttp || 'Unknown').trim()
+    const cityData = byCity.get(city) || { total: 0, ready: 0, activated: 0 }
+    cityData.total++
+    if (row.imp_integ_af) cityData.ready++
+    if (row.rfs_af) cityData.activated++
+    byCity.set(city, cityData)
+
+    // === Nano Cluster aggregation ===
+    const cluster = (row.nano_cluster || 'Unknown').trim()
+    const clusterData = byNanoCluster.get(cluster) || { total: 0, ready: 0, activated: 0 }
+    clusterData.total++
+    if (row.imp_integ_af) clusterData.ready++
+    if (row.rfs_af) clusterData.activated++
+    byNanoCluster.set(cluster, clusterData)
+
+    // === Vendor aggregation (for VendorLeaderboardCard) ===
+    const vendor = row.vendor_name || 'Unknown'
+    const vendorData = byVendor.get(vendor) || { total: 0, ready: 0, activated: 0, forecast: 0 }
+    vendorData.total++
+    if (row.imp_integ_af) vendorData.ready++
+    if (row.rfs_af) vendorData.activated++
+    if (row.rfs_ff) vendorData.forecast++
+    byVendor.set(vendor, vendorData)
+
+    // === Progress curve aggregation ===
+    if (row.rfs_bf || row.mocn_activation_forecast) {
+      totalBaseline++
+      const baselineDate = row.mocn_activation_forecast || row.rfs_bf
+      if (baselineDate) {
+        const month = baselineDate.substring(0, 7) // YYYY-MM
+        const monthData = byMonth.get(month) || { baseline: 0, forecast: 0, actual: 0 }
+        monthData.baseline++
+        byMonth.set(month, monthData)
+      }
+    }
+
+    if (row.rfs_ff) {
+      totalForecast++
+      const month = row.rfs_ff.substring(0, 7)
+      const monthData = byMonth.get(month) || { baseline: 0, forecast: 0, actual: 0 }
+      monthData.forecast++
+      byMonth.set(month, monthData)
+
+      // Daily runrate - forecast
+      try {
+        const dateKey = row.rfs_ff.substring(0, 10) // YYYY-MM-DD
+        if (dateSet.has(dateKey)) {
+          forecastByDate.set(dateKey, (forecastByDate.get(dateKey) || 0) + 1)
+        }
+      } catch { /* skip invalid dates */ }
+    }
+
+    if (row.rfs_af) {
+      totalActual++
+      const month = row.rfs_af.substring(0, 7)
+      const monthData = byMonth.get(month) || { baseline: 0, forecast: 0, actual: 0 }
+      monthData.actual++
+      byMonth.set(month, monthData)
+
+      // Daily runrate - actual
+      try {
+        const dateKey = row.rfs_af.substring(0, 10) // YYYY-MM-DD
+        if (dateSet.has(dateKey)) {
+          actualByDate.set(dateKey, (actualByDate.get(dateKey) || 0) + 1)
+        }
+      } catch { /* skip invalid dates */ }
+    }
+
+    // === Issue category aggregation ===
+    if (row.issue_category) {
+      const category = row.issue_category.trim()
+      const categoryLower = category.toLowerCase()
+      // Skip excluded categories
+      if (category && !EXCLUDED_ISSUES.some(ex => categoryLower.includes(ex))) {
+        issueCount.set(category, (issueCount.get(category) || 0) + 1)
+        totalIssueCount++
+      }
+    }
+  }
+
+  const dailyRunrate: DailyRunrateItem[] = last7Days.map(({ dateKey, formatted }) => ({
+    date: formatted,
+    forecast: forecastByDate.get(dateKey) || 0,
+    actual: actualByDate.get(dateKey) || 0
+  }))
+
+  const sortedIssues = Array.from(issueCount.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([category, count], index) => ({
+      category,
+      count,
+      color: ISSUE_COLORS[index % ISSUE_COLORS.length]
+    }))
+
+  const top5Count = sortedIssues.reduce((sum, item) => sum + item.count, 0)
+
+  return {
+    aggregated: {
+      byCity,
+      byNanoCluster,
+      byVendor,
+      progressCurve: {
+        totalBaseline,
+        totalForecast,
+        totalActual,
+        byMonth
+      },
+      dailyRunrate,
+      topIssues: {
+        issues: sortedIssues,
+        top5Count,
+        totalCount: totalIssueCount
+      }
+    },
+    stats: {
+      totalSites: data.length,
+      caf,
+      mos,
+      install,
+      readiness,
+      activated,
+      rfc,
+      hotnews,
+      endorse,
+      pac,
+      patp,
+      nanoClusters: uniqueClusters.size
+    }
+  }
+}
+
 // Calculate stats from filtered data - runs on client side
 function calculateStatsFromFilteredData(data: Hermes5GSiteData[]): Hermes5GDataStats {
   if (!data || data.length === 0) return EMPTY_STATS
@@ -454,36 +676,31 @@ function calculateStatsFromFilteredData(data: Hermes5GSiteData[]): Hermes5GDataS
 }
 
 export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): UseHermes5GDataReturn {
-  const { vendorNames = [], programReports = [], impTtps = [], nanoClusters = [], ranScores = [], years = [], regions = [], circles = [], search = '' } = options
+  const { vendorNames = [], programReports = [], impTtps = [], nanoClusters = [], ranScores = [], years = [], regions = [], circles = [], siteCategories = [], search = '' } = options
 
   // OPTIMIZATION: Always fetch ALL data (no filter) and filter client-side
   // This makes filter changes instant instead of waiting 15-20s for API
-  const cacheKey = 'hermes-site-data-all' // Fixed key - always fetch all data
+  // v2: cache key bump so client fetches fresh data including region_circle + site_category
+  const cacheKey = 'hermes-site-data-all-v2' // Fixed key - always fetch all data
   
   // Track if this is initial load vs filter change
   const hasLoadedOnceRef = useRef(false)
 
   // Fetch ALL data (no filters) - only once
   const fetchFn = useCallback(async () => {
-    // Always fetch without filters - we'll filter client-side
     const url = `/api/hermes-5g/site-data?mode=minimal`
-    console.log('[useHermes5GDataOptimized] Fetching ALL Hermes data (no filters)...')
-    
     const response = await fetchWithRetry(url, {}, 3)
     const result = await response.json()
 
     if (result.status === 'success') {
-      console.log('[useHermes5GDataOptimized] Fetched ALL data:', result.count, 'records')
       hasLoadedOnceRef.current = true
-      const returnData = {
+      return {
         data: result.data || [],
         stats: result.stats || EMPTY_STATS
       }
-      return returnData
-    } else {
-      throw new Error(result.message || 'Failed to fetch Hermes data')
     }
-  }, []) // No dependencies - always fetch all data
+    throw new Error(result.message || 'Failed to fetch Hermes data')
+  }, [])
 
   // Use useApiCache untuk base data (tanpa filter)
   const { data: baseData, loading: baseLoading, error, refetch: cacheRefetch } = useApiCache<{ data: Hermes5GSiteData[], stats: Hermes5GDataStats }>(
@@ -509,30 +726,24 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
     }
     
-    const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
-                       impTtps.length > 0 || nanoClusters.length > 0 || 
-                       ranScores.length > 0 || years.length > 0 || regions.length > 0 || circles.length > 0 || search.length > 0
-    
-    // If no filters, use base data and calculate aggregation
-    const dataToUse = hasFilters 
-      ? filterDataClientSide(baseData.data, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, search)
+    const hasFilters = vendorNames.length > 0 || programReports.length > 0 ||
+                       impTtps.length > 0 || nanoClusters.length > 0 ||
+                       ranScores.length > 0 || years.length > 0 || regions.length > 0 || circles.length > 0 || siteCategories.length > 0 || search.length > 0
+
+    const dataToUse = hasFilters
+      ? filterDataClientSide(baseData.data, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search)
       : baseData.data
-    
-    // Calculate stats (single pass)
-    const stats = hasFilters 
-      ? calculateStatsFromFilteredData(dataToUse) 
-      : baseData.stats
-    
-    // Pre-aggregate data for all chart components (single pass)
-    // This prevents each component from iterating 40k+ rows
-    const agg = aggregateDataSinglePass(dataToUse)
-    
-      return { 
-        filteredData: dataToUse, 
-        filteredStats: stats,
-        aggregated: agg
-      }
-  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, search])
+
+    const aggregationResult = aggregateDataSinglePassWithStats(dataToUse)
+    const stats = hasFilters ? aggregationResult.stats : baseData.stats
+    const agg = aggregationResult.aggregated
+
+    return {
+      filteredData: dataToUse,
+      filteredStats: stats,
+      aggregated: agg
+    }
+  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search])
 
   // Refetch function
   const refetch = useCallback(async () => {

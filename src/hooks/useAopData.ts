@@ -68,11 +68,6 @@ function normalizePriorityCongestUrgentForFilter(value: string | null | undefine
 // Helper function to normalize ran_score for filtering
 // Must match the normalization in supabase.ts
 function normalizeRanScoreForFilter(value: string | null | undefined): string {
-  // #region agent log
-  if (value === '-' || value === null || value === undefined || value === '') {
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useAopData.ts:71',message:'normalizeRanScoreForFilter input for "-"',data:{input:value,type:typeof value,isNull:value === null,isUndefined:value === undefined,isEmpty:value === ''},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-  }
-  // #endregion
   if (!value) return ''
   
   // Normalize multiple spaces to single space before checking
@@ -286,11 +281,6 @@ function filterDataClientSide(
     // Row values need to be normalized before comparison
     if (ranScores.length > 0) {
       const normalizedRowRanScore = normalizeRanScoreForFilter(row.ran_score)
-      // #region agent log
-      if (ranScores.includes('-') || ranScores.some(rs => rs.trim() === '-')) {
-        fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useAopData.ts:283',message:'ran_score filter "-" matching',data:{rowRanScore:row.ran_score,normalizedRowRanScore,ranScores,matchesRanScore:ranScores.some(rs => normalizedRowRanScore === normalizeRanScoreForFilter(rs))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      }
-      // #endregion
       const matchesRanScore = ranScores.some(rs => normalizedRowRanScore === normalizeRanScoreForFilter(rs))
       if (!matchesRanScore) return false
     }
@@ -483,24 +473,19 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
 
   // Fetch ALL data (no filters) - only once
   const fetchFn = useCallback(async () => {
-    // Always fetch without filters - we'll filter client-side
     const url = `/api/aop/site-data`
-    console.log('[useAopData] Fetching ALL AOP data (no filters)...')
-    
     const response = await fetchWithRetry(url, {}, 3)
     const result = await response.json()
 
     if (result.status === 'success') {
-      console.log('[useAopData] Fetched ALL data:', result.count, 'records')
       hasLoadedOnceRef.current = true
       return {
         data: result.data || [],
         stats: result.stats || EMPTY_STATS
       }
-    } else {
-      throw new Error(result.message || 'Failed to fetch AOP data')
     }
-  }, []) // No dependencies - always fetch all data
+    throw new Error(result.message || 'Failed to fetch AOP data')
+  }, [])
 
   // Use useApiCache untuk base data (tanpa filter)
   const { data: baseData, loading: baseLoading, error, refetch: cacheRefetch } = useApiCache<{ data: AopSiteData[], stats: AopDataStats }>(
@@ -522,11 +507,6 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
 
   // CLIENT-SIDE FILTERING + AGGREGATION - All done in single pass!
   const { filteredData, filteredStats, aggregated } = useMemo(() => {
-    // #region agent log
-    if (ranScores.includes('-') || ranScores.some(rs => rs.trim() === '-')) {
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useAopData.ts:524',message:'useMemo filterDataClientSide entry with "-" filter',data:{baseDataCount:baseData?.data?.length || 0,ranScores,allFilters:{vendorNames,programReports,circles,siteCategories,ranScores,years,priorityCongestUrgent,search}},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    }
-    // #endregion
     if (!baseData?.data || baseData.data.length === 0) {
       return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
     }
@@ -536,31 +516,18 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
                        ranScores.length > 0 || years.length > 0 || 
                        priorityCongestUrgent.length > 0 || search.length > 0
     
-    // If no filters, use base data and calculate aggregation
-    const dataToUse = hasFilters 
+    const dataToUse = hasFilters
       ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, ranScores, years, priorityCongestUrgent, search)
       : baseData.data
-    // #region agent log
-    if (ranScores.includes('-') || ranScores.some(rs => rs.trim() === '-')) {
-      const dashFilteredCount = dataToUse.filter((row: AopSiteData) => {
-        const normalized = normalizeRanScoreForFilter(row.ran_score)
-        return normalized === normalizeRanScoreForFilter('-')
-      }).length
-      const nullEmptyCount = dataToUse.filter((row: AopSiteData) => !row.ran_score || row.ran_score === '' || row.ran_score === '-').length
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useAopData.ts:537',message:'filterDataClientSide result for "-" filter',data:{totalFiltered:dataToUse.length,dashFilteredCount,nullEmptyCount,baseDataCount:baseData.data.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    }
-    // #endregion
-    
+
     // Safety check: ensure dataToUse is always an array
     if (!dataToUse || !Array.isArray(dataToUse)) {
-      console.error('[useAopData] dataToUse is not an array:', dataToUse)
       return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
     }
-    
-    // Pre-aggregate (single pass includes stats) — when hasFilters: 2 passes total (filter + aggregate)
+
     const agg = aggregateDataSinglePass(dataToUse)
     const stats = hasFilters ? agg.stats : baseData.stats
-    
+
     return { 
       filteredData: dataToUse, 
       filteredStats: stats,

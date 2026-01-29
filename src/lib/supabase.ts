@@ -130,7 +130,9 @@ export async function getSiteData5G(
     'lat',
     'long',
     'year',        // Year filter
-    'region'       // Region filter
+    'region',      // Region filter (deprecated)
+    'region_circle', // Circle filter
+    'site_category'  // Site category filter
   ].join(',')
 
   const { includeExcludedProgramReports = false, onlyExcludedProgramReports = false } = options

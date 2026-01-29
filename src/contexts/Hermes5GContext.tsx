@@ -1,8 +1,8 @@
 "use client"
 
-import React, { createContext, useContext, ReactNode } from 'react'
+import React, { createContext, useContext, useMemo, ReactNode } from 'react'
 import { useHermes5GFilters } from '@/hooks/useHermes5GFilters'
-import { useHermes5GCharts } from '@/hooks/useHermes5GCharts'
+import { useHermes5GDataOptimized } from '@/hooks/useHermes5GDataOptimized'
 import { useHermes5GSiteData } from '@/hooks/useHermes5GSiteData'
 
 // Types
@@ -149,28 +149,92 @@ interface Hermes5GProviderProps {
   children: ReactNode
 }
 
-// Provider Component
+// Map hermesAggregated to legacy ChartData shape (no legacy chart API calls)
+function aggregatedToChartData(aggregated: ReturnType<typeof useHermes5GDataOptimized>['aggregated']): ChartData {
+  if (!aggregated) {
+    return {
+      readinessChartData: [],
+      activatedChartData: [],
+      progressCurveData: [],
+      dailyRunrateData: [],
+      dataAlignmentData: null,
+      top5IssueData: [],
+      top5IssueStats: { top5Count: 0, totalCount: 0 },
+      nanoClusterData: null
+    }
+  }
+  const readinessChartData = Array.from(aggregated.byCity.entries()).map(([city, d]) => ({
+    city,
+    total: d.total,
+    ready: d.ready,
+    activated: d.activated
+  }))
+  const activatedChartData = Array.from(aggregated.byCity.entries()).map(([city, d]) => ({
+    city,
+    total: d.total,
+    ready: d.ready,
+    activated: d.activated
+  }))
+  const progressCurveData = Array.from(aggregated.progressCurve.byMonth.entries()).map(([month, d]) => ({
+    month,
+    ...d
+  }))
+  const nanoClusterData = Array.from(aggregated.byNanoCluster.entries()).map(([name, d]) => ({
+    name,
+    ...d
+  }))
+  return {
+    readinessChartData,
+    activatedChartData,
+    progressCurveData,
+    dailyRunrateData: aggregated.dailyRunrate,
+    dataAlignmentData: null,
+    top5IssueData: aggregated.topIssues.issues,
+    top5IssueStats: {
+      top5Count: aggregated.topIssues.top5Count,
+      totalCount: aggregated.topIssues.totalCount
+    },
+    nanoClusterData: nanoClusterData.length ? nanoClusterData : null
+  }
+}
+
+// Provider Component - uses hermesAggregated (no legacy chart endpoints)
 export function Hermes5GProvider({ children }: Hermes5GProviderProps) {
-  // Use all hooks
   const filterHook = useHermes5GFilters()
-  const chartHook = useHermes5GCharts(filterHook.chartFilters)
+  const chartFilters = filterHook.chartFilters
+  const options = useMemo(() => ({
+    vendorNames: chartFilters.vendorFilter && chartFilters.vendorFilter !== 'all' ? chartFilters.vendorFilter.split(',').filter(Boolean) : [],
+    programReports: chartFilters.programFilter && chartFilters.programFilter !== 'all' ? chartFilters.programFilter.split(',').filter(Boolean) : [],
+    impTtps: chartFilters.cityFilter && chartFilters.cityFilter !== 'all' ? chartFilters.cityFilter.split(',').filter(Boolean) : [],
+    search: chartFilters.searchFilter || ''
+  }), [chartFilters.vendorFilter, chartFilters.programFilter, chartFilters.cityFilter, chartFilters.searchFilter])
+  const { aggregated, loading: chartDataLoading, refetch: refetchCharts } = useHermes5GDataOptimized(options)
   const siteDataHook = useHermes5GSiteData()
 
-  // Global refresh function
-  const refreshAll = () => {
-    siteDataHook.refreshData()
-    chartHook.refreshAllCharts()
+  const chartData = useMemo(() => aggregatedToChartData(aggregated), [aggregated])
+  const chartLoading = {
+    readiness: chartDataLoading,
+    activated: chartDataLoading,
+    progressCurve: chartDataLoading,
+    dailyRunrate: chartDataLoading,
+    dataAlignment: chartDataLoading,
+    top5Issue: chartDataLoading,
+    nanoCluster: chartDataLoading
   }
 
-  // Context value
+  const refreshAllCharts = useMemo(() => () => { refetchCharts() }, [refetchCharts])
+  const refreshChart = useMemo(() => (_name: keyof ChartData) => { refetchCharts() }, [refetchCharts])
+
+  const refreshAll = () => {
+    siteDataHook.refreshData()
+    refetchCharts()
+  }
+
   const contextValue: Hermes5GContextType = {
-    // Filter State
     filters: filterHook.filters,
     filterOptions: filterHook.filterOptions,
     chartFilters: filterHook.chartFilters,
     tableFilters: filterHook.tableFilters,
-    
-    // Filter Actions
     setSearchTerm: filterHook.setSearchTerm,
     setStatusFilter: filterHook.setStatusFilter,
     setRegionFilter: filterHook.setRegionFilter,
@@ -178,14 +242,10 @@ export function Hermes5GProvider({ children }: Hermes5GProviderProps) {
     setProgramFilter: filterHook.setProgramFilter,
     setCityFilter: filterHook.setCityFilter,
     resetFilters: filterHook.resetFilters,
-    
-    // Chart Data
-    chartData: chartHook.chartData,
-    chartLoading: chartHook.loading,
-    refreshAllCharts: chartHook.refreshAllCharts,
-    refreshChart: chartHook.refreshChart,
-    
-    // Site Data
+    chartData,
+    chartLoading,
+    refreshAllCharts,
+    refreshChart,
     sites: siteDataHook.sites,
     pagination: siteDataHook.pagination,
     stats: siteDataHook.stats,
@@ -197,8 +257,6 @@ export function Hermes5GProvider({ children }: Hermes5GProviderProps) {
     handlePageChange: siteDataHook.handlePageChange,
     refreshSiteData: siteDataHook.refreshData,
     setCurrentPage: siteDataHook.setCurrentPage,
-    
-    // Global Actions
     refreshAll
   }
 

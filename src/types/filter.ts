@@ -9,6 +9,8 @@ export interface FilterState {
   searchTerm: string;
   statusFilter: string;
   regionFilter: string;
+  circleFilter: string; // Circle filter (region_circle)
+  siteCategoryFilter: string; // Site category filter (Hermes / AOP)
   statusFilters: string[]; // Array untuk multiple status selection
 }
 
@@ -23,6 +25,8 @@ export interface FilterActions {
   setSearchTerm: (search: string) => void;
   setStatusFilter: (status: string) => void;
   setRegionFilter: (region: string) => void;
+  setCircleFilter: (circle: string) => void;
+  setSiteCategoryFilter: (siteCategory: string) => void;
   setStatusFilters: (statuses: string[]) => void; // New action for multiple status selection
   resetFilters: () => void;
   setFilters: (filters: Partial<FilterState>) => void;
@@ -55,5 +59,7 @@ export const DEFAULT_FILTERS: FilterState = {
   searchTerm: '',
   statusFilter: 'all',
   regionFilter: 'all',
+  circleFilter: 'all',
+  siteCategoryFilter: 'all',
   statusFilters: [] // Empty array untuk no status filters
 };
