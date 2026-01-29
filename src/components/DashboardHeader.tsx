@@ -45,7 +45,7 @@ export function DashboardHeader() {
           {/* Title */}
           <div className="text-center flex-1">
             <h1 className="text-xl font-bold tracking-wide">
-              DASHBOARD HERMES H2 2025
+              Dashboard Hermes
             </h1>
             <div className="text-blue-200 text-[10px]">
               Real-time 5G Network Performance Monitor

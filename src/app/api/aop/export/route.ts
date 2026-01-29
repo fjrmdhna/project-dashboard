@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { SITE_DATA_AOP_SELECT_COLUMNS, SITE_DATA_AOP_HEADERS } from '@/lib/site-data-aop-columns'
-import { normalizeRanScoreValue } from '@/lib/supabase'
+import { normalizeRanScoreValue, normalizePriorityCongestUrgentValue } from '@/lib/supabase'
 
 const EXPORT_ROW_LIMIT = 50000
 
@@ -59,18 +59,50 @@ function buildFilterQuery(searchParams: URLSearchParams) {
 
   if (ranScores.length > 0) {
     // Normalize ran_score values and build query conditions
-    // Handle "Co - Expansion" normalization: match all variations containing "co - expansion"
+    // Handle "Co Expansion", "Co New Site", "New Site 2026", "New Site 2025", "Expansion 2026", and "Expansion 2025" normalization
     const ranScoreConditions = ranScores
       .map(rs => {
         const normalized = normalizeRanScoreValue(rs.trim())
         const lowerNormalized = normalized.toLowerCase()
         
-        // If normalized to "Co - Expansion", match all variations
-        // Pattern: match "co", optional spaces/dashes, "expansion" (case-insensitive)
-        if (lowerNormalized === 'co - expansion') {
-          // Match variations like: "CO - Expansion", "Co - Expansion", "co-expansion", etc.
-          // Use pattern that matches "co" followed by optional spaces/dashes and "expansion"
+        // If normalized to "Co New Site", match all variations containing "co" and "new site"
+        if (lowerNormalized === 'co new site') {
+          // Match variations like: "CO New Site", "Co New Site", "co-new-site", etc.
+          return `ran_score.ilike.%co%new%site%`
+        }
+        
+        // If normalized to "Co Expansion", match all variations containing "co" and "expansion" (with or without dash)
+        if (lowerNormalized === 'co expansion') {
+          // Match variations like: "CO Expansion", "Co Expansion", "Co - Expansion", "co-expansion", etc.
           return `ran_score.ilike.%co%expansion%`
+        }
+        
+        // If normalized to "New Site 2026", match all variations containing "new site" and "2026" (without "co")
+        if (lowerNormalized === 'new site 2026') {
+          // Match variations like: "New Site 2026", "new site 2026", "New Site 2026 Aop", etc.
+          // But exclude those with "co" (those should match "Co New Site" instead)
+          return `ran_score.ilike.%new%site%2026%`
+        }
+        
+        // If normalized to "New Site 2025", match all variations containing "new site" and "2025" (without "co")
+        if (lowerNormalized === 'new site 2025') {
+          // Match variations like: "New Site 2025", "new site 2025", "New Site 2025 Aop", etc.
+          // But exclude those with "co" (those should match "Co New Site" instead)
+          return `ran_score.ilike.%new%site%2025%`
+        }
+        
+        // If normalized to "Expansion 2026", match all variations containing "expansion" and "2026" (without "co")
+        if (lowerNormalized === 'expansion 2026') {
+          // Match variations like: "Expansion 2026", "expansion 2026", etc.
+          // But exclude those with "co" (those should match "Co Expansion" instead)
+          return `ran_score.ilike.%expansion%2026%`
+        }
+        
+        // If normalized to "Expansion 2025", match all variations containing "expansion" and "2025" (without "co")
+        if (lowerNormalized === 'expansion 2025') {
+          // Match variations like: "Expansion 2025", "expansion 2025", etc.
+          // But exclude those with "co" (those should match "Co Expansion" instead)
+          return `ran_score.ilike.%expansion%2025%`
         }
         
         // For other values, use exact match (case-insensitive)
@@ -85,8 +117,29 @@ function buildFilterQuery(searchParams: URLSearchParams) {
   }
 
   if (priorityCongestUrgent.length > 0) {
+    // Normalize priority values and build query conditions
+    // Handle "Prio Lebaran" and P1-P4 normalization
     const priorityConditions = priorityCongestUrgent
-      .map(pcu => `priority_congest_urgent.ilike.%${pcu.trim()}%`)
+      .map(pcu => {
+        const normalized = normalizePriorityCongestUrgentValue(pcu.trim())
+        const lowerNormalized = normalized.toLowerCase()
+        
+        // If normalized to "Prio Lebaran", match all variations
+        if (lowerNormalized === 'prio lebaran') {
+          // Match any variation of "prio lebaran" (case-insensitive, handles multiple spaces)
+          return `priority_congest_urgent.ilike.%prio%lebaran%`
+        }
+        
+        // If normalized to P1, P2, P3, or P4, match all variations containing that priority
+        if (lowerNormalized === 'p1' || lowerNormalized === 'p2' || lowerNormalized === 'p3' || lowerNormalized === 'p4') {
+          // Match variations like: "P1", "Priority P1", "P1 - Urgent", etc.
+          // Use pattern that matches the priority level (case-insensitive)
+          return `priority_congest_urgent.ilike.%${normalized}%`
+        }
+        
+        // For other values, use partial match (case-insensitive)
+        return `priority_congest_urgent.ilike.%${normalized}%`
+      })
       .join(',')
     query = query.or(priorityConditions)
   }

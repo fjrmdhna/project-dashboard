@@ -41,6 +41,26 @@ function normalizePriorityCongestUrgentForFilter(value: string | null | undefine
     return 'prio lebaran'
   }
   
+  // Extract P1, P2, P3, or P4 (case-insensitive, can be standalone or part of text)
+  // Pattern: matches "p1", "p2", "p3", "p4" (with word boundaries)
+  const p1Match = lowerValue.match(/\bp1\b/i)
+  const p2Match = lowerValue.match(/\bp2\b/i)
+  const p3Match = lowerValue.match(/\bp3\b/i)
+  const p4Match = lowerValue.match(/\bp4\b/i)
+  
+  if (p1Match) {
+    return 'p1'
+  }
+  if (p2Match) {
+    return 'p2'
+  }
+  if (p3Match) {
+    return 'p3'
+  }
+  if (p4Match) {
+    return 'p4'
+  }
+  
   // Return lowercase normalized value for others
   return lowerValue
 }
@@ -48,15 +68,59 @@ function normalizePriorityCongestUrgentForFilter(value: string | null | undefine
 // Helper function to normalize ran_score for filtering
 // Must match the normalization in supabase.ts
 function normalizeRanScoreForFilter(value: string | null | undefined): string {
+  // #region agent log
+  if (value === '-' || value === null || value === undefined || value === '') {
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useAopData.ts:71',message:'normalizeRanScoreForFilter input for "-"',data:{input:value,type:typeof value,isNull:value === null,isUndefined:value === undefined,isEmpty:value === ''},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  }
+  // #endregion
   if (!value) return ''
   
   // Normalize multiple spaces to single space before checking
   const normalizedSpaces = value.replace(/\s+/g, ' ').trim()
   const lowerValue = normalizedSpaces.toLowerCase()
   
-  // Check for "co - expansion" keyword (case-insensitive, handles multiple spaces) -> "co - expansion"
-  if (lowerValue.includes('co - expansion')) {
-    return 'co - expansion'
+  // Check for "co" and "new site" (case-insensitive, handles multiple spaces and dashes)
+  // Pattern: "co" as a word (not substring like in "scope") followed by optional spaces/dashes and "new site"
+  // Use word boundary to ensure "co" is a separate word, not part of another word
+  const hasCoAsWord = /\bco\b/i.test(normalizedSpaces)
+  if (hasCoAsWord && lowerValue.includes('new site')) {
+    return 'co new site'
+  }
+  
+  // Check for "co" and "expansion" (case-insensitive, handles multiple spaces and dashes)
+  // All variations (with or without dash) -> "co expansion" (unified, no dash)
+  // This takes priority over expansion + year normalization
+  // Use word boundary to ensure "co" is a separate word, not part of another word
+  if (hasCoAsWord && lowerValue.includes('expansion')) {
+    return 'co expansion'
+  }
+  
+  // Check for "new site" and "2026" (case-insensitive, without "co" as a word)
+  // Pattern: "new site" followed by optional spaces and "2026"
+  // Use word boundary to ensure "co" is not present as a separate word
+  if (!hasCoAsWord && lowerValue.includes('new site') && lowerValue.includes('2026')) {
+    return 'new site 2026'
+  }
+  
+  // Check for "new site" and "2025" (case-insensitive, without "co" as a word)
+  // Pattern: "new site" followed by optional spaces and "2025"
+  // Use word boundary to ensure "co" is not present as a separate word
+  if (!hasCoAsWord && lowerValue.includes('new site') && lowerValue.includes('2025')) {
+    return 'new site 2025'
+  }
+  
+  // Check for "expansion" and "2026" (case-insensitive, without "co" as a word)
+  // Pattern: "expansion" followed by optional spaces and "2026"
+  // Use word boundary to ensure "co" is not present as a separate word
+  if (!hasCoAsWord && lowerValue.includes('expansion') && lowerValue.includes('2026')) {
+    return 'expansion 2026'
+  }
+  
+  // Check for "expansion" and "2025" (case-insensitive, without "co" as a word)
+  // Pattern: "expansion" followed by optional spaces and "2025"
+  // Use word boundary to ensure "co" is not present as a separate word
+  if (!hasCoAsWord && lowerValue.includes('expansion') && lowerValue.includes('2025')) {
+    return 'expansion 2025'
   }
   
   // Return lowercase normalized value for others
@@ -222,6 +286,11 @@ function filterDataClientSide(
     // Row values need to be normalized before comparison
     if (ranScores.length > 0) {
       const normalizedRowRanScore = normalizeRanScoreForFilter(row.ran_score)
+      // #region agent log
+      if (ranScores.includes('-') || ranScores.some(rs => rs.trim() === '-')) {
+        fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useAopData.ts:283',message:'ran_score filter "-" matching',data:{rowRanScore:row.ran_score,normalizedRowRanScore,ranScores,matchesRanScore:ranScores.some(rs => normalizedRowRanScore === normalizeRanScoreForFilter(rs))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      }
+      // #endregion
       const matchesRanScore = ranScores.some(rs => normalizedRowRanScore === normalizeRanScoreForFilter(rs))
       if (!matchesRanScore) return false
     }
@@ -453,6 +522,11 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
 
   // CLIENT-SIDE FILTERING + AGGREGATION - All done in single pass!
   const { filteredData, filteredStats, aggregated } = useMemo(() => {
+    // #region agent log
+    if (ranScores.includes('-') || ranScores.some(rs => rs.trim() === '-')) {
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useAopData.ts:524',message:'useMemo filterDataClientSide entry with "-" filter',data:{baseDataCount:baseData?.data?.length || 0,ranScores,allFilters:{vendorNames,programReports,circles,siteCategories,ranScores,years,priorityCongestUrgent,search}},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    }
+    // #endregion
     if (!baseData?.data || baseData.data.length === 0) {
       return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
     }
@@ -466,6 +540,16 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
     const dataToUse = hasFilters 
       ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, ranScores, years, priorityCongestUrgent, search)
       : baseData.data
+    // #region agent log
+    if (ranScores.includes('-') || ranScores.some(rs => rs.trim() === '-')) {
+      const dashFilteredCount = dataToUse.filter((row: AopSiteData) => {
+        const normalized = normalizeRanScoreForFilter(row.ran_score)
+        return normalized === normalizeRanScoreForFilter('-')
+      }).length
+      const nullEmptyCount = dataToUse.filter((row: AopSiteData) => !row.ran_score || row.ran_score === '' || row.ran_score === '-').length
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useAopData.ts:537',message:'filterDataClientSide result for "-" filter',data:{totalFiltered:dataToUse.length,dashFilteredCount,nullEmptyCount,baseDataCount:baseData.data.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    }
+    // #endregion
     
     // Safety check: ensure dataToUse is always an array
     if (!dataToUse || !Array.isArray(dataToUse)) {

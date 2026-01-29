@@ -14,6 +14,8 @@ function buildFilterQuery(searchParams: URLSearchParams) {
   const programReports = searchParams.getAll('program_report')
   const impTtps = searchParams.getAll('imp_ttp')
   const nanoClusters = searchParams.getAll('nano_cluster')
+  const regionCircles = searchParams.getAll('region_circle') // Circle filter from region_circle
+  const years = searchParams.getAll('year')
   const search = searchParams.get('q')
 
   let query = supabase
@@ -34,6 +36,27 @@ function buildFilterQuery(searchParams: URLSearchParams) {
 
   if (nanoClusters.length > 0) {
     query = query.in('nano_cluster', nanoClusters)
+  }
+
+  // Circle filter (from region_circle) - normalize to Title Case for consistent matching
+  // This ensures "JAVA" and "Java" are treated the same
+  if (regionCircles.length > 0) {
+    const normalizeCircle = (value: string): string => {
+      return value.trim().toLowerCase().replace(/\b\w/g, char => char.toUpperCase())
+    }
+    
+    const circleConditions = regionCircles
+      .map(c => {
+        const normalized = normalizeCircle(c)
+        // Use case-insensitive partial match to catch variations in database
+        return `region_circle.ilike.%${normalized}%`
+      })
+      .join(',')
+    query = query.or(circleConditions)
+  }
+
+  if (years.length > 0) {
+    query = query.in('year', years)
   }
 
   if (search && search.trim().length > 0) {

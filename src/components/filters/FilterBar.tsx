@@ -128,13 +128,27 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
             }
             
             // For AOP variant: detect stale cache by checking if priorityCongestUrgent are normalized
-            // Normalized priorityCongestUrgent should only have "Prio Lebaran" for values containing "prio lebaran"
+            // Normalized priorityCongestUrgent should have:
+            // - "Prio Lebaran" for values containing "prio lebaran"
+            // - "P1", "P2", "P3", "P4" for values containing those priorities
             // If we see long values like "Prio Lebaran - Forecast Below 3 - P1", cache is stale
             if (variant === 'aop' && !hasRetried && newOptions.priorityCongestUrgent && newOptions.priorityCongestUrgent.length > 0) {
               const hasUnnormalizedValues = newOptions.priorityCongestUrgent.some((pcu: string) => {
                 const lower = pcu.toLowerCase()
                 // Check if value contains "prio lebaran" but is not normalized to "Prio Lebaran"
-                return lower.includes('prio lebaran') && pcu !== 'Prio Lebaran'
+                if (lower.includes('prio lebaran') && pcu !== 'Prio Lebaran') {
+                  return true
+                }
+                // Check if value contains P1, P2, P3, or P4 but is not normalized to just "P1", "P2", "P3", or "P4"
+                const p1Match = lower.match(/\bp1\b/i)
+                const p2Match = lower.match(/\bp2\b/i)
+                const p3Match = lower.match(/\bp3\b/i)
+                const p4Match = lower.match(/\bp4\b/i)
+                if (p1Match && pcu !== 'P1') return true
+                if (p2Match && pcu !== 'P2') return true
+                if (p3Match && pcu !== 'P3') return true
+                if (p4Match && pcu !== 'P4') return true
+                return false
               })
               
               if (hasUnnormalizedValues) {
@@ -146,13 +160,46 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
             }
             
             // For AOP variant: detect stale cache by checking if ranScores are normalized
-            // Normalized ranScores should only have "Co - Expansion" for values containing "co - expansion"
-            // If we see long values like "CO - Expansion - Forecast", cache is stale
+            // Normalized ranScores should have:
+            // - "Co Expansion" (unified, no dash) for all values containing "co" and "expansion"
+            // - "Co New Site" for values containing "co" and "new site"
+            // - "New Site 2026" for values containing "new site" and "2026" (without "co")
+            // - "New Site 2025" for values containing "new site" and "2025" (without "co")
+            // - "Expansion 2026" for values containing "expansion" and "2026" (without "co")
+            // - "Expansion 2025" for values containing "expansion" and "2025" (without "co")
+            // If we see long values like "CO - Expansion - Forecast" or unnormalized new site/expansion + year, cache is stale
             if (variant === 'aop' && !hasRetried && newOptions.ranScores && newOptions.ranScores.length > 0) {
               const hasUnnormalizedValues = newOptions.ranScores.some((rs: string) => {
                 const lower = rs.toLowerCase()
-                // Check if value contains "co - expansion" but is not normalized to "Co - Expansion"
-                return lower.includes('co - expansion') && rs !== 'Co - Expansion'
+                // Use word boundary to check for "co" as a separate word, not substring
+                const hasCoAsWord = /\bco\b/i.test(rs)
+                
+                // Check if value contains "co" and "new site" but is not normalized to "Co New Site"
+                if (hasCoAsWord && lower.includes('new site') && rs !== 'Co New Site') {
+                  return true
+                }
+                // Check if value contains "co" and "expansion" but is not normalized to "Co Expansion"
+                // All variations (with or without dash) should be "Co Expansion"
+                if (hasCoAsWord && lower.includes('expansion') && rs !== 'Co Expansion') {
+                  return true
+                }
+                // Check if value contains "new site" and "2026" (without "co") but is not normalized to "New Site 2026"
+                if (!hasCoAsWord && lower.includes('new site') && lower.includes('2026') && rs !== 'New Site 2026') {
+                  return true
+                }
+                // Check if value contains "new site" and "2025" (without "co") but is not normalized to "New Site 2025"
+                if (!hasCoAsWord && lower.includes('new site') && lower.includes('2025') && rs !== 'New Site 2025') {
+                  return true
+                }
+                // Check if value contains "expansion" and "2026" (without "co") but is not normalized to "Expansion 2026"
+                if (!hasCoAsWord && lower.includes('expansion') && lower.includes('2026') && rs !== 'Expansion 2026') {
+                  return true
+                }
+                // Check if value contains "expansion" and "2025" (without "co") but is not normalized to "Expansion 2025"
+                if (!hasCoAsWord && lower.includes('expansion') && lower.includes('2025') && rs !== 'Expansion 2025') {
+                  return true
+                }
+                return false
               })
               
               if (hasUnnormalizedValues) {
@@ -275,9 +322,9 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.program_report?.length || 0) > 0 || 
     (value.imp_ttp?.length || 0) > 0 ||
     (value.nano_cluster?.length || 0) > 0 ||
-    (value.region?.length || 0) > 0 ||
+    (value.region?.length || 0) > 0 || // Deprecated: kept for backward compatibility
     (value.year?.length || 0) > 0 ||
-    (value.circle?.length || 0) > 0 ||
+    (value.circle?.length || 0) > 0 || // New: circle filter
     (value.status?.length || 0) > 0 ||
     (value.site_category?.length || 0) > 0 ||
     (value.ran_score?.length || 0) > 0 ||
@@ -359,10 +406,10 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
             />
 
             <MultiSelect
-              options={options.regions}
-              selected={value.region || []}
-              placeholder="Region"
-              onChange={handleRegionChange}
+              options={options.circles}
+              selected={value.circle || []}
+              placeholder="Circle"
+              onChange={handleCircleChange}
               disabled={isLoading}
               width="w-full"
               className="col-span-2 md:col-span-1"
@@ -536,16 +583,16 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
             </div>
           ))}
 
-          {value.region?.map(region => (
+          {value.circle?.map(circle => (
             <div 
-              key={`region-${region}`} 
+              key={`circle-${circle}`} 
               className="bg-pink-500/20 text-pink-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
-              title={`Region: ${region}`}
+              title={`Circle: ${circle}`}
             >
-              <span>R: {truncateText(region, 10)}</span>
+              <span>C: {truncateText(circle, 10)}</span>
               <X 
                 className="h-2 w-2 cursor-pointer" 
-                onClick={() => removeFilter('region', region)} 
+                onClick={() => removeFilter('circle', circle)} 
               />
             </div>
           ))}

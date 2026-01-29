@@ -27,7 +27,8 @@ export async function GET(request: NextRequest) {
         programs: filterOptions.data.programs,
         cities: filterOptions.data.cities,
         nanoClusters: filterOptions.data.nanoClusters,
-        regions: filterOptions.data.regions,
+        regions: filterOptions.data.regions, // Deprecated: kept for backward compatibility
+        circles: filterOptions.data.circles, // New: circles from region_circle
         years: filterOptions.data.years,
         ranScores: filterOptions.data.ranScores,
       },

@@ -75,19 +75,21 @@ export default function Hermes5GPage() {
   const filterContext = useFilter()
   
   // Convert filter context to FilterValue format - support multiselect
+  // Note: regionFilter is used for circle filter (from region_circle)
   const currentFilter: FilterValue = useMemo(() => ({
     q: filterContext.searchTerm,
     vendor_name: filterContext.vendorFilter !== 'all' ? filterContext.vendorFilter.split(',').filter(Boolean) : [],
     program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
     imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
     nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
-    region: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [],
+    circle: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [], // Using regionFilter for circle (from region_circle)
     year: filterContext.yearFilter !== 'all' ? filterContext.yearFilter.split(',').filter(Boolean) : [],
     status: filterContext.statusFilters || []
   }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.statusFilters])
   
   // Convert filter context to FilterValue format - use debouncedFilters from context (already debounced 300ms)
   // FilterContext already handles debouncing, so we use debouncedFilters directly
+  // Note: regionFilter is used for circle filter (from region_circle)
   const debouncedFilterValue: FilterValue = useMemo(() => {
     const debounced = filterContext.debouncedFilters || filterContext
     return {
@@ -96,20 +98,21 @@ export default function Hermes5GPage() {
       program_report: debounced.programFilter !== 'all' ? debounced.programFilter.split(',').filter(Boolean) : [],
       imp_ttp: debounced.cityFilter !== 'all' ? debounced.cityFilter.split(',').filter(Boolean) : [],
       nano_cluster: debounced.nanoClusterFilter !== 'all' ? debounced.nanoClusterFilter.split(',').filter(Boolean) : [],
-      region: debounced.regionFilter !== 'all' ? debounced.regionFilter.split(',').filter(Boolean) : [],
+      circle: debounced.regionFilter !== 'all' ? debounced.regionFilter.split(',').filter(Boolean) : [], // Using regionFilter for circle (from region_circle)
       year: debounced.yearFilter !== 'all' ? debounced.yearFilter.split(',').filter(Boolean) : [],
       status: debounced.statusFilters || []
     }
   }, [filterContext.debouncedFilters, filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.statusFilters])
 
   // Current filter (non-debounced) for display purposes
+  // Note: regionFilter is used for circle filter (from region_circle)
   const filterValue: FilterValue = useMemo(() => ({
     q: filterContext.searchTerm || '',
     vendor_name: filterContext.vendorFilter !== 'all' ? filterContext.vendorFilter.split(',').filter(Boolean) : [],
     program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
     imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
     nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
-    region: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [],
+    circle: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [], // Using regionFilter for circle (from region_circle)
     year: filterContext.yearFilter !== 'all' ? filterContext.yearFilter.split(',').filter(Boolean) : [],
     status: filterContext.statusFilters || []
   }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.statusFilters])
@@ -123,7 +126,7 @@ export default function Hermes5GPage() {
   const stableNanoClusters = useMemo(() => debouncedFilterValue.nano_cluster || [], [debouncedFilterValue.nano_cluster])
   const stableRanScores = useMemo(() => debouncedFilterValue.ran_score || [], [debouncedFilterValue.ran_score])
   const stableYears = useMemo(() => debouncedFilterValue.year || [], [debouncedFilterValue.year])
-  const stableRegions = useMemo(() => debouncedFilterValue.region || [], [debouncedFilterValue.region])
+  const stableCircles = useMemo(() => debouncedFilterValue.circle || [], [debouncedFilterValue.circle]) // Using circle instead of region
   const stableSearch = debouncedFilterValue.q || ''
 
   // Fetch data from API menggunakan debounced filter with stable references
@@ -140,7 +143,7 @@ export default function Hermes5GPage() {
     nanoClusters: stableNanoClusters,
     ranScores: stableRanScores,
     years: stableYears,
-    regions: stableRegions,
+    circles: stableCircles, // Using circles instead of regions
     search: stableSearch
   })
   
@@ -208,7 +211,8 @@ export default function Hermes5GPage() {
     filter.vendor_name.length +
     filter.program_report.length +
     filter.imp_ttp.length +
-    filter.nano_cluster.length
+    filter.nano_cluster.length +
+    (filter.circle?.length || 0)
   )
 
   const hasActiveFilters = activeFilterCount > 0
@@ -262,12 +266,13 @@ export default function Hermes5GPage() {
     // OPTIMIZED: Use startTransition untuk non-urgent state updates (mencegah UI freeze)
     startTransition(() => {
       // Update filter context - support multiselect by joining arrays
+      // Note: circle filter is stored in regionFilter (for backward compatibility)
       filterContext.setSearchTerm(newFilters.q || '')
       filterContext.setVendorFilter(newFilters.vendor_name.length > 0 ? newFilters.vendor_name.join(',') : 'all')
       filterContext.setProgramFilter(newFilters.program_report.length > 0 ? newFilters.program_report.join(',') : 'all')
       filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp.join(',') : 'all')
       filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster.join(',') : 'all')
-      filterContext.setRegionFilter(newFilters.region && newFilters.region.length > 0 ? newFilters.region.join(',') : 'all')
+      filterContext.setRegionFilter(newFilters.circle && newFilters.circle.length > 0 ? newFilters.circle.join(',') : 'all') // Using circle for regionFilter
       filterContext.setYearFilter(newFilters.year && newFilters.year.length > 0 ? newFilters.year.join(',') : 'all')
     })
   }
@@ -301,6 +306,15 @@ export default function Hermes5GPage() {
     filter.nano_cluster.forEach((value) => {
       params.append('nano_cluster', value)
     })
+
+    filter.circle?.forEach((value) => {
+      params.append('region_circle', value) // Using region_circle parameter name for API compatibility
+    })
+
+    filter.year?.forEach((value) => {
+      params.append('year', value)
+    })
+
     // ran_score filter removed - no longer used
 
     return params
@@ -375,38 +389,27 @@ export default function Hermes5GPage() {
     }
   }
 
-  const renderExportControls = (extraClassName = '') => {
-    const baseButtonClass = 'inline-flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60'
-
-    return (
-      <div className={`flex flex-col gap-1 ${extraClassName}`}>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={handleExport}
-            className={`${baseButtonClass} border-emerald-400/40 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/20`}
-            disabled={isExporting}
-          >
-            <Download className="h-3.5 w-3.5" />
-            {isExporting ? 'Downloading...' : 'Export Activation'}
-          </button>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
-          <span className="text-white/60">File will follow the applied filters.</span>
-          {exportStatus && (
-            <span className={exportStatus.type === 'success' ? 'text-emerald-300' : 'text-rose-300'}>{exportStatus.message}</span>
-          )}
-        </div>
-      </div>
-    )
-  }
+  // Export button component - styled like AOP page
+  const exportButton = (
+    <button
+      type="button"
+      onClick={handleExport}
+      disabled={isExporting}
+      className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-60 uppercase tracking-[0.32em]"
+      title={isExporting ? 'Exporting...' : 'Export to Excel'}
+    >
+      <Download className="h-3 w-3" />
+      {isExporting ? 'Exporting...' : 'Export'}
+    </button>
+  )
 
   // Header component
   const header = (
     <ProgramHeader
-      title="Dashboard Hermes H2 2025"
+      title="Dashboard Hermes"
       dateLabel={formattedDate}
       mapHref="/hermes-5g/map"
+      exportButton={exportButton}
     />
   )
 
@@ -418,7 +421,6 @@ export default function Hermes5GPage() {
         onChange={handleFilterChange}
         onReset={handleFilterReset}
       />
-      {renderExportControls()}
     </div>
   )
 
@@ -546,9 +548,19 @@ export default function Hermes5GPage() {
         </div>
 
         <h1 className="mt-4 text-center text-xl font-semibold tracking-wide text-white">
-          DASHBOARD HERMES H2 2025
+          Dashboard Hermes
         </h1>
         <div className="mt-3 flex justify-center gap-3 text-[11px] uppercase tracking-[0.32em]">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={isExporting}
+            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 font-semibold text-emerald-100 transition hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-60 uppercase tracking-[0.32em]"
+            title={isExporting ? 'Exporting...' : 'Export to Excel'}
+          >
+            <Download className="h-3 w-3" />
+            {isExporting ? 'Exporting...' : 'Export'}
+          </button>
           <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-3 py-1 font-semibold text-[#34D399]">Overview</span>
           <Link
             href="/hermes-5g/map"
@@ -588,7 +600,6 @@ export default function Hermes5GPage() {
                   onChange={handleFilterChange}
                   onReset={handleFilterReset}
                 />
-                {renderExportControls('mt-3')}
               </div>
             )}
           </div>

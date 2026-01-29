@@ -18,7 +18,8 @@ export interface Hermes5GSiteData extends MatrixRow {
   rfs_bf?: string | null                    // Legacy baseline
   rfs_ff?: string | null
   year?: string | null
-  region?: string | null
+  region?: string | null // Deprecated: kept for backward compatibility
+  region_circle?: string | null // New: circle from region_circle
   issue_category?: string | null
 }
 
@@ -91,7 +92,8 @@ export interface UseHermes5GDataOptions {
   nanoClusters?: string[]
   ranScores?: string[]
   years?: string[]
-  regions?: string[]
+  regions?: string[] // Deprecated: kept for backward compatibility, use circles instead
+  circles?: string[] // New: circles from region_circle
   search?: string
   autoFetch?: boolean
 }
@@ -121,7 +123,8 @@ function filterDataClientSide(
   nanoClusters: string[],
   ranScores: string[],
   years: string[],
-  regions: string[],
+  regions: string[], // Deprecated: kept for backward compatibility
+  circles: string[], // New: circles from region_circle
   search: string
 ): Hermes5GSiteData[] {
   if (!data || data.length === 0) return []
@@ -129,7 +132,7 @@ function filterDataClientSide(
   // If no filters, return all data
   const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
                      impTtps.length > 0 || nanoClusters.length > 0 || 
-                     ranScores.length > 0 || years.length > 0 || regions.length > 0 || search.length > 0
+                     ranScores.length > 0 || years.length > 0 || regions.length > 0 || circles.length > 0 || search.length > 0
   
   if (!hasFilters) return data
   
@@ -210,8 +213,24 @@ function filterDataClientSide(
       }
     }
     
-    // Region filter
-    if (regions.length > 0 && !regions.includes(row.region || '')) {
+    // Circle filter (from region_circle) - takes priority over deprecated region filter
+    // Normalize both filter values and row values to Title Case for consistent matching
+    if (circles.length > 0) {
+      const normalizeCircle = (value: string): string => {
+        if (!value) return ''
+        return value.trim().toLowerCase().replace(/\b\w/g, char => char.toUpperCase())
+      }
+      
+      const normalizedRowCircle = normalizeCircle(row.region_circle || '')
+      const normalizedFilterCircles = circles.map(c => normalizeCircle(c))
+      const matchesCircle = normalizedFilterCircles.some(c => normalizedRowCircle === c || normalizedRowCircle.includes(c))
+      
+      if (!matchesCircle) {
+        rejectedByRegion++
+        return false
+      }
+    } else if (regions.length > 0 && !regions.includes(row.region || '')) {
+      // Deprecated: fallback to region filter for backward compatibility
       rejectedByRegion++
       return false
     }
@@ -435,7 +454,7 @@ function calculateStatsFromFilteredData(data: Hermes5GSiteData[]): Hermes5GDataS
 }
 
 export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): UseHermes5GDataReturn {
-  const { vendorNames = [], programReports = [], impTtps = [], nanoClusters = [], ranScores = [], years = [], regions = [], search = '' } = options
+  const { vendorNames = [], programReports = [], impTtps = [], nanoClusters = [], ranScores = [], years = [], regions = [], circles = [], search = '' } = options
 
   // OPTIMIZATION: Always fetch ALL data (no filter) and filter client-side
   // This makes filter changes instant instead of waiting 15-20s for API
@@ -492,11 +511,11 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
     
     const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
                        impTtps.length > 0 || nanoClusters.length > 0 || 
-                       ranScores.length > 0 || years.length > 0 || regions.length > 0 || search.length > 0
+                       ranScores.length > 0 || years.length > 0 || regions.length > 0 || circles.length > 0 || search.length > 0
     
     // If no filters, use base data and calculate aggregation
     const dataToUse = hasFilters 
-      ? filterDataClientSide(baseData.data, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, search)
+      ? filterDataClientSide(baseData.data, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, search)
       : baseData.data
     
     // Calculate stats (single pass)
@@ -513,7 +532,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
         filteredStats: stats,
         aggregated: agg
       }
-  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, search])
+  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, search])
 
   // Refetch function
   const refetch = useCallback(async () => {

@@ -341,7 +341,13 @@ export function normalizeSiteCategoryValue(value: string): string {
 
 /**
  * Normalize ran_score value to grouped categories
- * Groups values containing "co - expansion" (case-insensitive) -> "Co - Expansion"
+ * Groups values containing:
+ * - "co" and "new site" (case-insensitive, with or without dash) -> "Co New Site"
+ * - "co" and "expansion" (case-insensitive, with or without dash) -> "Co Expansion" (unified, no dash)
+ * - "new site" and "2026" (case-insensitive, without "co") -> "New Site 2026"
+ * - "new site" and "2025" (case-insensitive, without "co") -> "New Site 2025"
+ * - "expansion" and "2026" (case-insensitive, without "co") -> "Expansion 2026"
+ * - "expansion" and "2025" (case-insensitive, without "co") -> "Expansion 2025"
  * Other values remain as Title Case
  */
 export function normalizeRanScoreValue(value: string): string {
@@ -351,9 +357,48 @@ export function normalizeRanScoreValue(value: string): string {
   const normalizedSpaces = value.replace(/\s+/g, ' ').trim()
   const lowerValue = normalizedSpaces.toLowerCase()
   
-  // Check for "co - expansion" keyword (case-insensitive, handles multiple spaces) -> "Co - Expansion"
-  if (lowerValue.includes('co - expansion')) {
-    return 'Co - Expansion'
+  // Check for "co" and "new site" (case-insensitive, handles multiple spaces and dashes)
+  // Pattern: "co" as a word (not substring like in "scope") followed by optional spaces/dashes and "new site"
+  // Use word boundary to ensure "co" is a separate word, not part of another word
+  const hasCoAsWord = /\bco\b/i.test(normalizedSpaces)
+  if (hasCoAsWord && lowerValue.includes('new site')) {
+    return 'Co New Site'
+  }
+  
+  // Check for "co" and "expansion" (case-insensitive, handles multiple spaces and dashes)
+  // All variations (with or without dash) -> "Co Expansion" (unified, no dash)
+  // This takes priority over expansion + year normalization
+  // Use word boundary to ensure "co" is a separate word, not part of another word
+  if (hasCoAsWord && lowerValue.includes('expansion')) {
+    return 'Co Expansion'
+  }
+  
+  // Check for "new site" and "2026" (case-insensitive, without "co" as a word)
+  // Pattern: "new site" followed by optional spaces and "2026"
+  // Use word boundary to ensure "co" is not present as a separate word
+  if (!hasCoAsWord && lowerValue.includes('new site') && lowerValue.includes('2026')) {
+    return 'New Site 2026'
+  }
+  
+  // Check for "new site" and "2025" (case-insensitive, without "co" as a word)
+  // Pattern: "new site" followed by optional spaces and "2025"
+  // Use word boundary to ensure "co" is not present as a separate word
+  if (!hasCoAsWord && lowerValue.includes('new site') && lowerValue.includes('2025')) {
+    return 'New Site 2025'
+  }
+  
+  // Check for "expansion" and "2026" (case-insensitive, without "co" as a word)
+  // Pattern: "expansion" followed by optional spaces and "2026"
+  // Use word boundary to ensure "co" is not present as a separate word
+  if (!hasCoAsWord && lowerValue.includes('expansion') && lowerValue.includes('2026')) {
+    return 'Expansion 2026'
+  }
+  
+  // Check for "expansion" and "2025" (case-insensitive, without "co" as a word)
+  // Pattern: "expansion" followed by optional spaces and "2025"
+  // Use word boundary to ensure "co" is not present as a separate word
+  if (!hasCoAsWord && lowerValue.includes('expansion') && lowerValue.includes('2025')) {
+    return 'Expansion 2025'
   }
   
   // Return Title Case for others
@@ -379,7 +424,12 @@ const formatRanScoreValue = (value: string) =>
 
 /**
  * Normalize priority_congest_urgent value
- * Groups values containing "prio lebaran" (case-insensitive) into "Prio Lebaran"
+ * Groups values containing:
+ * - "prio lebaran" (case-insensitive) -> "Prio Lebaran"
+ * - "P1" (case-insensitive) -> "P1"
+ * - "P2" (case-insensitive) -> "P2"
+ * - "P3" (case-insensitive) -> "P3"
+ * - "P4" (case-insensitive) -> "P4"
  * @param value The priority value to normalize
  * @returns Normalized priority value
  */
@@ -393,6 +443,26 @@ export function normalizePriorityCongestUrgentValue(value: string): string {
   // Check for "prio lebaran" keyword (case-insensitive, handles multiple spaces) -> "Prio Lebaran"
   if (lowerValue.includes('prio lebaran')) {
     return 'Prio Lebaran'
+  }
+  
+  // Extract P1, P2, P3, or P4 (case-insensitive, can be standalone or part of text)
+  // Pattern: matches "p1", "p2", "p3", "p4" (with optional spaces/dashes before/after)
+  const p1Match = lowerValue.match(/\bp1\b/i)
+  const p2Match = lowerValue.match(/\bp2\b/i)
+  const p3Match = lowerValue.match(/\bp3\b/i)
+  const p4Match = lowerValue.match(/\bp4\b/i)
+  
+  if (p1Match) {
+    return 'P1'
+  }
+  if (p2Match) {
+    return 'P2'
+  }
+  if (p3Match) {
+    return 'P3'
+  }
+  if (p4Match) {
+    return 'P4'
   }
   
   // Return original value for others (no normalization)
@@ -531,7 +601,7 @@ export async function getAopFilterOptions(forceRefresh = false) {
 
   // OPTIMIZED: Fetch semua columns secara paralel dengan pagination per column
   // Setiap column akan di-fetch dengan pagination untuk memastikan semua data ter-fetch
-  const [vendors, programs, circles, siteCategories, ranScores, years, priorityCongestUrgent] = await Promise.all([
+  const [vendors, programs, circles, siteCategories, ranScoresRaw, years, priorityCongestUrgent] = await Promise.all([
     fetchDistinctValuesOptimized('vendor_name'),
     fetchDistinctValuesOptimized('program_report'),
     fetchDistinctValuesOptimized('region_circle'),
@@ -540,6 +610,16 @@ export async function getAopFilterOptions(forceRefresh = false) {
     fetchDistinctValuesOptimized('year'),
     fetchDistinctValuesOptimized('priority_congest_urgent')
   ])
+
+  // Normalize ranScores: apply normalization and deduplicate
+  const normalizedRanScores = new Set<string>()
+  for (const rs of ranScoresRaw) {
+    if (rs) {
+      const normalized = normalizeRanScoreValue(rs)
+      normalizedRanScores.add(normalized)
+    }
+  }
+  const ranScores = Array.from(normalizedRanScores).sort()
 
   const result = {
     vendors,

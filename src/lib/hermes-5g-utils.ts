@@ -2,6 +2,13 @@ import { supabase } from './supabase';
 import { EXCLUDED_PROGRAM_REPORTS, filterExcludedProgramReports, shouldExcludeProgramReport } from './hermes-5g-constants';
 import { getAllDisplayNames, getUnmappedProgramReports } from './hermes-program-mapping';
 
+// Helper function to normalize circle values to Title Case (consistent with AOP)
+const formatCircleValue = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, char => char.toUpperCase())
+
 // Hermes 5G Data Interface
 export interface Hermes5GData {
   system_key: string;
@@ -176,7 +183,8 @@ export interface FilterOptionsData {
   programs: string[]
   cities: string[]
   nanoClusters: string[]
-  regions: string[]
+  regions: string[] // Deprecated: kept for backward compatibility, use circles instead
+  circles: string[] // New: circles from region_circle
   years: string[]
   ranScores: string[]
 }
@@ -364,12 +372,12 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
       .not('nano_cluster', 'is', null)
       .neq('nano_cluster', '');
     
-    // Get unique regions from region
-    const { data: regionsData, error: regionsError } = await supabase
+    // Get unique circles from region_circle (replacing region filter)
+    const { data: circlesData, error: circlesError } = await supabase
       .from('site_data_5g')
-      .select('region')
-      .not('region', 'is', null)
-      .neq('region', '');
+      .select('region_circle')
+      .not('region_circle', 'is', null)
+      .neq('region_circle', '');
     
     // Get unique years from year
     const { data: yearsData, error: yearsError } = await supabase
@@ -385,9 +393,9 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
       .not('ran_score', 'is', null)
       .neq('ran_score', '');
     
-    if (vendorsError || programsError || citiesError || nanoClustersError || regionsError || yearsError || ranScoresError) {
-      console.error('Supabase Error:', vendorsError || programsError || citiesError || nanoClustersError || regionsError || yearsError || ranScoresError);
-      throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message || nanoClustersError?.message || regionsError?.message || yearsError?.message || ranScoresError?.message}`);
+    if (vendorsError || programsError || citiesError || nanoClustersError || circlesError || yearsError || ranScoresError) {
+      console.error('Supabase Error:', vendorsError || programsError || citiesError || nanoClustersError || circlesError || yearsError || ranScoresError);
+      throw new Error(`Supabase error: ${vendorsError?.message || programsError?.message || citiesError?.message || nanoClustersError?.message || circlesError?.message || yearsError?.message || ranScoresError?.message}`);
     }
     
     // Get all unique program_report values from database
@@ -403,12 +411,32 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
     // Display names first (prioritized), then unmapped ones
     const programOptions = [...mappedDisplayNames, ...unmappedProgramReports].sort()
     
+    // Normalize circles: use Map with normalized key (lowercase) to avoid duplicates with different casing
+    // This ensures "JAVA" and "Java" are treated as the same value
+    const circlesMap = new Map<string, string>()
+    circlesData?.forEach(row => {
+      const rawValue = row.region_circle
+      if (rawValue && typeof rawValue === 'string') {
+        const trimmed = rawValue.trim()
+        if (trimmed) {
+          const formatted = formatCircleValue(trimmed)
+          const normalizedKey = formatted.toLowerCase()
+          // Only add if not already present (avoids duplicates with different casing)
+          if (!circlesMap.has(normalizedKey)) {
+            circlesMap.set(normalizedKey, formatted)
+          }
+        }
+      }
+    })
+    const normalizedCircles = Array.from(circlesMap.values()).sort()
+    
     const data: FilterOptionsData = {
       vendors: [...new Set(vendorsData?.map(row => row.vendor_name) || [])].sort(),
       programs: programOptions, // Display names + unmapped program reports
       cities: [...new Set(citiesData?.map(row => row.imp_ttp) || [])].sort(),
       nanoClusters: [...new Set(nanoClustersData?.map(row => row.nano_cluster) || [])].sort(),
-      regions: [...new Set(regionsData?.map(row => row.region) || [])].sort(),
+      regions: [], // Deprecated: kept for backward compatibility, use circles instead
+      circles: normalizedCircles, // Normalized circles (Title Case, no duplicates)
       years: [...new Set(yearsData?.map(row => row.year) || [])].sort((a, b) => b.localeCompare(a)), // Sort descending (newest first)
       ranScores: [
         ...new Set(
@@ -436,6 +464,7 @@ export async function getFilterOptions(): Promise<FilterOptionsResponse> {
         cities: [],
         nanoClusters: [],
         regions: [],
+        circles: [],
         years: [],
         ranScores: []
       },
