@@ -1,8 +1,14 @@
 "use client"
 
+// #region agent log
+const DEBUG_LOG = (p: { location: string; message: string; data?: Record<string, unknown>; hypothesisId?: string }) => {
+  fetch("http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...p, timestamp: Date.now(), sessionId: "aop-mobile-overflow" }) }).catch(() => {})
+}
+// #endregion
+
 import Link from "next/link"
-import { useMemo, useState, useEffect, useTransition, useDeferredValue, type ReactNode, type CSSProperties } from "react"
-import { ChevronDown, SlidersHorizontal, Download } from "lucide-react"
+import { useMemo, useState, useEffect, useTransition, useDeferredValue, useCallback, type ReactNode, type CSSProperties } from "react"
+import { ChevronDown, Download, Save, FolderOpen, SlidersHorizontal, Pencil, Trash2 } from "lucide-react"
 
 import { FilterBar, type FilterValue } from "@/components/filters/FilterBar"
 import { useDebounce } from "@/hooks/useDebounce"
@@ -224,7 +230,33 @@ const INITIAL_FILTER: FilterValue = {
   site_category: [],
   ran_score: [],
   year: [],
-  priority_congest_urgent: []
+  priority_congest_urgent: [],
+  trial_gb_factory: []
+}
+
+const AOP_TEMPLATE_FILTER_KEYS = [
+  { key: "q" as const, label: "Search" },
+  { key: "vendor_name" as const, label: "Vendor" },
+  { key: "program_report" as const, label: "Program" },
+  { key: "circle" as const, label: "Circle" },
+  { key: "site_category" as const, label: "Site Category" },
+  { key: "ran_score" as const, label: "RAN Score" },
+  { key: "year" as const, label: "Year" },
+  { key: "priority_congest_urgent" as const, label: "Priority" },
+  { key: "trial_gb_factory" as const, label: "Trial GB Factory" }
+]
+
+function mergeWithInitialFilter(payload: Record<string, unknown>): FilterValue {
+  const base = { ...INITIAL_FILTER }
+  for (const { key } of AOP_TEMPLATE_FILTER_KEYS) {
+    const v = payload[key]
+    if (key === "q") {
+      base.q = typeof v === "string" ? v : ""
+    } else if (Array.isArray(v)) {
+      ;(base as unknown as Record<string, unknown>)[key] = v.filter((x): x is string => typeof x === "string")
+    }
+  }
+  return base
 }
 
 export default function AopPage() {
@@ -235,7 +267,18 @@ export default function AopPage() {
   const [isPending, startTransition] = useTransition()
   const [isExporting, setIsExporting] = useState(false)
   const [exportStatus, setExportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-
+  const [templateModalOpen, setTemplateModalOpen] = useState(false)
+  const [templateName, setTemplateName] = useState("")
+  const [templates, setTemplates] = useState<{ id: string; name: string; payload: Record<string, unknown>; created_at?: string }[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [templateSaveError, setTemplateSaveError] = useState<string | null>(null)
+  const [loadTemplateOpen, setLoadTemplateOpen] = useState(false)
+  const [createTemplateMode, setCreateTemplateMode] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const [deleteConfirmTemplate, setDeleteConfirmTemplate] = useState<{ id: string; name: string } | null>(null)
+  const [templateUpdateError, setTemplateUpdateError] = useState<string | null>(null)
+  const [templateDeleteError, setTemplateDeleteError] = useState<string | null>(null)
+  const [templateUpdating, setTemplateUpdating] = useState(false)
 
   // Debounce filter untuk unified debouncing (300ms seperti Hermes 5G)
   const debouncedFilterValue = useDebounce(filterValue, 300)
@@ -249,6 +292,7 @@ export default function AopPage() {
   const stableRanScores = useMemo(() => debouncedFilterValue.ran_score || [], [debouncedFilterValue.ran_score])
   const stableYears = useMemo(() => debouncedFilterValue.year || [], [debouncedFilterValue.year])
   const stablePriorityCongestUrgent = useMemo(() => debouncedFilterValue.priority_congest_urgent || [], [debouncedFilterValue.priority_congest_urgent])
+  const stableTrialGbFactory = useMemo(() => debouncedFilterValue.trial_gb_factory || [], [debouncedFilterValue.trial_gb_factory])
   const stableSearch = debouncedFilterValue.q || ''
 
   // Fetch data from API menggunakan debounced filter with stable references
@@ -260,6 +304,7 @@ export default function AopPage() {
     ranScores: stableRanScores,
     years: stableYears,
     priorityCongestUrgent: stablePriorityCongestUrgent,
+    trialGbFactory: stableTrialGbFactory,
     search: stableSearch
   })
   
@@ -317,7 +362,7 @@ export default function AopPage() {
     []
   )
 
-  // Calculate active filter count (include ran_score, year, priority_congest_urgent)
+  // Calculate active filter count (include ran_score, year, priority_congest_urgent, trial_gb_factory)
   const activeFilterCount = (
     (filterValue.q ? 1 : 0) +
     (filterValue.vendor_name?.length || 0) +
@@ -328,7 +373,8 @@ export default function AopPage() {
     (filterValue.site_category?.length ?? 0) +
     (filterValue.ran_score?.length ?? 0) +
     (filterValue.year?.length ?? 0) +
-    (filterValue.priority_congest_urgent?.length ?? 0)
+    (filterValue.priority_congest_urgent?.length ?? 0) +
+    (filterValue.trial_gb_factory?.length ?? 0)
   )
   const hasActiveFilters = activeFilterCount > 0
 
@@ -349,6 +395,152 @@ export default function AopPage() {
 
   const handleFilterReset = () => {
     setFilterValue(INITIAL_FILTER)
+  }
+
+  const openSaveTemplateModal = () => {
+    setTemplateName("")
+    setTemplateSaveError(null)
+    setTemplateModalOpen(true)
+  }
+
+  const fetchTemplates = useCallback(async (_caller?: string) => {
+    setTemplatesLoading(true)
+    try {
+      const res = await fetch("/api/aop/templates?limit=50")
+      const json = await res.json()
+      if (json.status === "success" && Array.isArray(json.data)) {
+        setTemplates(json.data)
+      } else {
+        setTemplates([])
+      }
+    } catch {
+      setTemplates([])
+    } finally {
+      setTemplatesLoading(false)
+    }
+  }, [])
+
+  // Fetch templates once on mount so dropdown doesn't show loading on first open (H3)
+  useEffect(() => {
+    fetchTemplates("mount")
+  }, [fetchTemplates])
+
+  // #region agent log – mobile overflow (H1)
+  useEffect(() => {
+    if (!isMobile || !isMobileFilterOpen || (!loadTemplateOpen && !createTemplateMode)) return
+    const t = setTimeout(() => {
+      const card = document.querySelector<HTMLElement>("[data-mobile-templates-card]")
+      if (card) {
+        const style = getComputedStyle(card)
+        DEBUG_LOG({ location: "aop/page.tsx:mobile-templates-card", message: "Mobile Templates card overflow", hypothesisId: "H1", data: { overflow: style.overflow, overflowY: style.overflowY } })
+      }
+    }, 50)
+    return () => clearTimeout(t)
+  }, [isMobile, isMobileFilterOpen, loadTemplateOpen, createTemplateMode])
+  // #endregion
+
+  const handleSaveTemplate = async () => {
+    const name = templateName.trim()
+    if (!name) {
+      setTemplateSaveError("Template name is required")
+      return
+    }
+    setTemplateSaveError(null)
+    const payload = buildTemplatePayload()
+    try {
+      const res = await fetch("/api/aop/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, payload })
+      })
+      const json = await res.json()
+      if (json.status !== "success") {
+        setTemplateSaveError(json.message || "Failed to save template")
+        return
+      }
+      setTemplateModalOpen(false)
+      setTemplateName("")
+      await fetchTemplates("after_save")
+    } catch (e) {
+      setTemplateSaveError(e instanceof Error ? e.message : "Failed to save template")
+    }
+  }
+
+  const handleLoadTemplate = (template: { id: string; payload: Record<string, unknown> } | null) => {
+    if (template === null) {
+      startTransition(() => setFilterValue(INITIAL_FILTER))
+      setSelectedTemplateId(null)
+    } else {
+      startTransition(() => setFilterValue(mergeWithInitialFilter(template.payload)))
+      setSelectedTemplateId(template.id)
+    }
+    setLoadTemplateOpen(false)
+  }
+
+  const exitCreateTemplateMode = () => {
+    setCreateTemplateMode(false)
+  }
+
+  const buildTemplatePayload = useCallback((): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {}
+    for (const { key } of AOP_TEMPLATE_FILTER_KEYS) {
+      if (key === "q") {
+        const v = filterValue.q?.trim()
+        if (v) payload[key] = v
+      } else {
+        const arr = (filterValue as unknown as Record<string, unknown>)[key]
+        if (Array.isArray(arr) && arr.length > 0) {
+          payload[key] = arr.filter((x): x is string => typeof x === "string")
+        }
+      }
+    }
+    return payload
+  }, [filterValue])
+
+  const handleUpdateTemplate = async () => {
+    if (!selectedTemplateId || templateUpdating) return
+    setTemplateUpdateError(null)
+    setTemplateUpdating(true)
+    const payload = buildTemplatePayload()
+    try {
+      const res = await fetch(`/api/aop/templates/${selectedTemplateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload })
+      })
+      const json = await res.json()
+      if (json.status !== "success") {
+        setTemplateUpdateError(json.message || "Failed to update template")
+        return
+      }
+      await fetchTemplates("after_update")
+    } catch (e) {
+      setTemplateUpdateError(e instanceof Error ? e.message : "Failed to update template")
+    } finally {
+      setTemplateUpdating(false)
+    }
+  }
+
+  const handleDeleteTemplate = async () => {
+    const t = deleteConfirmTemplate
+    if (!t) return
+    setTemplateDeleteError(null)
+    try {
+      const res = await fetch(`/api/aop/templates/${t.id}`, { method: "DELETE" })
+      const json = await res.json()
+      if (json.status !== "success") {
+        setTemplateDeleteError(json.message || "Failed to delete template")
+        return
+      }
+      setDeleteConfirmTemplate(null)
+      if (selectedTemplateId === t.id) {
+        setSelectedTemplateId(null)
+        startTransition(() => setFilterValue(INITIAL_FILTER))
+      }
+      await fetchTemplates("after_delete")
+    } catch (e) {
+      setTemplateDeleteError(e instanceof Error ? e.message : "Failed to delete template")
+    }
   }
 
   // Build export params from current filter
@@ -386,7 +578,11 @@ export default function AopPage() {
     filterValue.priority_congest_urgent?.forEach((value) => {
       params.append('priority_congest_urgent', value)
     })
-    
+
+    filterValue.trial_gb_factory?.forEach((value) => {
+      params.append('trial_gb_factory', value)
+    })
+
     params.set('type', 'aop')
     
     return params
@@ -459,15 +655,235 @@ export default function AopPage() {
     }
   }
 
+  const selectedTemplateName = selectedTemplateId ? templates.find((t) => t.id === selectedTemplateId)?.name : null
+
   const filterPanel = (
     <div className="flex h-full flex-col gap-3">
-      <FilterBar
-        value={filterValue}
-        onChange={handleFilterChange}
-        onReset={handleFilterReset}
-        variant="aop"
-        endpoint="/api/aop/filters"
-      />
+      {/* Row 1 + floating Edit filters panel (dropdown-style) */}
+      <div className="relative">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setLoadTemplateOpen((o) => !o)
+                if (!loadTemplateOpen && templates.length === 0) fetchTemplates("dropdown_open")
+              }}
+              className="inline-flex min-w-[140px] items-center justify-between gap-1.5 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-1.5 text-[10px] font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+              title="Select a template"
+            >
+              <FolderOpen className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{selectedTemplateName ?? "Select template"}</span>
+              <ChevronDown className={`h-3 w-3 flex-shrink-0 transition ${loadTemplateOpen ? "rotate-180" : ""}`} />
+            </button>
+            {loadTemplateOpen && (
+              <>
+                <div className="absolute left-0 top-full z-50 mt-1 max-h-48 w-64 overflow-y-auto rounded-md border border-white/10 bg-[#0F1630] py-1 shadow-lg">
+                  {templatesLoading ? (
+                    <div className="px-3 py-2 text-[10px] text-white/50">Loading...</div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleLoadTemplate(null)}
+                        className="w-full px-3 py-1.5 text-left text-[10px] text-white/90 hover:bg-white/10"
+                      >
+                        All data
+                      </button>
+                      {templates.length === 0 ? (
+                        <div className="px-3 py-2 text-[10px] text-white/50">No templates saved yet.</div>
+                      ) : (
+                        templates.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => handleLoadTemplate({ id: t.id, payload: t.payload })}
+                            className="w-full px-3 py-1.5 text-left text-[10px] text-white/90 hover:bg-white/10"
+                          >
+                            {t.name}
+                            {t.created_at && (
+                              <span className="ml-1 text-white/50">
+                                ({new Date(t.created_at).toLocaleDateString()})
+                              </span>
+                            )}
+                          </button>
+                        ))
+                      )}
+                    </>
+                  )}
+                </div>
+                <div
+                  className="fixed inset-0 z-40"
+                  aria-hidden
+                  onClick={() => setLoadTemplateOpen(false)}
+                />
+              </>
+            )}
+          </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (!createTemplateMode) {
+              setTemplateUpdateError(null)
+              setTemplateDeleteError(null)
+            }
+            setCreateTemplateMode((prev) => !prev)
+          }}
+          className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-[10px] font-semibold transition ${
+            createTemplateMode
+              ? "border-amber-500/60 bg-amber-500/20 text-amber-200 hover:bg-amber-500/25"
+              : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+          }`}
+          title={createTemplateMode ? "Close filter panel" : "Edit filter criteria"}
+        >
+          <SlidersHorizontal className="h-3 w-3" />
+          Edit filters
+        </button>
+        </div>
+
+        {/* Floating Edit filters panel (dropdown-style, above other content) */}
+        {createTemplateMode && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              aria-hidden
+              onClick={() => setCreateTemplateMode(false)}
+            />
+            <div
+              className="absolute left-0 top-full z-50 mt-1 w-full min-w-[320px] max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-[#0F1630] p-3 shadow-xl"
+              role="dialog"
+              aria-label="Edit filters"
+            >
+              <FilterBar
+                value={filterValue}
+                onChange={handleFilterChange}
+                onReset={handleFilterReset}
+                variant="aop"
+                endpoint="/api/aop/filters"
+              />
+              {(templateUpdateError || templateDeleteError) && (
+                <p className="mt-2 text-[10px] text-red-400">{templateUpdateError ?? templateDeleteError}</p>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {selectedTemplateId ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleUpdateTemplate}
+                      disabled={templateUpdating}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                      title="Update this template with current filters"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      {templateUpdating ? "Updating..." : "Update template"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const t = templates.find((x) => x.id === selectedTemplateId)
+                        if (t) setDeleteConfirmTemplate({ id: t.id, name: t.name })
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200 transition hover:bg-red-500/20"
+                      title="Delete this template"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Delete template
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={openSaveTemplateModal}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-200 transition hover:bg-amber-500/20"
+                    title="Save current filters as template"
+                  >
+                    <Save className="h-3 w-3" />
+                    Save as template
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { exitCreateTemplateMode(); setTemplateUpdateError(null); setTemplateDeleteError(null) }}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-2 py-1 text-[10px] font-semibold text-white/80 transition hover:bg-white/10"
+                  title="Done editing filters"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Delete template confirmation modal */}
+      {deleteConfirmTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal aria-labelledby="delete-template-title">
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0F1630] p-4 shadow-xl">
+            <h2 id="delete-template-title" className="mb-3 text-sm font-semibold text-white">Delete template</h2>
+            <p className="mb-3 text-[11px] text-white/80">
+              Delete template &quot;{deleteConfirmTemplate.name}&quot;? This cannot be undone.
+            </p>
+            {templateDeleteError && (
+              <p className="mb-2 text-[10px] text-red-400">{templateDeleteError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setDeleteConfirmTemplate(null); setTemplateDeleteError(null) }}
+                className="rounded-md border border-white/20 px-2 py-1 text-[10px] font-medium text-white/80 hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteTemplate}
+                className="rounded-md border border-red-500/40 bg-red-500/20 px-2 py-1 text-[10px] font-medium text-red-200 hover:bg-red-500/30"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {templateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal aria-labelledby="save-template-title">
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0F1630] p-4 shadow-xl">
+            <h2 id="save-template-title" className="mb-3 text-sm font-semibold text-white">Save filter template</h2>
+            <div className="mb-3">
+              <label htmlFor="template-name" className="mb-1 block text-[10px] text-white/60">Template name</label>
+              <input
+                id="template-name"
+                type="text"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="e.g. Jakarta Wave 1"
+                className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder:text-white/40"
+                autoFocus
+              />
+            </div>
+            {templateSaveError && (
+              <p className="mb-2 text-[10px] text-red-400">{templateSaveError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setTemplateModalOpen(false); setTemplateSaveError(null) }}
+                className="rounded-md border border-white/20 px-2 py-1 text-[10px] font-medium text-white/80 hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTemplate}
+                className="rounded-md border border-amber-500/40 bg-amber-500/20 px-2 py-1 text-[10px] font-medium text-amber-200 hover:bg-amber-500/30"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {(aopLoading || isStaleData) && (
         <p className="text-[10px] text-white/50 flex items-center gap-1">
           <span className="inline-block w-2 h-2 rounded-full bg-emerald-400/50 animate-pulse" />
@@ -654,18 +1070,18 @@ export default function AopPage() {
 
       <main className="flex-1 overflow-y-auto pb-8">
         <section className="px-4 pt-4">
-          <div className="rounded-2xl border border-white/10 bg-[#111d41]/90 backdrop-blur-sm shadow-[0_10px_30px_rgba(5,11,27,0.45)] overflow-hidden">
+          <div data-mobile-templates-card className="rounded-2xl border border-white/10 bg-[#111d41]/90 backdrop-blur-sm shadow-[0_10px_30px_rgba(5,11,27,0.45)] overflow-visible">
             <button
               type="button"
               onClick={() => setIsMobileFilterOpen((prev) => !prev)}
               className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-white"
             >
               <span className="flex items-center gap-2">
-                <SlidersHorizontal className="h-4 w-4 text-white/80" />
-                <span>Filter Data</span>
-                {hasActiveFilters && (
-                  <span className="inline-flex items-center justify-center rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-white/80">
-                    {activeFilterCount}
+                <FolderOpen className="h-4 w-4 text-white/80" />
+                <span>Templates</span>
+                {selectedTemplateName && (
+                  <span className="truncate max-w-[120px] text-[11px] font-normal text-white/70">
+                    ({selectedTemplateName})
                   </span>
                 )}
               </span>
@@ -675,33 +1091,160 @@ export default function AopPage() {
             </button>
 
             {isMobileFilterOpen && (
-              <div className="border-t border-white/10 bg-[#050B1B]/60 px-3 py-3">
-                <FilterBar
-                  value={filterValue}
-                  onChange={handleFilterChange}
-                  onReset={handleFilterReset}
-                  variant="aop"
-                  endpoint="/api/aop/filters"
-                />
+              <div className="border-t border-white/10 bg-[#050B1B]/60 px-3 py-3 space-y-3">
+                {/* Template selector + Edit filters + floating panel (same as desktop) */}
+                <div className="relative">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoadTemplateOpen((o) => !o)
+                          if (!loadTemplateOpen && templates.length === 0) fetchTemplates("dropdown_open")
+                        }}
+                        className="inline-flex w-full min-w-0 items-center justify-between gap-1.5 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-1.5 text-[10px] font-semibold text-cyan-200"
+                      >
+                        <FolderOpen className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{selectedTemplateName ?? "Select template"}</span>
+                        <ChevronDown className={`h-3 w-3 flex-shrink-0 ${loadTemplateOpen ? "rotate-180" : ""}`} />
+                      </button>
+                      {loadTemplateOpen && (
+                        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-40 overflow-y-auto rounded-md border border-white/10 bg-[#0F1630] py-1 shadow-lg">
+                          {templatesLoading ? (
+                            <div className="px-3 py-2 text-[10px] text-white/50">Loading...</div>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleLoadTemplate(null)}
+                                className="w-full px-3 py-1.5 text-left text-[10px] text-white/90 hover:bg-white/10"
+                              >
+                                All data
+                              </button>
+                              {templates.length === 0 ? (
+                                <div className="px-3 py-2 text-[10px] text-white/50">No templates saved yet.</div>
+                              ) : (
+                                templates.map((t) => (
+                                  <button
+                                    key={t.id}
+                                    type="button"
+                                    onClick={() => handleLoadTemplate({ id: t.id, payload: t.payload })}
+                                    className="w-full px-3 py-1.5 text-left text-[10px] text-white/90 hover:bg-white/10"
+                                  >
+                                    {t.name}
+                                  </button>
+                                ))
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!createTemplateMode) {
+                          setTemplateUpdateError(null)
+                          setTemplateDeleteError(null)
+                        }
+                        setCreateTemplateMode((prev) => !prev)
+                      }}
+                      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-[10px] font-semibold ${
+                        createTemplateMode
+                          ? "border-amber-500/60 bg-amber-500/20 text-amber-200"
+                          : "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                      }`}
+                    >
+                      <SlidersHorizontal className="h-3 w-3" />
+                      Edit filters
+                    </button>
+                  </div>
+
+                  {/* Edit filters panel: in-flow on mobile (avoids overlap with content below), overlay to close */}
+                  {createTemplateMode && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        aria-hidden
+                        onClick={() => setCreateTemplateMode(false)}
+                      />
+                      <div
+                        className="relative z-50 mt-2 flex max-h-[85vh] flex-col rounded-xl border border-white/10 bg-[#0F1630] p-3 shadow-xl"
+                        role="dialog"
+                        aria-label="Edit filters"
+                      >
+                        <div className="min-h-0 flex-1 overflow-y-auto">
+                          <FilterBar
+                            value={filterValue}
+                            onChange={handleFilterChange}
+                            onReset={handleFilterReset}
+                            variant="aop"
+                            endpoint="/api/aop/filters"
+                          />
+                        </div>
+                        <div className="mt-2 flex-shrink-0 border-t border-white/5 pt-2">
+                          {(templateUpdateError || templateDeleteError) && (
+                            <p className="mb-2 text-[10px] text-red-400">{templateUpdateError ?? templateDeleteError}</p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {selectedTemplateId ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={handleUpdateTemplate}
+                                  disabled={templateUpdating}
+                                  className="inline-flex items-center gap-1.5 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                  {templateUpdating ? "Updating..." : "Update template"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const t = templates.find((x) => x.id === selectedTemplateId)
+                                    if (t) setDeleteConfirmTemplate({ id: t.id, name: t.name })
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                  Delete template
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={openSaveTemplateModal}
+                                className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-200"
+                              >
+                                <Save className="h-3 w-3" />
+                                Save as template
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => { exitCreateTemplateMode(); setTemplateUpdateError(null); setTemplateDeleteError(null) }}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-2 py-1 text-[10px] font-semibold text-white/80"
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 {aopLoading && (
-                  <p className="mt-2 text-[11px] text-white/50">
-                    Loading AOP data...
-                  </p>
+                  <p className="text-[11px] text-white/50">Loading AOP data...</p>
                 )}
                 {aopError && (
-                  <p className="mt-2 text-[11px] text-red-400">
-                    Error: {aopError}. Using placeholder data.
-                  </p>
+                  <p className="text-[11px] text-red-400">Error: {aopError}. Using placeholder data.</p>
                 )}
                 {!aopLoading && !aopError && aopData && aopData.length > 0 && (
-                  <p className="mt-2 text-[11px] text-white/50">
-                    Live AOP operational metrics from database ({aopData.length} sites).
-                  </p>
+                  <p className="text-[11px] text-white/50">Live AOP operational metrics from database ({aopData.length} sites).</p>
                 )}
                 {!aopLoading && !aopError && (!aopData || aopData.length === 0) && (
-                  <p className="mt-2 text-[11px] text-white/50">
-                    Placeholder data shown. No AOP data found in database.
-                  </p>
+                  <p className="text-[11px] text-white/50">Placeholder data shown. No AOP data found in database.</p>
                 )}
               </div>
             )}

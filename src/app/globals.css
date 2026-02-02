@@ -518,6 +518,11 @@ html, body {
 /* Specific compact adjustments for certain rows */
 .wallboard-filter-card {
   min-height: 48px !important;
+  /* Allow template dropdown to extend below without clipping (H1) */
+  overflow: visible !important;
+  /* Stack above matrix card so dropdown is not painted behind it (H2) */
+  position: relative;
+  z-index: 10;
 }
 
 .wallboard-matrix-card {

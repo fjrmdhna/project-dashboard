@@ -18,6 +18,7 @@ function buildFilterQuery(searchParams: URLSearchParams) {
   const ranScores = searchParams.getAll('ran_score')
   const years = searchParams.getAll('year')
   const priorityCongestUrgent = searchParams.getAll('priority_congest_urgent')
+  const trialGbFactory = searchParams.getAll('trial_gb_factory')
   const search = searchParams.get('q')
 
   let query = supabase
@@ -142,6 +143,18 @@ function buildFilterQuery(searchParams: URLSearchParams) {
       })
       .join(',')
     query = query.or(priorityConditions)
+  }
+
+  // Trial GB Factory (pic_indosat): blank in DB = "Other" in dropdown
+  if (trialGbFactory.length > 0) {
+    const picIndosatConditions = trialGbFactory.map((v) => {
+      const trimmed = v.trim()
+      if (trimmed === 'Other') {
+        return "pic_indosat.is.null,pic_indosat.eq.''"
+      }
+      return `pic_indosat.eq.${trimmed}`
+    })
+    query = query.or(picIndosatConditions.join(','))
   }
 
   if (search && search.trim().length > 0) {

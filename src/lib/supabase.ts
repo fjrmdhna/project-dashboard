@@ -601,16 +601,59 @@ export async function getAopFilterOptions(forceRefresh = false) {
     return result
   }
 
+  // Trial GB Factory (pic_indosat): include null/empty as "Other"
+  const fetchPicIndosatValues = async (): Promise<string[]> => {
+    const values = new Set<string>()
+    try {
+      let page = 0
+      let hasMore = true
+      const pageSize = 1000
+      const maxPages = 100
+      while (hasMore && page < maxPages) {
+        const from = page * pageSize
+        const to = from + pageSize - 1
+        const { data, error } = await supabase
+          .from('site_data_aop')
+          .select('pic_indosat')
+          .range(from, to)
+          .order('pic_indosat', { ascending: true, nullsFirst: true })
+
+        if (error) throw error
+        const rows = (data as unknown) as { pic_indosat: string | null }[] | null
+        if (!rows || rows.length === 0) {
+          hasMore = false
+          break
+        }
+        rows.forEach((row) => {
+          const v = row.pic_indosat
+          if (v === null || v === undefined || String(v).trim() === '') {
+            values.add('Other')
+          } else {
+            values.add(String(v).trim())
+          }
+        })
+        hasMore = rows.length === pageSize
+        page += 1
+      }
+      const result = Array.from(values).sort((a, b) => (a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)))
+      console.log(`[AOP Filters] pic_indosat (Trial GB Factory): ${result.length} distinct values`)
+      return result
+    } catch (err) {
+      console.error('[AOP Filters] Error fetching pic_indosat:', err)
+      return []
+    }
+  }
+
   // OPTIMIZED: Fetch semua columns secara paralel dengan pagination per column
-  // Setiap column akan di-fetch dengan pagination untuk memastikan semua data ter-fetch
-  const [vendors, programs, circles, siteCategories, ranScoresRaw, years, priorityCongestUrgent] = await Promise.all([
+  const [vendors, programs, circles, siteCategories, ranScoresRaw, years, priorityCongestUrgent, trialGbFactory] = await Promise.all([
     fetchDistinctValuesOptimized('vendor_name'),
     fetchDistinctValuesOptimized('program_report'),
     fetchDistinctValuesOptimized('region_circle'),
     fetchDistinctValuesOptimized('site_category'),
     fetchDistinctValuesOptimized('ran_score'),
     fetchDistinctValuesOptimized('year'),
-    fetchDistinctValuesOptimized('priority_congest_urgent')
+    fetchDistinctValuesOptimized('priority_congest_urgent'),
+    fetchPicIndosatValues()
   ])
 
   // Normalize ranScores: apply normalization and deduplicate
@@ -630,7 +673,8 @@ export async function getAopFilterOptions(forceRefresh = false) {
     siteCategories,
     ranScores,
     years: years.sort((a, b) => b.localeCompare(a)), // Sort years descending (newest first)
-    priorityCongestUrgent
+    priorityCongestUrgent,
+    trialGbFactory
   }
 
   // Cache hasil

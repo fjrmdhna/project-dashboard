@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useTransition } from "react"
 import { Search, Tag, X } from "lucide-react"
 import { MultiSelect } from "@/components/ui/MultiSelect"
 import { useDebounce } from "@/hooks/useDebounce"
@@ -20,6 +20,7 @@ export interface FilterValue {
   site_category?: string[] // Site category filter for AOP
   ran_score?: string[] // RAN Score filter for AOP
   priority_congest_urgent?: string[] // Priority filter for AOP
+  trial_gb_factory?: string[] // Trial GB Factory (pic_indosat); blank = "Other"
 }
 
 // Props untuk FilterBar
@@ -43,6 +44,7 @@ interface FilterOptions {
   siteCategories?: string[] // Site categories for AOP
   ranScores?: string[] // RAN Scores for AOP
   priorityCongestUrgent?: string[] // Priority filter for AOP
+  trialGbFactory?: string[] // Trial GB Factory (pic_indosat); blank shown as "Other"
 }
 
 // Fungsi helper untuk memendekkan teks yang terlalu panjang
@@ -53,6 +55,7 @@ const truncateText = (text: string | undefined | null, maxLength: number = 20): 
 }
 
 export function FilterBar({ value, onChange, onReset, variant = "default", endpoint = "/api/filters" }: FilterBarProps) {
+  const [, startTransition] = useTransition()
   // State lokal untuk search input (sebelum debounce)
   const [searchInput, setSearchInput] = useState(value.q)
   
@@ -67,7 +70,8 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     circles: [],
     siteCategories: [],
     ranScores: [],
-    priorityCongestUrgent: []
+    priorityCongestUrgent: [],
+    trialGbFactory: []
   })
   
   // State untuk loading
@@ -83,7 +87,6 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     
     async function fetchOptions(forceRefresh = false) {
       try {
-        const t0 = Date.now()
         setIsLoading(true)
         // Force refresh on initial load to ensure fresh data with new mapping
         const url = forceRefresh ? `${endpoint}?refresh=true` : endpoint
@@ -104,7 +107,8 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               circles: data.data.circles || [],
               siteCategories: data.data.siteCategories || [],
               ranScores: data.data.ranScores || [],
-              priorityCongestUrgent: data.data.priorityCongestUrgent || []
+              priorityCongestUrgent: data.data.priorityCongestUrgent || [],
+              trialGbFactory: data.data.trialGbFactory || []
             }
             
             // For AOP variant: detect stale cache by checking if siteCategories are normalized
@@ -211,38 +215,18 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               }
             }
             
-            setOptions(newOptions)
+            // Defer heavy options update so opening a dropdown doesn't freeze (lag fix)
+            startTransition(() => {
+              setOptions(newOptions)
+            })
 
-            const t1 = Date.now()
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                sessionId: 'debug-session',
-                runId: 'initial',
-                hypothesisId: 'H3',
-                location: 'src/components/filters/FilterBar.tsx:84-159',
-                message: 'FilterBar options loaded',
-                data: {
-                  durationMs: t1 - t0,
-                  endpoint: url,
-                  vendors: newOptions.vendors.length,
-                  programs: newOptions.programs.length,
-                  cities: newOptions.cities.length,
-                  nanoClusters: newOptions.nanoClusters.length
-                },
-                timestamp: Date.now()
-              })
-            }).catch(() => {})
-            // #endregion
           }
         }
       } catch (error) {
         console.error('Error fetching filter options:', error)
       } finally {
         if (isMounted) {
-          setIsLoading(false)
+          startTransition(() => setIsLoading(false))
         }
       }
     }
@@ -319,12 +303,17 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     console.log('Priority Congest Urgent filter changed:', selected)
     onChange({ ...value, priority_congest_urgent: selected })
   }, [onChange, value])
-  
+
+  // Handler untuk Trial GB Factory selection (AOP variant)
+  const handleTrialGbFactoryChange = useCallback((selected: string[]) => {
+    onChange({ ...value, trial_gb_factory: selected })
+  }, [onChange, value])
+
   // Handler untuk reset semua filter
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [], ran_score: [], priority_congest_urgent: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [], ran_score: [], priority_congest_urgent: [], trial_gb_factory: [] })
   }
 
   // Handler untuk remove individual filter
@@ -353,12 +342,13 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.status?.length || 0) > 0 ||
     (value.site_category?.length || 0) > 0 ||
     (value.ran_score?.length || 0) > 0 ||
-    (value.priority_congest_urgent?.length || 0) > 0
+    (value.priority_congest_urgent?.length || 0) > 0 ||
+    (value.trial_gb_factory?.length || 0) > 0
 
-  // Grid layout: AOP 7 filters; default (Hermes) 8 filters: vendor, program, city, cluster, circle, year, site_category
+  // Grid layout: AOP 8 filters (Circle, Site Category, RAN Score, Year, Priority, Trial GB Factory); default (Hermes) 8 filters
   const gridClass =
     variant === "aop"
-      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(7,minmax(0,1fr))_auto] md:items-center md:gap-2"
+      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(8,minmax(0,1fr))_auto] md:items-center md:gap-2"
       : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(7,minmax(0,1fr))_auto] md:items-center md:gap-2"
   
   return (
@@ -510,6 +500,16 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.priority_congest_urgent ?? []}
               placeholder="Priority"
               onChange={handlePriorityCongestUrgentChange}
+              disabled={isLoading}
+              width="w-full"
+              className="col-span-2 md:col-span-1"
+            />
+            {/* Trial GB Factory Filter (pic_indosat; blank = Other) */}
+            <MultiSelect
+              options={options.trialGbFactory || []}
+              selected={value.trial_gb_factory ?? []}
+              placeholder="Trial GB Factory"
+              onChange={handleTrialGbFactoryChange}
               disabled={isLoading}
               width="w-full"
               className="col-span-2 md:col-span-1"
@@ -684,6 +684,20 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               <X
                 className="h-2 w-2 cursor-pointer"
                 onClick={() => removeFilter('priority_congest_urgent', priority)}
+              />
+            </div>
+          ))}
+
+          {value.trial_gb_factory?.map(tgf => (
+            <div
+              key={`trial-gb-factory-${tgf}`}
+              className="bg-sky-500/20 text-sky-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`Trial GB Factory: ${tgf}`}
+            >
+              <span>TGF: {truncateText(tgf, 10)}</span>
+              <X
+                className="h-2 w-2 cursor-pointer"
+                onClick={() => removeFilter('trial_gb_factory', tgf)}
               />
             </div>
           ))}

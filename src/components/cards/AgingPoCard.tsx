@@ -8,6 +8,7 @@ interface Row {
   system_key?: string | null
   project_name?: string | null
   po_date?: string | null
+  po_number?: string | null
   rfs_af?: string | null
 }
 
@@ -18,14 +19,17 @@ export interface AgingPoCardProps {
 }
 
 interface ProjectAgingData {
-  id: string           // Unique key for React
-  projectName: string  // Display name
-  poAgingCount: number // Number of POs that are aging (no rfs_af)
-  oldestAgingDays: number // Oldest PO aging in days
-  poNullCount: number  // Number of rows with null po_date
-  totalScope: number   // Total system_key (total scope) in project
-  completedScope: number // system_key with rfs_af filled
-  completedPct: number // Percentage of completed scope (rfs_af / total scope)
+  id: string
+  projectName: string
+  /** Unique system_key count that are aging (not completed + have po_date) */
+  agingSystemKeyCount: number
+  /** Unique po_number count among aging rows */
+  agingUniquePoCount: number
+  oldestAgingDays: number
+  poNullCount: number
+  totalScope: number
+  completedScope: number
+  completedPct: number
 }
 
 // Calculate days between two dates
@@ -85,7 +89,8 @@ function getCompletionColor(pct: number): string {
 // Project item component
 interface ProjectItemProps {
   projectName: string
-  poAgingCount: number
+  agingSystemKeyCount: number
+  agingUniquePoCount: number
   oldestAgingDays: number
   poNullCount: number
   completedPct: number
@@ -93,9 +98,9 @@ interface ProjectItemProps {
   completedScope: number
 }
 
-function ProjectItem({ projectName, poAgingCount, oldestAgingDays, poNullCount, completedPct, totalScope, completedScope }: ProjectItemProps) {
+function ProjectItem({ projectName, agingSystemKeyCount, agingUniquePoCount, oldestAgingDays, poNullCount, completedPct, totalScope, completedScope }: ProjectItemProps) {
   const agingColor = getAgingColor(oldestAgingDays)
-  
+
   return (
     <div className={`flex items-center justify-between rounded-md border ${agingColor.border} p-1.5 transition-all hover:bg-white/5 min-w-0`}>
       <div className="flex items-center flex-1 min-w-0">
@@ -107,7 +112,7 @@ function ProjectItem({ projectName, poAgingCount, oldestAgingDays, poNullCount, 
             {projectName}
           </div>
           <div className="text-[7px] text-[#B0B7C3]">
-            {poAgingCount} aging PO{poAgingCount !== 1 ? 's' : ''}
+            {agingSystemKeyCount} Syskey from {agingUniquePoCount} PO
           </div>
         </div>
       </div>
@@ -142,79 +147,74 @@ export function AgingPoCard({ rows, isLoading = false, className = "" }: AgingPo
     // Group data by project
     const projectMap = new Map<string, {
       displayName: string
-      poAgingCount: number
+      agingSystemKeys: Set<string>
+      agingPoNumbers: Set<string>
       oldestAgingDays: number
       poNullCount: number
-      totalScope: number      // Total unique system_key
-      completedScope: number  // system_key with rfs_af
-      systemKeyStatus: Map<string, boolean> // Track if system_key has rfs_af (completed)
+      totalScope: number
+      completedScope: number
+      systemKeyStatus: Map<string, boolean>
     }>()
 
-    // Single pass through rows
     for (const row of rows) {
       const rawProjectName = row.project_name
-      if (!rawProjectName || !row.system_key) continue // Skip rows without project name or system_key
-      
+      if (!rawProjectName || !row.system_key) continue
+
       const normalizedKey = normalizeProjectName(rawProjectName)
       const displayName = formatProjectName(rawProjectName)
-      
+
       const data = projectMap.get(normalizedKey) || {
         displayName,
-        poAgingCount: 0,
+        agingSystemKeys: new Set<string>(),
+        agingPoNumbers: new Set<string>(),
         oldestAgingDays: 0,
         poNullCount: 0,
         totalScope: 0,
         completedScope: 0,
         systemKeyStatus: new Map<string, boolean>()
       }
-      
-      // Track system_key and its completion status
+
       const hasRfsAf = isValidDate(row.rfs_af)
       const currentStatus = data.systemKeyStatus.get(row.system_key)
-      
+
       if (currentStatus === undefined) {
-        // First time seeing this system_key
         data.systemKeyStatus.set(row.system_key, hasRfsAf)
         data.totalScope++
-        if (hasRfsAf) {
-          data.completedScope++
-        }
+        if (hasRfsAf) data.completedScope++
       } else {
-        // Update completion status: system_key is completed if ANY row has rfs_af
         if (!currentStatus && hasRfsAf) {
           data.systemKeyStatus.set(row.system_key, true)
           data.completedScope++
         }
       }
-      
-      // Check aging PO: only count if system_key is NOT completed AND has po_date
-      const isCompleted = data.systemKeyStatus.get(row.system_key) || false
+
+      const isCompleted = data.systemKeyStatus.get(row.system_key) ?? false
       if (!isCompleted) {
         const hasPoDate = isValidDate(row.po_date)
-        
+
         if (!hasPoDate) {
           data.poNullCount++
         } else {
-          // Calculate aging for this PO (hasPoDate already validated)
+          data.agingSystemKeys.add(row.system_key)
+          const poNum = (row.po_number ?? '').toString().trim()
+          if (poNum) data.agingPoNumbers.add(poNum)
+
           const agingDays = calculateAgingDays(row.po_date as string)
-          data.poAgingCount++
-          
-          // Track oldest (max) aging
           if (agingDays > data.oldestAgingDays) {
             data.oldestAgingDays = agingDays
           }
         }
       }
-      
+
       projectMap.set(normalizedKey, data)
     }
 
-    // Convert to array
     const result: ProjectAgingData[] = Array.from(projectMap.entries())
       .map(([normalizedKey, data]) => ({
         id: normalizedKey,
         projectName: data.displayName,
-        poAgingCount: data.poAgingCount,
+        agingSystemKeyCount: data.agingSystemKeys.size,
+        agingUniquePoCount: data.agingPoNumbers.size,
         oldestAgingDays: data.oldestAgingDays,
         poNullCount: data.poNullCount,
         totalScope: data.totalScope,
@@ -227,16 +227,16 @@ export function AgingPoCard({ rows, isLoading = false, className = "" }: AgingPo
     return result
   }, [rows, isLoading])
 
-  // Calculate totals
   const totals = useMemo(() => {
     const sums = projectData.reduce(
       (acc, item) => ({
-        poAgingCount: acc.poAgingCount + item.poAgingCount,
+        agingSystemKeyCount: acc.agingSystemKeyCount + item.agingSystemKeyCount,
+        agingUniquePoCount: acc.agingUniquePoCount + item.agingUniquePoCount,
         poNullCount: acc.poNullCount + item.poNullCount,
         totalScope: acc.totalScope + item.totalScope,
         completedScope: acc.completedScope + item.completedScope
       }),
-      { poAgingCount: 0, poNullCount: 0, totalScope: 0, completedScope: 0 }
+      { agingSystemKeyCount: 0, agingUniquePoCount: 0, poNullCount: 0, totalScope: 0, completedScope: 0 }
     )
     return {
       ...sums,
@@ -271,10 +271,13 @@ export function AgingPoCard({ rows, isLoading = false, className = "" }: AgingPo
               {totals.completedPct.toFixed(0)}%
             </div>
           </div>
-          {/* Total aging POs */}
-          <div className="bg-orange-500/10 px-1.5 py-0.5 rounded-sm flex items-center" title="Total aging POs">
+          {/* Total aging PO count; full detail (Syskey / PO) on hover */}
+          <div
+            className="bg-orange-500/10 px-1.5 py-0.5 rounded-sm flex items-center cursor-default"
+            title={`${totals.agingSystemKeyCount.toLocaleString()} Syskey from ${totals.agingUniquePoCount.toLocaleString()} PO`}
+          >
             <div className="text-[7px] text-orange-300 mr-0.5">Aging:</div>
-            <div className="text-[9px] font-bold text-white">{totals.poAgingCount.toLocaleString()}</div>
+            <div className="text-[9px] font-bold text-white">{totals.agingUniquePoCount.toLocaleString()} PO</div>
           </div>
           {/* Total null POs */}
           {totals.poNullCount > 0 && (
@@ -318,7 +321,8 @@ export function AgingPoCard({ rows, isLoading = false, className = "" }: AgingPo
               <ProjectItem
                 key={project.id}
                 projectName={project.projectName}
-                poAgingCount={project.poAgingCount}
+                agingSystemKeyCount={project.agingSystemKeyCount}
+                agingUniquePoCount={project.agingUniquePoCount}
                 oldestAgingDays={project.oldestAgingDays}
                 poNullCount={project.poNullCount}
                 completedPct={project.completedPct}

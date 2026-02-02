@@ -129,6 +129,7 @@ export interface AopSiteData extends MatrixRow {
   site_category?: string | null
   ran_score?: string | null
   priority_congest_urgent?: string | null
+  pic_indosat?: string | null  // Trial GB Factory filter; blank = "Other"
   mocn_activation_forecast?: string | null  // Baseline for ProgressCurve
   rfs_bf?: string | null                    // Legacy baseline
   rfs_ff?: string | null
@@ -206,6 +207,7 @@ export interface UseAopDataOptions {
   ranScores?: string[]
   years?: string[]
   priorityCongestUrgent?: string[]
+  trialGbFactory?: string[]  // pic_indosat; blank in data = "Other"
   search?: string
   autoFetch?: boolean
 }
@@ -225,6 +227,12 @@ const EMPTY_STATS: AopDataStats = {
   nanoClusters: 0
 }
 
+// Normalize pic_indosat for filter: blank → "Other"
+function normalizePicIndosatForFilter(value: string | null | undefined): string {
+  if (value === null || value === undefined || String(value).trim() === '') return 'Other'
+  return String(value).trim()
+}
+
 // Client-side filter function - much faster than API call
 function filterDataClientSide(
   data: AopSiteData[],
@@ -235,20 +243,20 @@ function filterDataClientSide(
   ranScores: string[],
   years: string[],
   priorityCongestUrgent: string[],
+  trialGbFactory: string[],
   search: string
 ): AopSiteData[] {
   if (!data || data.length === 0) return []
-  
-  // If no filters, return all data
-  const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
-                     circles.length > 0 || siteCategories.length > 0 || 
-                     ranScores.length > 0 || years.length > 0 || 
-                     priorityCongestUrgent.length > 0 || search.length > 0
-  
+
+  const hasFilters = vendorNames.length > 0 || programReports.length > 0 ||
+                     circles.length > 0 || siteCategories.length > 0 ||
+                     ranScores.length > 0 || years.length > 0 ||
+                     priorityCongestUrgent.length > 0 || trialGbFactory.length > 0 || search.length > 0
+
   if (!hasFilters) return data
-  
+
   const searchLower = search.toLowerCase()
-  
+
   const filtered = data.filter((row) => {
     // Vendor filter
     if (vendorNames.length > 0 && !vendorNames.includes(row.vendor_name || '')) {
@@ -291,14 +299,18 @@ function filterDataClientSide(
     }
     
     // Priority Congest Urgent filter (normalized matching)
-    // Filter values are normalized (e.g., "Prio Lebaran")
-    // Row values need to be normalized before comparison
     if (priorityCongestUrgent.length > 0) {
       const normalizedRowPriority = normalizePriorityCongestUrgentForFilter(row.priority_congest_urgent)
       const matchesPriority = priorityCongestUrgent.some(p => normalizedRowPriority === normalizePriorityCongestUrgentForFilter(p))
       if (!matchesPriority) return false
     }
-    
+
+    // Trial GB Factory (pic_indosat): blank = "Other"
+    if (trialGbFactory.length > 0) {
+      const rowValue = normalizePicIndosatForFilter(row.pic_indosat)
+      if (!trialGbFactory.includes(rowValue)) return false
+    }
+
     // Search filter
     if (searchLower) {
       const searchFields = [
@@ -462,7 +474,7 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
 }
 
 export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
-  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], ranScores = [], years = [], priorityCongestUrgent = [], search = '' } = options
+  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], ranScores = [], years = [], priorityCongestUrgent = [], trialGbFactory = [], search = '' } = options
 
   // OPTIMIZATION: Always fetch ALL data (no filter) and filter client-side
   // This makes filter changes instant instead of waiting 15-20s for API
@@ -511,13 +523,13 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
     }
     
-    const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
-                       circles.length > 0 || siteCategories.length > 0 || 
-                       ranScores.length > 0 || years.length > 0 || 
-                       priorityCongestUrgent.length > 0 || search.length > 0
-    
+    const hasFilters = vendorNames.length > 0 || programReports.length > 0 ||
+                       circles.length > 0 || siteCategories.length > 0 ||
+                       ranScores.length > 0 || years.length > 0 ||
+                       priorityCongestUrgent.length > 0 || trialGbFactory.length > 0 || search.length > 0
+
     const dataToUse = hasFilters
-      ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, ranScores, years, priorityCongestUrgent, search)
+      ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, ranScores, years, priorityCongestUrgent, trialGbFactory, search)
       : baseData.data
 
     // Safety check: ensure dataToUse is always an array
@@ -533,7 +545,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       filteredStats: stats,
       aggregated: agg
     }
-  }, [baseData, vendorNames, programReports, circles, siteCategories, ranScores, years, priorityCongestUrgent, search])
+  }, [baseData, vendorNames, programReports, circles, siteCategories, ranScores, years, priorityCongestUrgent, trialGbFactory, search])
 
   // Refetch function
   const refetch = useCallback(async () => {

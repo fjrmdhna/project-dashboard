@@ -1,8 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
-import { RefreshCw } from 'lucide-react'
+import { ChevronDown, FolderOpen, Pencil, RefreshCw, Save, SlidersHorizontal, Trash2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 
 const Hermes5GMap = dynamic(() => import('@/components/maps/Hermes5GMap').then(mod => ({ default: mod.default })), {
@@ -19,6 +20,7 @@ const Hermes5GMap = dynamic(() => import('@/components/maps/Hermes5GMap').then(m
 
 import type { HermesMapPoint, StatusLabel } from '@/components/maps/Hermes5GMap'
 import { FilterBar, FilterValue } from '@/components/filters/FilterBar'
+import { useAopTemplates } from '@/hooks/useAopTemplates'
 import { useDebounce } from '@/hooks/useDebounce'
 
 // Compact point format from API
@@ -117,7 +119,12 @@ const INITIAL_FILTER: FilterValue = {
   imp_ttp: [],
   nano_cluster: [],
   status: [],
-  circle: []
+  circle: [],
+  site_category: [],
+  ran_score: [],
+  year: [],
+  priority_congest_urgent: [],
+  trial_gb_factory: []
 }
 
 function formatTimestamp(timestamp: string | null) {
@@ -151,6 +158,41 @@ export default function AopMapPage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [showExcluded, setShowExcluded] = useState(true)
 
+  const {
+    templates,
+    templatesLoading,
+    selectedTemplateId,
+    selectedTemplateName,
+    loadTemplateOpen,
+    setLoadTemplateOpen,
+    createTemplateMode,
+    setCreateTemplateMode,
+    fetchTemplates,
+    handleLoadTemplate,
+    openSaveTemplateModal,
+    exitCreateTemplateMode,
+    handleSaveTemplate,
+    handleUpdateTemplate,
+    handleDeleteTemplate,
+    templateModalOpen,
+    setTemplateModalOpen,
+    templateName,
+    setTemplateName,
+    templateSaveError,
+    templateUpdateError,
+    templateDeleteError,
+    deleteConfirmTemplate,
+    setDeleteConfirmTemplate,
+    templateUpdating,
+    setTemplateUpdateError,
+    setTemplateDeleteError,
+    setTemplateSaveError,
+  } = useAopTemplates({
+    filterValue,
+    setFilterValue,
+    initialFilter: INITIAL_FILTER,
+  })
+
   // Debounce filter untuk unified debouncing (300ms seperti Hermes 5G)
   const debouncedFilterValue = useDebounce(filterValue, 300)
 
@@ -162,6 +204,23 @@ export default function AopMapPage() {
   const totalSitesForSummary = useMemo(() => {
     return Object.values(totalCounts).reduce((sum, count) => sum + count, 0)
   }, [totalCounts])
+
+  const selectTemplateButtonRef = useRef<HTMLButtonElement>(null)
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null)
+  useEffect(() => {
+    if (!loadTemplateOpen) {
+      setDropdownPosition(null)
+      return
+    }
+    const t = setTimeout(() => {
+      const btn = selectTemplateButtonRef.current
+      if (btn) {
+        const rect = btn.getBoundingClientRect()
+        setDropdownPosition({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 200) })
+      }
+    }, 50)
+    return () => clearTimeout(t)
+  }, [loadTemplateOpen])
 
   // Handler untuk status click
   const handleStatusClick = useCallback((status: StatusLabel) => {
@@ -391,15 +450,168 @@ export default function AopMapPage() {
       </header>
 
       <main className={`mx-auto flex h-[calc(100vh-120px)] max-w-[1440px] flex-col gap-5 px-6 py-5 lg:h-[calc(100vh-140px)] transition-opacity duration-300 ${isFilterLoading ? 'opacity-30' : ''}`} style={{ pointerEvents: isFilterLoading ? 'none' : 'auto' }}>
-        {/* Filter Bar */}
-        <div className="rounded-2xl border border-white/10 bg-[#0B1533]/60 p-4">
-          <FilterBar
-            value={filterValue}
-            onChange={handleFilterChange}
-            onReset={handleFilterReset}
-            variant="aop"
-            endpoint="/api/aop/filters"
-          />
+        {/* Filter Bar + Templates */}
+        <div className="relative z-10 overflow-visible rounded-2xl border border-white/10 bg-[#0B1533]/60 p-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[160px]">
+              <button
+                ref={selectTemplateButtonRef}
+                type="button"
+                onClick={() => {
+                  setLoadTemplateOpen((o) => !o)
+                  if (!loadTemplateOpen && templates.length === 0) void fetchTemplates("dropdown_open")
+                }}
+                className="inline-flex w-full items-center justify-between gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-200"
+                aria-expanded={loadTemplateOpen}
+                aria-haspopup="listbox"
+                aria-label="Select template"
+              >
+                <FolderOpen className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">{selectedTemplateName ?? "Select template"}</span>
+                <ChevronDown className={`h-4 w-4 flex-shrink-0 transition ${loadTemplateOpen ? "rotate-180" : ""}`} />
+              </button>
+              {loadTemplateOpen &&
+                typeof document !== 'undefined' &&
+                createPortal(
+                  <>
+                    <div
+                      className="fixed inset-0 z-[9998] bg-transparent"
+                      aria-hidden
+                      onClick={() => setLoadTemplateOpen(false)}
+                    />
+                    {dropdownPosition != null && (
+                      <div
+                        className="fixed z-[9999] max-h-[min(12rem,60vh)] overflow-y-auto rounded-lg border border-white/10 bg-[#0F1630] py-1 shadow-xl"
+                        role="listbox"
+                        style={{
+                          top: dropdownPosition.top,
+                          left: dropdownPosition.left,
+                          width: dropdownPosition.width,
+                          minWidth: 200,
+                        }}
+                      >
+                        {templatesLoading ? (
+                          <div className="px-3 py-2 text-xs text-white/50">Loading...</div>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              role="option"
+                              onClick={() => handleLoadTemplate(null)}
+                              className="w-full px-3 py-2 text-left text-xs text-white/90 hover:bg-white/10"
+                            >
+                              All data
+                            </button>
+                            {templates.length === 0 ? (
+                              <div className="px-3 py-2 text-xs text-white/50">No templates saved yet.</div>
+                            ) : (
+                              templates.map((t) => (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  role="option"
+                                  onClick={() => handleLoadTemplate({ id: t.id, payload: t.payload })}
+                                  className="w-full px-3 py-2 text-left text-xs text-white/90 hover:bg-white/10"
+                                >
+                                  {t.name}
+                                </button>
+                              ))
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>,
+                  document.body
+                )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!createTemplateMode) {
+                  setTemplateUpdateError(null)
+                  setTemplateDeleteError(null)
+                }
+                setCreateTemplateMode((prev) => !prev)
+              }}
+              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                createTemplateMode
+                  ? "border-amber-500/60 bg-amber-500/20 text-amber-200"
+                  : "border-amber-500/40 bg-amber-500/10 text-amber-200"
+              }`}
+              title={createTemplateMode ? "Close filter panel" : "Edit filter criteria"}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Edit filters
+            </button>
+          </div>
+
+          {createTemplateMode && (
+            <>
+              <FilterBar
+                value={filterValue}
+                onChange={handleFilterChange}
+                onReset={handleFilterReset}
+                variant="aop"
+                endpoint="/api/aop/filters"
+              />
+
+              <div className="flex-shrink-0 border-t border-white/5 pt-3">
+                {(templateUpdateError ?? templateDeleteError) && (
+                  <p className="mb-2 text-xs text-red-400">{templateUpdateError ?? templateDeleteError}</p>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedTemplateName ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void handleUpdateTemplate()}
+                        disabled={templateUpdating}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-semibold text-cyan-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                        title="Update this template with current filters"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        {templateUpdating ? "Updating..." : "Update template"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const t = selectedTemplateId ? templates.find((x) => x.id === selectedTemplateId) : undefined
+                          if (t) setDeleteConfirmTemplate({ id: t.id, name: t.name })
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs font-semibold text-red-200"
+                        title="Delete this template"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete template
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={openSaveTemplateModal}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-200"
+                      title="Save current filters as template"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      Save as template
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      exitCreateTemplateMode()
+                      setTemplateUpdateError(null)
+                      setTemplateDeleteError(null)
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-white/80"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="grid flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -487,6 +699,98 @@ export default function AopMapPage() {
           </aside>
         </div>
       </main>
+
+      {/* Delete template confirmation modal */}
+      {deleteConfirmTemplate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal
+          aria-labelledby="aop-map-delete-template-title"
+        >
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0F1630] p-4 shadow-xl">
+            <h2 id="aop-map-delete-template-title" className="mb-3 text-sm font-semibold text-white">
+              Delete template
+            </h2>
+            <p className="mb-4 text-xs text-white/70">
+              Delete template &quot;{deleteConfirmTemplate.name}&quot;? This cannot be undone.
+            </p>
+            {templateDeleteError && (
+              <p className="mb-2 text-xs text-red-400">{templateDeleteError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteConfirmTemplate(null)
+                  setTemplateDeleteError(null)
+                }}
+                className="rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteTemplate()}
+                className="rounded-lg border border-red-500/40 bg-red-500/20 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/30"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save template modal */}
+      {templateModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal
+          aria-labelledby="aop-map-save-template-title"
+        >
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0F1630] p-4 shadow-xl">
+            <h2 id="aop-map-save-template-title" className="mb-3 text-sm font-semibold text-white">
+              Save filter template
+            </h2>
+            <div className="mb-4">
+              <label htmlFor="aop-map-template-name" className="mb-1 block text-xs text-white/60">
+                Template name
+              </label>
+              <input
+                id="aop-map-template-name"
+                type="text"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="e.g. Region Jakarta"
+                className="w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+              />
+            </div>
+            {templateSaveError && (
+              <p className="mb-2 text-xs text-red-400">{templateSaveError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTemplateModalOpen(false)
+                  setTemplateSaveError(null)
+                }}
+                className="rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveTemplate()}
+                className="rounded-lg border border-amber-500/40 bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/30"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

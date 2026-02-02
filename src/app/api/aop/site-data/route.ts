@@ -78,6 +78,8 @@ const MINIMAL_COLUMNS = [
   'mos_af',            // MOS stats
   'project_name',      // AgingPoCard - project grouping
   'po_date',           // AgingPoCard - PO aging calculation
+  'po_number',         // AgingPoCard - unique PO count
+  'pic_indosat',       // Trial GB Factory filter
   'ic_000040_af',      // Install stats
   'rfc_approved',      // RFC stats
   'hotnews_af',        // Hotnews stats
@@ -122,6 +124,8 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       issue_category: row.issue_category || null,
       project_name: row.project_name || null,
       po_date: row.po_date || null,
+      po_number: row.po_number || null,
+      pic_indosat: row.pic_indosat || null,
       priority_congest_urgent: row.priority_congest_urgent || null,
     }))
   }
