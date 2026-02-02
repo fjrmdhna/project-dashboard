@@ -17,29 +17,39 @@ export interface CircleAchievementCardProps {
 
 interface CircleData {
   circle: string
-  // MTD (Month to Date) - Current month only
+  // MTD: from start of current month through today
   mtdTarget: number
   mtdActual: number
   mtdRemaining: number
-  // YTD (Year to Date) - Current year only
+  // YTD: from start of current year through today
   ytdTarget: number
   ytdActual: number
   ytdRemaining: number
 }
 
-// Get date ranges for MTD and YTD calculations
+/** End of today (23:59:59.999) for "through today" ranges */
+function getEndOfToday(): Date {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+}
+
+/**
+ * Date ranges for MTD and YTD: from period start through today (inclusive).
+ * Target and Actual both use these ranges for consistent comparison.
+ */
 function getDateRanges(): { mtdStart: Date; mtdEnd: Date; ytdStart: Date; ytdEnd: Date } {
   const now = new Date()
   const year = now.getFullYear()
   const month = now.getMonth()
-  
+  const endOfToday = getEndOfToday()
+
   return {
-    // MTD: First day of current month to last day of current month
+    // MTD: First day of current month through today
     mtdStart: new Date(year, month, 1, 0, 0, 0, 0),
-    mtdEnd: new Date(year, month + 1, 0, 23, 59, 59, 999),
-    // YTD: First day of current year to last day of current year
+    mtdEnd: endOfToday,
+    // YTD: First day of current year through today
     ytdStart: new Date(year, 0, 1, 0, 0, 0, 0),
-    ytdEnd: new Date(year, 11, 31, 23, 59, 59, 999)
+    ytdEnd: endOfToday
   }
 }
 

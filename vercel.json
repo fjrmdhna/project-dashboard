@@ -4,7 +4,13 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["sin1"]
+  "regions": ["sin1"],
+  "functions": {
+    "src/app/api/hermes-5g/process-storage-file/route.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  }
 }
 
 
