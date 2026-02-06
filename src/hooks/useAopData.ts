@@ -124,6 +124,7 @@ function normalizeRanScoreForFilter(value: string | null | undefined): string {
 
 export interface AopSiteData extends MatrixRow {
   rfc_approved?: string | null
+  fatp_accepted_af?: string | null  // FATP - Matrix milestone
   pac_accepted_af?: string | null
   region_circle?: string | null
   site_category?: string | null
@@ -145,6 +146,7 @@ export interface AopDataStats {
   readiness: number
   activated: number
   rfc: number
+  fatp: number
   hotnews: number
   endorse: number
   pac: number
@@ -221,6 +223,7 @@ const EMPTY_STATS: AopDataStats = {
   readiness: 0,
   activated: 0,
   rfc: 0,
+  fatp: 0,
   hotnews: 0,
   endorse: 0,
   pac: 0,
@@ -350,7 +353,7 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
   // Stats (merged from calculateStatsFromFilteredData to avoid extra pass)
   const uniqueClusters = new Set<string>()
   let caf = 0, mos = 0, install = 0, readiness = 0, activated = 0
-  let rfc = 0, hotnews = 0, endorse = 0, pac = 0
+  let rfc = 0, fatp = 0, hotnews = 0, endorse = 0, pac = 0
   
   // Daily runrate maps (last 7 days)
   const today = new Date()
@@ -396,6 +399,7 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
     if (row.imp_integ_af) readiness++
     if (row.rfs_af) activated++
     if (row.rfc_approved) rfc++
+    if (row.fatp_accepted_af) fatp++
     if (row.hotnews_af) hotnews++
     if (row.endorse_af) endorse++
     if (row.pac_accepted_af) pac++
@@ -465,6 +469,7 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
       readiness,
       activated,
       rfc,
+      fatp,
       hotnews,
       endorse,
       pac,

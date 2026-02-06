@@ -15,6 +15,7 @@ export interface Row {
   rfs_forecast_lock?: string | null
   ready_for_acpt_date?: string | null  // RFA - Ready for Acceptance (AOP)
   rfc_approved?: string | null
+  fatp_accepted_af?: string | null  // FATP - Matrix milestone (AOP)
   hotnews_af?: string | null
   endorse_af?: string | null
   pac_accepted_af?: string | null
@@ -44,6 +45,7 @@ export interface MatrixStatsCardProps {
     rfa?: number   // RFA - Ready for Acceptance (ready_for_acpt_date)
     activated?: number
     rfc?: number
+    fatp?: number  // FATP (fatp_accepted_af)
     hotnews?: number
     endorse?: number
     pac?: number
@@ -64,7 +66,7 @@ const DEFAULT_METRIC_CONFIG = [
   { key: "pac", label: "PAC" }
 ] as const
 
-// AOP metric configuration
+// AOP metric configuration (FATP after RFC)
 const AOP_METRIC_CONFIG = [
   { key: "rfi", label: "RFI" },
   { key: "crfi", label: "CRFI" },
@@ -73,6 +75,7 @@ const AOP_METRIC_CONFIG = [
   { key: "rfs", label: "RFS" },
   { key: "rfa", label: "RFA" },
   { key: "rfc", label: "RFC" },
+  { key: "fatp", label: "FATP" },
   { key: "patp", label: "PATP" },
   { key: "hotnews", label: "HN" },
   { key: "endorse", label: "ENDORSE" },
@@ -116,6 +119,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
         rfs: providedStats.rfs ?? providedStats.activated ?? rows.filter(row => row.rfs_af).length,
         rfa: providedStats.rfa ?? rows.filter(row => row.ready_for_acpt_date).length,
         rfc: providedStats.rfc ?? rows.filter(row => row.rfc_approved).length,
+        fatp: providedStats.fatp ?? rows.filter(row => row.fatp_accepted_af).length,
         patp: patpCount,
         hotnews: providedStats.hotnews ?? rows.filter(row => row.hotnews_af).length,
         endorse: providedStats.endorse ?? rows.filter(row => row.endorse_af).length,
@@ -134,6 +138,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
       const rfs = rows.filter(row => row.rfs_af).length
       const rfa = rows.filter(row => row.ready_for_acpt_date).length
       const rfc = rows.filter(row => row.rfc_approved).length
+      const fatp = rows.filter(row => row.fatp_accepted_af).length
       const hotnews = rows.filter(row => row.hotnews_af).length
       const endorse = rows.filter(row => row.endorse_af).length
       const pac = rows.filter(row => row.pac_accepted_af).length
@@ -148,6 +153,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
         rfs,
         rfa,
         rfc,
+        fatp,
         patp,
         hotnews,
         endorse,
@@ -194,6 +200,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
         rfs: stats.rfs!,
         rfa: stats.rfa ?? 0,
         rfc: stats.rfc,
+        fatp: stats.fatp ?? 0,
         patp: stats.patp,
         hotnews: stats.hotnews,
         endorse: stats.endorse,

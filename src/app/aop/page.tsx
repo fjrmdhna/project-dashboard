@@ -923,6 +923,7 @@ export default function AopPage() {
       install: aopStats.install,
       rfs: aopStats.activated, // RFS = activated (rfs_af)
       rfc: aopStats.rfc,
+      fatp: aopStats.fatp,
       hotnews: aopStats.hotnews,
       endorse: aopStats.endorse,
       pac: aopStats.pac

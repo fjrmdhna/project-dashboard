@@ -20,6 +20,7 @@ CREATE INDEX IF NOT EXISTS idx_site_data_aop_ic_000040_af ON site_data_aop(ic_00
 CREATE INDEX IF NOT EXISTS idx_site_data_aop_imp_integ_af ON site_data_aop(imp_integ_af) WHERE imp_integ_af IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_site_data_aop_rfs_af ON site_data_aop(rfs_af) WHERE rfs_af IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_site_data_aop_rfc_approved ON site_data_aop(rfc_approved) WHERE rfc_approved IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_site_data_aop_fatp_accepted_af ON site_data_aop(fatp_accepted_af) WHERE fatp_accepted_af IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_site_data_aop_hotnews_af ON site_data_aop(hotnews_af) WHERE hotnews_af IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_site_data_aop_endorse_af ON site_data_aop(endorse_af) WHERE endorse_af IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_site_data_aop_pac_accepted_af ON site_data_aop(pac_accepted_af) WHERE pac_accepted_af IS NOT NULL;
