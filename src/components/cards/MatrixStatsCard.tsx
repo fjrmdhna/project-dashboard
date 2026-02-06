@@ -46,6 +46,7 @@ export interface MatrixStatsCardProps {
     activated?: number
     rfc?: number
     fatp?: number  // FATP (fatp_accepted_af)
+    patp?: number  // PATP (patp_accepted_af)
     hotnews?: number
     endorse?: number
     pac?: number
@@ -120,7 +121,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
         rfa: providedStats.rfa ?? rows.filter(row => row.ready_for_acpt_date).length,
         rfc: providedStats.rfc ?? rows.filter(row => row.rfc_approved).length,
         fatp: providedStats.fatp ?? rows.filter(row => row.fatp_accepted_af).length,
-        patp: patpCount,
+        patp: providedStats.patp ?? patpCount ?? rows.filter(row => row.patp_accepted_af).length,
         hotnews: providedStats.hotnews ?? rows.filter(row => row.hotnews_af).length,
         endorse: providedStats.endorse ?? rows.filter(row => row.endorse_af).length,
         pac: providedStats.pac ?? rows.filter(row => row.pac_accepted_af).length
@@ -139,10 +140,10 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
       const rfa = rows.filter(row => row.ready_for_acpt_date).length
       const rfc = rows.filter(row => row.rfc_approved).length
       const fatp = rows.filter(row => row.fatp_accepted_af).length
+      const patp = patpCount > 0 ? patpCount : rows.filter(row => row.patp_accepted_af).length
       const hotnews = rows.filter(row => row.hotnews_af).length
       const endorse = rows.filter(row => row.endorse_af).length
       const pac = rows.filter(row => row.pac_accepted_af).length
-      const patp = patpCount
 
       return {
         totalSites,

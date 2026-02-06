@@ -384,7 +384,7 @@ export default function AopPage() {
   const activatedCount = aopStats?.activated || 0
   
   // Calculate PATP count (using stats from API if available)
-  const patpCount = aopStats?.pac || 0
+  const patpCount = aopStats?.patp || 0
 
   const handleFilterChange = (value: FilterValue) => {
     // OPTIMIZED: Use startTransition untuk non-urgent state updates (mencegah UI freeze)
@@ -924,6 +924,7 @@ export default function AopPage() {
       rfs: aopStats.activated, // RFS = activated (rfs_af)
       rfc: aopStats.rfc,
       fatp: aopStats.fatp,
+      patp: aopStats.patp,
       hotnews: aopStats.hotnews,
       endorse: aopStats.endorse,
       pac: aopStats.pac

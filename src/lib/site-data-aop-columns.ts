@@ -16,6 +16,7 @@ export const SITE_DATA_AOP_SELECT_COLUMNS = [
   'ready_for_acpt_date', // RFA
   'rfc_approved',
   'fatp_accepted_af', // FATP - Matrix milestone
+  'patp_accepted_af', // PATP - Matrix milestone
   'ran_score',
   'hotnews_af', // HN
   'endorse_af', // Endorse
@@ -50,6 +51,7 @@ export const SITE_DATA_AOP_HEADERS = [
   'ready_for_acpt_date', // RFA
   'rfc_approved',
   'fatp_accepted_af', // FATP
+  'patp_accepted_af', // PATP
   'ran_score',
   'hotnews_af', // HN
   'endorse_af', // Endorse

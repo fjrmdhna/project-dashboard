@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useTransition } from "react"
+import { useEffect, useState, useCallback, useTransition, useRef } from "react"
 import { Search, Tag, X } from "lucide-react"
 import { MultiSelect } from "@/components/ui/MultiSelect"
 import { useDebounce } from "@/hooks/useDebounce"
@@ -47,6 +47,11 @@ interface FilterOptions {
   trialGbFactory?: string[] // Trial GB Factory (pic_indosat); blank shown as "Other"
 }
 
+// In-memory cache to avoid re-fetching options on remounts.
+// Keyed by variant+endpoint, short TTL, safe (no secrets).
+const FILTER_OPTIONS_CACHE = new Map<string, { options: FilterOptions; fetchedAt: number }>()
+const FILTER_OPTIONS_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
 // Fungsi helper untuk memendekkan teks yang terlalu panjang
 const truncateText = (text: string | undefined | null, maxLength: number = 20): string => {
   if (!text || typeof text !== 'string') return '';
@@ -56,26 +61,30 @@ const truncateText = (text: string | undefined | null, maxLength: number = 20): 
 
 export function FilterBar({ value, onChange, onReset, variant = "default", endpoint = "/api/filters" }: FilterBarProps) {
   const [, startTransition] = useTransition()
+  const cacheKey = `${variant}:${endpoint}`
   // State lokal untuk search input (sebelum debounce)
   const [searchInput, setSearchInput] = useState(value.q)
   
-  // State untuk filter options
-  const [options, setOptions] = useState<FilterOptions>({
-    vendors: [],
-    programs: [],
-    cities: [],
-    nanoClusters: [],
-    regions: [],
-    years: [],
-    circles: [],
-    siteCategories: [],
-    ranScores: [],
-    priorityCongestUrgent: [],
-    trialGbFactory: []
-  })
+  // Initialize options from cache immediately if available (even if stale) to keep dropdowns interactive
+  const cachedOnMount = FILTER_OPTIONS_CACHE.get(cacheKey)
+  const [options, setOptions] = useState<FilterOptions>(
+    cachedOnMount?.options || {
+      vendors: [],
+      programs: [],
+      cities: [],
+      nanoClusters: [],
+      regions: [],
+      years: [],
+      circles: [],
+      siteCategories: [],
+      ranScores: [],
+      priorityCongestUrgent: [],
+      trialGbFactory: []
+    }
+  )
   
-  // State untuk loading
-  const [isLoading, setIsLoading] = useState(true)
+  // State untuk loading - start as false if we have cached options
+  const [isLoading, setIsLoading] = useState(!cachedOnMount)
   
   // Debounce search input
   const debouncedSearch = useDebounce(searchInput, 250)
@@ -87,7 +96,24 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     
     async function fetchOptions(forceRefresh = false) {
       try {
-        setIsLoading(true)
+        // Use cache on remount to keep dropdowns interactive immediately.
+        const cached = FILTER_OPTIONS_CACHE.get(cacheKey)
+        const isCacheFresh = !!cached && (Date.now() - cached.fetchedAt) < FILTER_OPTIONS_TTL_MS
+        
+        // If cache is fresh and not forcing refresh, use cache and skip fetch
+        if (!forceRefresh && isCacheFresh) {
+          startTransition(() => {
+            setOptions(cached!.options)
+            setIsLoading(false)
+          })
+          return
+        }
+
+        // If we have stale cache, keep it visible but fetch in background
+        // Only set loading=true if we don't have ANY cached options
+        if (!cached) {
+          setIsLoading(true)
+        }
         // Force refresh on initial load to ensure fresh data with new mapping
         const url = forceRefresh ? `${endpoint}?refresh=true` : endpoint
         const response = await fetch(url)
@@ -97,7 +123,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
         if (response.ok) {
           const data = await response.json()
           if (data.status === 'success') {
-            const newOptions = {
+            const newOptions: FilterOptions = {
               vendors: data.data.vendors || [],
               programs: data.data.programs || [],
               cities: data.data.cities || [],
@@ -110,6 +136,14 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               priorityCongestUrgent: data.data.priorityCongestUrgent || [],
               trialGbFactory: data.data.trialGbFactory || []
             }
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:fetchOptions:success',message:'Fetch filter options success',data:{instanceId:instanceIdRef.current,variant,forceRefresh,attempt,durationMs:Date.now()-startTs,counts:{vendors:newOptions.vendors.length,programs:newOptions.programs.length,circles:newOptions.circles.length,years:newOptions.years.length,siteCategories:(newOptions.siteCategories||[]).length,ranScores:(newOptions.ranScores||[]).length,priority:(newOptions.priorityCongestUrgent||[]).length,trial:(newOptions.trialGbFactory||[]).length}},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+
+            // Write-through cache IMMEDIATELY (before setState) so remounts are instant.
+            // This ensures cache is available even if component unmounts before setState completes.
+            const cacheEntry = { options: newOptions, fetchedAt: Date.now() }
+            FILTER_OPTIONS_CACHE.set(cacheKey, cacheEntry)
             
             // For AOP variant: detect stale cache by checking if siteCategories are normalized
             // Normalized siteCategories should only have "New Site", "Expansion", or other short values
@@ -127,6 +161,9 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               if (hasUnnormalizedValues) {
                 console.log('[FilterBar] Detected stale siteCategories cache, forcing refresh...')
                 hasRetried = true
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:stale:siteCategories',message:'Detected stale siteCategories; refetching',data:{instanceId:instanceIdRef.current,attempt,siteCategoriesSample:newOptions.siteCategories.slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+                // #endregion
                 await fetchOptions(true)
                 return
               }
@@ -159,6 +196,9 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               if (hasUnnormalizedValues) {
                 console.log('[FilterBar] Detected stale priorityCongestUrgent cache, forcing refresh...')
                 hasRetried = true
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:stale:priority',message:'Detected stale priorityCongestUrgent; refetching',data:{instanceId:instanceIdRef.current,attempt,prioritySample:newOptions.priorityCongestUrgent.slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+                // #endregion
                 await fetchOptions(true)
                 return
               }
@@ -210,6 +250,9 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               if (hasUnnormalizedValues) {
                 console.log('[FilterBar] Detected stale ranScores cache, forcing refresh...')
                 hasRetried = true
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:stale:ranScores',message:'Detected stale ranScores; refetching',data:{instanceId:instanceIdRef.current,attempt,ranScoresSample:newOptions.ranScores.slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+                // #endregion
                 await fetchOptions(true)
                 return
               }

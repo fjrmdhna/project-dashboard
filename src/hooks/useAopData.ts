@@ -125,6 +125,7 @@ function normalizeRanScoreForFilter(value: string | null | undefined): string {
 export interface AopSiteData extends MatrixRow {
   rfc_approved?: string | null
   fatp_accepted_af?: string | null  // FATP - Matrix milestone
+  patp_accepted_af?: string | null  // PATP - Matrix milestone
   pac_accepted_af?: string | null
   region_circle?: string | null
   site_category?: string | null
@@ -147,6 +148,7 @@ export interface AopDataStats {
   activated: number
   rfc: number
   fatp: number
+  patp: number
   hotnews: number
   endorse: number
   pac: number
@@ -224,6 +226,7 @@ const EMPTY_STATS: AopDataStats = {
   activated: 0,
   rfc: 0,
   fatp: 0,
+  patp: 0,
   hotnews: 0,
   endorse: 0,
   pac: 0,
@@ -353,7 +356,7 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
   // Stats (merged from calculateStatsFromFilteredData to avoid extra pass)
   const uniqueClusters = new Set<string>()
   let caf = 0, mos = 0, install = 0, readiness = 0, activated = 0
-  let rfc = 0, fatp = 0, hotnews = 0, endorse = 0, pac = 0
+  let rfc = 0, fatp = 0, patp = 0, hotnews = 0, endorse = 0, pac = 0
   
   // Daily runrate maps (last 7 days)
   const today = new Date()
@@ -401,6 +404,8 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
     if (row.rfc_approved) rfc++
     // FATP: Check if fatp_accepted_af exists and is not null/empty (matches API fallback logic)
     if (row.fatp_accepted_af && String(row.fatp_accepted_af).trim() !== '') fatp++
+    // PATP: Check if patp_accepted_af exists and is not null/empty (matches API fallback logic)
+    if (row.patp_accepted_af && String(row.patp_accepted_af).trim() !== '') patp++
     if (row.hotnews_af) hotnews++
     if (row.endorse_af) endorse++
     if (row.pac_accepted_af) pac++
@@ -471,6 +476,7 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
       activated,
       rfc,
       fatp,
+      patp,
       hotnews,
       endorse,
       pac,
@@ -529,13 +535,30 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
     }
     
-    const hasFilters = vendorNames.length > 0 || programReports.length > 0 ||
-                       circles.length > 0 || siteCategories.length > 0 ||
-                       ranScores.length > 0 || years.length > 0 ||
-                       priorityCongestUrgent.length > 0 || trialGbFactory.length > 0 || search.length > 0
+    const hasFilters =
+      vendorNames.length > 0 ||
+      programReports.length > 0 ||
+      circles.length > 0 ||
+      siteCategories.length > 0 ||
+      ranScores.length > 0 ||
+      years.length > 0 ||
+      priorityCongestUrgent.length > 0 ||
+      trialGbFactory.length > 0 ||
+      search.length > 0
 
     const dataToUse = hasFilters
-      ? filterDataClientSide(baseData.data, vendorNames, programReports, circles, siteCategories, ranScores, years, priorityCongestUrgent, trialGbFactory, search)
+      ? filterDataClientSide(
+          baseData.data,
+          vendorNames,
+          programReports,
+          circles,
+          siteCategories,
+          ranScores,
+          years,
+          priorityCongestUrgent,
+          trialGbFactory,
+          search
+        )
       : baseData.data
 
     // Safety check: ensure dataToUse is always an array
@@ -546,8 +569,8 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
     const agg = aggregateDataSinglePass(dataToUse)
     const stats = hasFilters ? agg.stats : baseData.stats
 
-    return { 
-      filteredData: dataToUse, 
+    return {
+      filteredData: dataToUse,
       filteredStats: stats,
       aggregated: agg
     }

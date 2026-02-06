@@ -24,6 +24,7 @@ interface SiteDataResponse {
     activated: number
     rfc: number
     fatp: number
+    patp: number
     hotnews: number
     endorse: number
     pac: number
@@ -46,6 +47,7 @@ const FULL_COLUMNS = [
   'rfs_af', // Actual (Activated/RFS)
   'rfc_approved',
   'fatp_accepted_af', // FATP
+  'patp_accepted_af', // PATP
   'ran_score',
   'hotnews_af', // HN
   'endorse_af', // Endorse
@@ -85,6 +87,7 @@ const MINIMAL_COLUMNS = [
   'ic_000040_af',      // Install stats
   'rfc_approved',      // RFC stats
   'fatp_accepted_af',  // FATP stats - Matrix milestone
+  'patp_accepted_af',  // PATP stats
   'hotnews_af',        // Hotnews stats
   'endorse_af',        // Endorse stats
   'pac_accepted_af',   // PAC stats
@@ -139,6 +142,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       if (row.ready_for_acpt_date) mapped.ready_for_acpt_date = row.ready_for_acpt_date.trim()
       if (row.rfc_approved) mapped.rfc_approved = row.rfc_approved.trim()
       if (row.fatp_accepted_af) mapped.fatp_accepted_af = row.fatp_accepted_af.trim()
+      if (row.patp_accepted_af) mapped.patp_accepted_af = row.patp_accepted_af.trim()
       if (row.hotnews_af) mapped.hotnews_af = row.hotnews_af.trim()
       if (row.endorse_af) mapped.endorse_af = row.endorse_af.trim()
       if (row.pac_accepted_af) mapped.pac_accepted_af = row.pac_accepted_af.trim()
@@ -169,6 +173,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
     rfs_af: row.rfs_af || null,
     rfc_approved: row.rfc_approved || null,
     fatp_accepted_af: row.fatp_accepted_af || null,
+    patp_accepted_af: row.patp_accepted_af || null,
     ran_score: row.ran_score || null,
     hotnews_af: row.hotnews_af || null,
     endorse_af: row.endorse_af || null,
@@ -217,6 +222,11 @@ function calculateStatsFromData(filteredData: any[]) {
     // Check if value is valid
     return hasValidDateValue(row.fatp_accepted_af)
   }).length
+  // PATP: Count rows where patp_accepted_af is not null/empty and is a valid date
+  const patpCount = filteredData.filter(row => {
+    if (!hasField(row, 'patp_accepted_af')) return false
+    return hasValidDateValue(row.patp_accepted_af)
+  }).length
   const hotnewsCount = filteredData.filter(row => hasValidDateValue(row.hotnews_af)).length
   const endorseCount = filteredData.filter(row => hasValidDateValue(row.endorse_af)).length
   const pacCount = filteredData.filter(row => hasValidDateValue(row.pac_accepted_af)).length
@@ -247,6 +257,7 @@ function calculateStatsFromData(filteredData: any[]) {
     activated: activatedCount,
     rfc: rfcCount,
     fatp: fatpCount,
+    patp: patpCount,
     hotnews: hotnewsCount,
     endorse: endorseCount,
     pac: pacCount,
@@ -352,7 +363,7 @@ async function fetchStatsFromDatabase(
   circles: string[],
   siteCategories: string[],
   q: string
-): Promise<{ stats: SiteDataResponse['stats'], hasFatpCount: boolean } | null> {
+): Promise<{ stats: SiteDataResponse['stats'], hasFatpCount: boolean, hasPatpCount: boolean } | null> {
   const vendorNamesParam = vendorNames.length > 0 ? vendorNames : null
   const programReportsParam = programReports.length > 0 ? programReports : null
   const circlesParam = circles.length > 0 ? circles : null
@@ -372,9 +383,15 @@ async function fetchStatsFromDatabase(
     // Check if fatp_count exists in response (database function might not be updated yet)
     const hasFatpCount = 'fatp_count' in statsRow && statsRow.fatp_count !== undefined
     const fatpCount = hasFatpCount ? (Number(statsRow.fatp_count) || 0) : 0 // Default to 0 if not available
+    // Check if patp_count exists in response (database function might not be updated yet)
+    const hasPatpCount = 'patp_count' in statsRow && statsRow.patp_count !== undefined
+    const patpCount = hasPatpCount ? (Number(statsRow.patp_count) || 0) : 0 // Default to 0 if not available
     
     if (!hasFatpCount) {
       console.warn('[AOP Site Data] Database function get_aop_stats does not have fatp_count. Will use fallback calculation from fetched data.')
+    }
+    if (!hasPatpCount) {
+      console.warn('[AOP Site Data] Database function get_aop_stats does not have patp_count. Will use fallback calculation from fetched data.')
     }
     
     return {
@@ -387,12 +404,14 @@ async function fetchStatsFromDatabase(
         activated: Number(statsRow.activated_count) || 0,
         rfc: Number(statsRow.rfc_count) || 0,
         fatp: fatpCount, // Always a number (0 if DB function doesn't have it yet - will be replaced by fallback)
+        patp: patpCount, // Always a number (0 if DB function doesn't have it yet - will be replaced by fallback)
         hotnews: Number(statsRow.hotnews_count) || 0,
         endorse: Number(statsRow.endorse_count) || 0,
         pac: Number(statsRow.pac_count) || 0,
         nanoClusters: Number(statsRow.cluster_count) || 0
       },
-      hasFatpCount
+      hasFatpCount,
+      hasPatpCount
     }
   }
 
@@ -456,15 +475,19 @@ export async function GET(request: NextRequest) {
 
     if (cachedStats) {
       console.log(`[AOP Site Data] Using cached stats for filter: ${filterHash}`)
-      // Check if cached stats has fatp (might be old cache from before fatp was added)
-      if (cachedStats.fatp === undefined) {
-        console.warn('[AOP Site Data] Cached stats missing fatp, will recalculate from fetched data')
-        // Fetch data first, then recalculate fatp from data
+      // Check if cached stats has fatp or patp (might be old cache from before these were added)
+      if (cachedStats.fatp === undefined || cachedStats.patp === undefined) {
+        console.warn('[AOP Site Data] Cached stats missing fatp or patp, will recalculate from fetched data')
+        // Fetch data first, then recalculate fatp and patp from data
         dataResult = await fetchDataFromDatabase(vendorNames, programReports, circles, siteCategories, q, mode)
         const fallbackStats = calculateStatsFromData(dataResult.data)
-        // Merge cached stats with fallback fatp
-        stats = { ...cachedStats, fatp: fallbackStats.fatp }
-        // Update cache with new stats that include fatp
+        // Merge cached stats with fallback fatp and patp
+        stats = { 
+          ...cachedStats, 
+          fatp: cachedStats.fatp ?? fallbackStats.fatp,
+          patp: cachedStats.patp ?? fallbackStats.patp
+        }
+        // Update cache with new stats that include fatp and patp
         setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch(err => {
           console.error('[AOP Site Data] Failed to update cached stats:', err)
         })
@@ -484,20 +507,24 @@ export async function GET(request: NextRequest) {
       if (!dbStatsResult) {
         // No stats from DB function - use full fallback
         stats = calculateStatsFromData(dataResult.data)
-        console.log(`[AOP Site Data] Using fallback stats calculation. FATP count: ${stats.fatp}`)
-      } else if (!dbStatsResult.hasFatpCount) {
-        // DB function exists but missing fatp_count - merge with fallback for fatp only
+        console.log(`[AOP Site Data] Using fallback stats calculation. FATP count: ${stats.fatp}, PATP count: ${stats.patp}`)
+      } else if (!dbStatsResult.hasFatpCount || !dbStatsResult.hasPatpCount) {
+        // DB function exists but missing fatp_count or patp_count - merge with fallback
         const fallbackStats = calculateStatsFromData(dataResult.data)
-        stats = { ...dbStatsResult.stats, fatp: fallbackStats.fatp }
-        console.log(`[AOP Site Data] Database function missing fatp_count, using fallback calculation. FATP count: ${fallbackStats.fatp}`)
-        // Update cache with stats that include fatp
+        stats = { 
+          ...dbStatsResult.stats, 
+          fatp: dbStatsResult.hasFatpCount ? dbStatsResult.stats.fatp : fallbackStats.fatp,
+          patp: dbStatsResult.hasPatpCount ? dbStatsResult.stats.patp : fallbackStats.patp
+        }
+        console.log(`[AOP Site Data] Database function missing fatp_count or patp_count, using fallback calculation. FATP count: ${stats.fatp}, PATP count: ${stats.patp}`)
+        // Update cache with stats that include fatp and patp
         setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch(err => {
-          console.error('[AOP Site Data] Failed to update cached stats with fatp:', err)
+          console.error('[AOP Site Data] Failed to update cached stats with fatp/patp:', err)
         })
       } else {
-        // DB function has all fields including fatp
+        // DB function has all fields including fatp and patp
         stats = dbStatsResult.stats
-        console.log(`[AOP Site Data] Using database function stats. FATP count: ${stats.fatp}`)
+        console.log(`[AOP Site Data] Using database function stats. FATP count: ${stats.fatp}, PATP count: ${stats.patp}`)
       }
       
       // Cache only stats (small data, ~1KB) - don't cache full data (too large ~20MB)
@@ -564,6 +591,7 @@ export async function GET(request: NextRequest) {
           activated: 0,
           rfc: 0,
           fatp: 0,
+          patp: 0,
           hotnews: 0,
           endorse: 0,
           pac: 0,
