@@ -9,6 +9,10 @@
     "src/app/api/hermes-5g/process-storage-file/route.ts": {
       "maxDuration": 60,
       "memory": 1024
+    },
+    "src/app/api/aop/site-data/route.ts": {
+      "maxDuration": 30,
+      "memory": 1024
     }
   }
 }

@@ -97,41 +97,60 @@ const getColumns = (mode: 'full' | 'minimal' = 'full') => {
   return mode === 'minimal' ? MINIMAL_COLUMNS.join(',') : FULL_COLUMNS.join(',')
 }
 
+// Helper function to optimize value - remove null/undefined and trim strings
+function optimizeValue(value: any): any {
+  if (value === null || value === undefined || value === '') return undefined
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed === '' ? undefined : trimmed
+  }
+  return value
+}
+
 // Helper function to map raw data to frontend format
 function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full'): any[] {
   if (mode === 'minimal') {
     // Minimal mapping - essential fields for dashboard + client-side filtering
-    return filteredData.map(row => ({
-      system_key: row.system_key,
-      vendor_name: row.vendor_name || null,
-      program_report: row.program_report || null,
-      region_circle: row.region_circle || null,
-      site_category: row.site_category || null,
-      ran_score: row.ran_score || null,
-      year: row.year || null,
-      // Stats fields
-      caf_approved: row.rfi_accepted || null,
-      mos_af: row.mos_af || null,
-      ic_000010_af: row.ic_000010_af || null,
-      ic_000040_af: row.ic_000040_af || null,
-      imp_integ_af: row.imp_integ_af || null,
-      mocn_activation_forecast: row.mocn_activation_forecast || null, // Baseline for ProgressCurve
-      rfs_bf: row.rfs_bf || null,
-      rfs_ff: row.rfs_ff || null,
-      rfs_af: row.rfs_af || null,
-      ready_for_acpt_date: row.ready_for_acpt_date || null,
-      rfc_approved: row.rfc_approved || null,
-      fatp_accepted_af: row.fatp_accepted_af || null,
-      hotnews_af: row.hotnews_af || null,
-      endorse_af: row.endorse_af || null,
-      pac_accepted_af: row.pac_accepted_af || null,
-      issue_category: row.issue_category || null,
-      project_name: row.project_name || null,
-      po_date: row.po_date || null,
-      po_number: row.po_number || null,
-      pic_indosat: row.pic_indosat || null,
-      priority_congest_urgent: row.priority_congest_urgent || null,
-    }))
+    // OPTIMIZATION: Only include fields that have values (undefined instead of null reduces JSON size)
+    return filteredData.map(row => {
+      const mapped: any = {}
+      
+      // Always include system_key (required)
+      mapped.system_key = row.system_key
+      
+      // Only include non-empty values
+      if (row.vendor_name) mapped.vendor_name = row.vendor_name.trim()
+      if (row.program_report) mapped.program_report = row.program_report.trim()
+      if (row.region_circle) mapped.region_circle = row.region_circle.trim()
+      if (row.site_category) mapped.site_category = row.site_category.trim()
+      if (row.ran_score) mapped.ran_score = row.ran_score.trim()
+      if (row.year) mapped.year = row.year.trim()
+      
+      // Stats fields - only include if not null/empty
+      if (row.rfi_accepted) mapped.caf_approved = row.rfi_accepted.trim()
+      if (row.mos_af) mapped.mos_af = row.mos_af.trim()
+      if (row.ic_000010_af) mapped.ic_000010_af = row.ic_000010_af.trim()
+      if (row.ic_000040_af) mapped.ic_000040_af = row.ic_000040_af.trim()
+      if (row.imp_integ_af) mapped.imp_integ_af = row.imp_integ_af.trim()
+      if (row.mocn_activation_forecast) mapped.mocn_activation_forecast = row.mocn_activation_forecast.trim()
+      if (row.rfs_bf) mapped.rfs_bf = row.rfs_bf.trim()
+      if (row.rfs_ff) mapped.rfs_ff = row.rfs_ff.trim()
+      if (row.rfs_af) mapped.rfs_af = row.rfs_af.trim()
+      if (row.ready_for_acpt_date) mapped.ready_for_acpt_date = row.ready_for_acpt_date.trim()
+      if (row.rfc_approved) mapped.rfc_approved = row.rfc_approved.trim()
+      if (row.fatp_accepted_af) mapped.fatp_accepted_af = row.fatp_accepted_af.trim()
+      if (row.hotnews_af) mapped.hotnews_af = row.hotnews_af.trim()
+      if (row.endorse_af) mapped.endorse_af = row.endorse_af.trim()
+      if (row.pac_accepted_af) mapped.pac_accepted_af = row.pac_accepted_af.trim()
+      if (row.issue_category) mapped.issue_category = row.issue_category.trim()
+      if (row.project_name) mapped.project_name = row.project_name.trim()
+      if (row.po_date) mapped.po_date = row.po_date.trim()
+      if (row.po_number) mapped.po_number = row.po_number.trim()
+      if (row.pic_indosat) mapped.pic_indosat = row.pic_indosat.trim()
+      if (row.priority_congest_urgent) mapped.priority_congest_urgent = row.priority_congest_urgent.trim()
+      
+      return mapped
+    })
   }
   
   // Full mapping for detailed views
@@ -258,17 +277,32 @@ async function fetchDataFromDatabase(
   }
 
   // Fetch all data using pagination
+  // #region agent log
+  const paginationStartTime = Date.now();
+  fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:261',message:'Pagination loop start',data:{mode,pageSize,MAX_PAGES},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   while (hasMore && page < MAX_PAGES) {
     const from = page * pageSize
     const to = from + pageSize - 1
 
+    // #region agent log
+    const pageQueryStartTime = Date.now();
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:265',message:'Before page query',data:{page,from,to},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     const query = baseQuery.range(from, to)
     const { data: pageData, error: pageError, count } = await query
+    // #region agent log
+    const pageQueryEndTime = Date.now();
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:266',message:'After page query',data:{page,queryDuration:pageQueryEndTime-pageQueryStartTime,recordCount:pageData?.length||0,hasError:!!pageError,errorCode:pageError?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
 
     if (pageError) {
       if (pageError.code === 'PGRST116') {
         return { data: [], totalCount: 0 }
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:272',message:'Database error in pagination',data:{page,errorCode:pageError.code,errorMessage:pageError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       throw new Error(`Database error: ${pageError.message}`)
     }
 
@@ -288,7 +322,10 @@ async function fetchDataFromDatabase(
   if (page >= MAX_PAGES) {
     console.warn(`[AOP Site Data] Pagination safety limit reached at ${page} pages, fetched ${allData.length} records`)
   }
-
+  // #region agent log
+  const paginationEndTime = Date.now();
+  fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:292',message:'Pagination complete',data:{totalPages:page,totalRecords:allData.length,totalDuration:paginationEndTime-paginationStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   return { data: allData, totalCount }
 }
 
@@ -306,6 +343,10 @@ async function fetchStatsFromDatabase(
   const siteCategoriesParam = siteCategories.length > 0 ? siteCategories : null
   const searchParam = q || null
 
+  // #region agent log
+  const statsQueryStartTime = Date.now();
+  fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:302',message:'Before stats RPC',data:{hasVendorFilter:!!vendorNamesParam,hasProgramFilter:!!programReportsParam},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const { data: statsData, error: statsError } = await supabase.rpc('get_aop_stats', {
     p_vendor_names: vendorNamesParam,
     p_program_reports: programReportsParam,
@@ -313,6 +354,10 @@ async function fetchStatsFromDatabase(
     p_site_categories: siteCategoriesParam,
     p_search: searchParam
   })
+  // #region agent log
+  const statsQueryEndTime = Date.now();
+  fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:310',message:'After stats RPC',data:{duration:statsQueryEndTime-statsQueryStartTime,hasData:!!statsData,hasError:!!statsError,errorMessage:statsError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
 
   if (!statsError && statsData && statsData.length > 0) {
     const statsRow = statsData[0]
@@ -333,13 +378,22 @@ async function fetchStatsFromDatabase(
   }
 
   if (statsError) {
+    // #region agent log
+    const isTimeout = statsError.message?.includes('timeout') || statsError.message?.includes('canceling statement');
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:328',message:'Stats RPC error',data:{errorMessage:statsError.message,isTimeout},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     console.warn('Database function get_aop_stats failed:', statsError)
+    // Don't throw - let caller use fallback calculation
   }
 
   return null
 }
 
 export async function GET(request: NextRequest) {
+  // #region agent log
+  const requestStartTime = Date.now();
+  fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:342',message:'API route entry',data:{timestamp:requestStartTime,url:request.url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   try {
     const { searchParams } = new URL(request.url)
 
@@ -384,6 +438,10 @@ export async function GET(request: NextRequest) {
     // Fetch from database
     console.log(`[AOP Site Data] Fetching from database (mode: ${mode})...`)
     const startTime = Date.now()
+    // #region agent log
+    const dbQueryStartTime = Date.now();
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:386',message:'Before database query',data:{mode,hasCachedStats:!!cachedStats,filterHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
 
     // If we have cached stats, we can skip stats fetch
     let stats: SiteDataResponse['stats']
@@ -393,14 +451,36 @@ export async function GET(request: NextRequest) {
       console.log(`[AOP Site Data] Using cached stats for filter: ${filterHash}`)
       stats = cachedStats
       // Still need to fetch data
+      // #region agent log
+      const fetchDataStartTime = Date.now();
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:396',message:'Before fetchDataFromDatabase',data:{mode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       dataResult = await fetchDataFromDatabase(vendorNames, programReports, circles, siteCategories, q, mode)
+      // #region agent log
+      const fetchDataEndTime = Date.now();
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:396',message:'After fetchDataFromDatabase',data:{duration:fetchDataEndTime-fetchDataStartTime,recordCount:dataResult.data.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     } else {
       // Fetch data and stats in parallel
+      // #region agent log
+      const parallelStartTime = Date.now();
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:399',message:'Before parallel fetch',data:{mode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       const [fetchedData, dbStats] = await Promise.all([
         fetchDataFromDatabase(vendorNames, programReports, circles, siteCategories, q, mode),
         fetchStatsFromDatabase(vendorNames, programReports, circles, siteCategories, q)
       ])
+      // #region agent log
+      const parallelEndTime = Date.now();
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:399',message:'After parallel fetch',data:{duration:parallelEndTime-parallelStartTime,dataCount:fetchedData.data.length,hasStats:!!dbStats},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       dataResult = fetchedData
+      // If stats RPC timeout or failed, calculate from fetched data (fallback)
+      if (!dbStats) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:404',message:'Stats RPC failed, using fallback calculation',data:{recordCount:fetchedData.data.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+      }
       stats = dbStats || calculateStatsFromData(dataResult.data)
       
       // Cache only stats (small data, ~1KB) - don't cache full data (too large ~20MB)
@@ -424,10 +504,30 @@ export async function GET(request: NextRequest) {
       totalCount,
       stats
     }
+    // #region agent log
+    const responseSizeEstimate = JSON.stringify(responseData).length;
+    const totalDuration = Date.now() - requestStartTime;
+    const responseSizeMB = responseSizeEstimate / 1024 / 1024;
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:420',message:'Before response',data:{fetchTime,totalDuration,recordCount:mappedData.length,responseSizeBytes:responseSizeEstimate,responseSizeMB:responseSizeMB.toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    // Warn if response size is too large (could cause issues)
+    if (responseSizeMB > 20) {
+      console.warn(`[AOP Site Data] Large response size: ${responseSizeMB.toFixed(2)}MB. Consider pagination or filtering.`)
+    }
+    
+    // Response headers (Vercel automatically compresses with gzip for large responses)
+    const responseHeaders: Record<string, string> = {
+      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
+    }
 
     // NOTE: We don't cache full response because data is too large (40k+ records = ~20MB)
     // Vercel KV has 256KB limit per value. We only cache stats above.
 
+    // #region agent log
+    const responseTime = Date.now();
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:431',message:'Returning success response',data:{totalDuration:responseTime-requestStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     return NextResponse.json({
       status: 'success',
       ...responseData,
@@ -436,12 +536,16 @@ export async function GET(request: NextRequest) {
       fetchTime,
       mode
     }, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
-      }
+      headers: responseHeaders
     })
   } catch (error) {
     console.error('Error in AOP site-data API route:', error)
+    // #region agent log
+    const errorTime = Date.now();
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:444',message:'Error caught',data:{errorMessage,errorStack,timeSinceStart:errorTime-requestStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     return NextResponse.json(
       {
         status: 'error',
