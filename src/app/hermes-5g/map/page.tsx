@@ -239,24 +239,6 @@ export default function Hermes5GMapPage() {
       totalCountsByStatus[p.status] = (totalCountsByStatus[p.status] ?? 0) + 1
     })
 
-    // #region agent log
-    if (cachedMapResponse && filtered.length >= 0) {
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: 'debug-session',
-          runId: 'post-fix',
-          hypothesisId: 'H2',
-          location: 'src/app/hermes-5g/map/page.tsx',
-          message: 'Hermes5GMap client-side filter applied',
-          data: { cachedPoints: raw.points.length, filteredPoints: filtered.length },
-          timestamp: Date.now()
-        })
-      }).catch(() => {})
-    }
-    // #endregion
-
     return {
       points: filtered as HermesMapPoint[],
       counts: countsByStatus as Record<StatusLabel, number>,

@@ -1,11 +1,5 @@
 "use client"
 
-// #region agent log
-const DEBUG_LOG = (p: { location: string; message: string; data?: Record<string, unknown>; hypothesisId?: string }) => {
-  fetch("http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...p, timestamp: Date.now(), sessionId: "aop-mobile-overflow" }) }).catch(() => {})
-}
-// #endregion
-
 import Link from "next/link"
 import { useMemo, useState, useEffect, useTransition, useDeferredValue, useCallback, type ReactNode, type CSSProperties } from "react"
 import { ChevronDown, Download, Save, FolderOpen, SlidersHorizontal, Pencil, Trash2 } from "lucide-react"
@@ -424,20 +418,6 @@ export default function AopPage() {
   useEffect(() => {
     fetchTemplates("mount")
   }, [fetchTemplates])
-
-  // #region agent log – mobile overflow (H1)
-  useEffect(() => {
-    if (!isMobile || !isMobileFilterOpen || (!loadTemplateOpen && !createTemplateMode)) return
-    const t = setTimeout(() => {
-      const card = document.querySelector<HTMLElement>("[data-mobile-templates-card]")
-      if (card) {
-        const style = getComputedStyle(card)
-        DEBUG_LOG({ location: "aop/page.tsx:mobile-templates-card", message: "Mobile Templates card overflow", hypothesisId: "H1", data: { overflow: style.overflow, overflowY: style.overflowY } })
-      }
-    }, 50)
-    return () => clearTimeout(t)
-  }, [isMobile, isMobileFilterOpen, loadTemplateOpen, createTemplateMode])
-  // #endregion
 
   const handleSaveTemplate = async () => {
     const name = templateName.trim()

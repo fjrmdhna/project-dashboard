@@ -92,36 +92,6 @@ export async function GET(request: NextRequest) {
       limit: 20000
     })
 
-    const tAfterDb = Date.now()
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: 'debug-session',
-        runId: 'post-fix',
-        hypothesisId: 'H1',
-        location: 'src/app/api/hermes-5g/map-data/route.ts',
-        message: 'map-data Supabase query completed',
-        data: {
-          durationMs: tAfterDb - t0,
-          mainCount: data.length,
-          filters: {
-            vendorNamesCount: vendorNames.length,
-            programReportsCount: programReports.length,
-            impTtpsCount: impTtps.length,
-            nanoClustersCount: nanoClusters.length,
-            regionsCount: regions.length,
-            yearsCount: years.length,
-            statusFiltersCount: statusFilters.length
-          }
-        },
-        timestamp: Date.now()
-      })
-    }).catch(() => {})
-    // #endregion
-
     const counts: Record<StatusLabel, number> = {
       [STATUS_LABEL.active]: 0,
       [STATUS_LABEL.ready]: 0,

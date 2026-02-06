@@ -136,9 +136,6 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               priorityCongestUrgent: data.data.priorityCongestUrgent || [],
               trialGbFactory: data.data.trialGbFactory || []
             }
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:fetchOptions:success',message:'Fetch filter options success',data:{instanceId:instanceIdRef.current,variant,forceRefresh,attempt,durationMs:Date.now()-startTs,counts:{vendors:newOptions.vendors.length,programs:newOptions.programs.length,circles:newOptions.circles.length,years:newOptions.years.length,siteCategories:(newOptions.siteCategories||[]).length,ranScores:(newOptions.ranScores||[]).length,priority:(newOptions.priorityCongestUrgent||[]).length,trial:(newOptions.trialGbFactory||[]).length}},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
 
             // Write-through cache IMMEDIATELY (before setState) so remounts are instant.
             // This ensures cache is available even if component unmounts before setState completes.
@@ -161,9 +158,6 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               if (hasUnnormalizedValues) {
                 console.log('[FilterBar] Detected stale siteCategories cache, forcing refresh...')
                 hasRetried = true
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:stale:siteCategories',message:'Detected stale siteCategories; refetching',data:{instanceId:instanceIdRef.current,attempt,siteCategoriesSample:newOptions.siteCategories.slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-                // #endregion
                 await fetchOptions(true)
                 return
               }
@@ -196,9 +190,6 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               if (hasUnnormalizedValues) {
                 console.log('[FilterBar] Detected stale priorityCongestUrgent cache, forcing refresh...')
                 hasRetried = true
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:stale:priority',message:'Detected stale priorityCongestUrgent; refetching',data:{instanceId:instanceIdRef.current,attempt,prioritySample:newOptions.priorityCongestUrgent.slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-                // #endregion
                 await fetchOptions(true)
                 return
               }
@@ -250,9 +241,6 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               if (hasUnnormalizedValues) {
                 console.log('[FilterBar] Detected stale ranScores cache, forcing refresh...')
                 hasRetried = true
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FilterBar.tsx:stale:ranScores',message:'Detected stale ranScores; refetching',data:{instanceId:instanceIdRef.current,attempt,ranScoresSample:newOptions.ranScores.slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-                // #endregion
                 await fetchOptions(true)
                 return
               }
