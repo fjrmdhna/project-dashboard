@@ -246,10 +246,9 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               }
             }
             
-            // Defer heavy options update so opening a dropdown doesn't freeze (lag fix)
-            startTransition(() => {
-              setOptions(newOptions)
-            })
+            // OPTIMIZED: Update options immediately (not deferred) for instant dropdown opening
+            // Options update is fast enough that we don't need startTransition here
+            setOptions(newOptions)
 
           }
         }
@@ -412,7 +411,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
           selected={value.vendor_name}
           placeholder="Vendor"
           onChange={handleVendorChange}
-          disabled={isLoading}
+          disabled={false}
           width="w-full"
           className="col-span-2 md:col-span-1"
         />
@@ -423,7 +422,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
           selected={value.program_report}
           placeholder="Program"
           onChange={handleProgramChange}
-          disabled={isLoading}
+          disabled={false}
           width="w-full"
           className="col-span-2 md:col-span-1"
         />
@@ -436,7 +435,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.imp_ttp}
               placeholder="City"
               onChange={handleCityChange}
-              disabled={isLoading}
+              disabled={false}
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
@@ -446,7 +445,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.nano_cluster}
               placeholder="Cluster"
               onChange={handleNanoClusterChange}
-              disabled={isLoading}
+              disabled={false}
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
@@ -456,7 +455,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.circle || []}
               placeholder="Circle"
               onChange={handleCircleChange}
-              disabled={isLoading}
+              disabled={false}
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
@@ -466,7 +465,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.year || []}
               placeholder="Year"
               onChange={handleYearChange}
-              disabled={isLoading}
+              disabled={false}
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
@@ -476,7 +475,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.site_category ?? []}
               placeholder="Site Category"
               onChange={handleSiteCategoryChange}
-              disabled={isLoading}
+              disabled={false}
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
@@ -491,7 +490,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.circle ?? []}
               placeholder="Circle"
               onChange={handleCircleChange}
-              disabled={isLoading}
+              disabled={false}
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
@@ -501,7 +500,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.site_category ?? []}
               placeholder="Site Category"
               onChange={handleSiteCategoryChange}
-              disabled={isLoading}
+              disabled={false}
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
@@ -511,7 +510,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.ran_score ?? []}
               placeholder="RAN Score"
               onChange={handleRanScoreChange}
-              disabled={isLoading}
+              disabled={false}
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
@@ -521,7 +520,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.year ?? []}
               placeholder="Year"
               onChange={handleYearChange}
-              disabled={isLoading}
+              disabled={false}
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
@@ -531,7 +530,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.priority_congest_urgent ?? []}
               placeholder="Priority"
               onChange={handlePriorityCongestUrgentChange}
-              disabled={isLoading}
+              disabled={false}
               width="w-full"
               className="col-span-2 md:col-span-1"
             />
@@ -541,7 +540,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
               selected={value.trial_gb_factory ?? []}
               placeholder="Trial GB Factory"
               onChange={handleTrialGbFactoryChange}
-              disabled={isLoading}
+              disabled={false}
               width="w-full"
               className="col-span-2 md:col-span-1"
             />

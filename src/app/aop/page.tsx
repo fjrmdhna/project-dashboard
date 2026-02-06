@@ -875,15 +875,20 @@ export default function AopPage() {
           Error: {aopError}. Using placeholder data.
         </p>
       )}
-      {!aopLoading && !aopError && aopData && aopData.length > 0 && (
-        <p className="text-[10px] text-white/50">
-          Live AOP operational metrics from database ({aopData.length} sites).
-        </p>
-      )}
-      {!aopLoading && !aopError && (!aopData || aopData.length === 0) && (
-        <p className="text-[10px] text-white/50">
-          Placeholder dataset. No AOP data found in database.
-        </p>
+      {!aopLoading && !aopError && (
+        <div className="space-y-0.5 text-[10px]">
+          {(!aopData || aopData.length === 0) && (
+            <p className="text-white/50">
+              Placeholder dataset. No AOP data found in database.
+            </p>
+          )}
+          <p className="max-w-xl text-[10px] font-semibold text-amber-200/90">
+            Note:{" "}
+            <span className="font-semibold text-white/90">
+              Shows RF Site Category sites only, excluding the Hermes 5G scope.
+            </span>
+          </p>
+        </div>
       )}
     </div>
   )

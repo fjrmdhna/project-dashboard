@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react"
-import { createPortal } from "react-dom"
+import { createPortal, flushSync } from "react-dom"
 import { Check, ChevronDown, X } from "lucide-react"
 
 export interface MultiSelectProps {
@@ -52,13 +52,18 @@ export function MultiSelect({
     })
   }
 
-  // Handle toggle dropdown
+  // Handle toggle dropdown - keep interaction snappy
   const handleToggle = () => {
-    if (!disabled) {
-      if (!open) {
-        updateMenuPosition()
-      }
-      setOpen(!open)
+    if (disabled) return
+    if (!open) {
+      updateMenuPosition()
+      // Use flushSync so the menu appears immediately after click,
+      // avoiding any visual delay from concurrent React rendering.
+      flushSync(() => {
+        setOpen(true)
+      })
+    } else {
+      setOpen(false)
     }
   }
 
