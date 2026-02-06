@@ -185,18 +185,52 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
   }))
 }
 
+// Helper function to check if a date field has a valid value
+function hasValidDateValue(value: any): boolean {
+  if (value === null || value === undefined) return false
+  const str = String(value).trim()
+  if (str === '' || str === 'null' || str === 'undefined' || str === 'NULL' || str === 'UNDEFINED') return false
+  // Accept any non-empty string as valid (date validation happens at database level)
+  // This matches the database function logic: IS NOT NULL
+  return true
+}
+
+// Helper function to check if a field exists in row (for minimal mode where null fields are omitted)
+function hasField(row: any, fieldName: string): boolean {
+  return fieldName in row && row[fieldName] !== null && row[fieldName] !== undefined
+}
+
 // Helper function to calculate stats from data (fallback)
 function calculateStatsFromData(filteredData: any[]) {
-  const cafCount = filteredData.filter(row => row.rfi_accepted).length
-  const mosCount = filteredData.filter(row => row.mos_af).length
-  const installCount = filteredData.filter(row => row.ic_000040_af).length
-  const readinessCount = filteredData.filter(row => row.imp_integ_af).length
-  const activatedCount = filteredData.filter(row => row.rfs_af).length
-  const rfcCount = filteredData.filter(row => row.rfc_approved).length
-  const fatpCount = filteredData.filter(row => row.fatp_accepted_af).length
-  const hotnewsCount = filteredData.filter(row => row.hotnews_af).length
-  const endorseCount = filteredData.filter(row => row.endorse_af).length
-  const pacCount = filteredData.filter(row => row.pac_accepted_af).length
+  // Count non-null, non-empty values for each milestone
+  const cafCount = filteredData.filter(row => hasValidDateValue(row.rfi_accepted)).length
+  const mosCount = filteredData.filter(row => hasValidDateValue(row.mos_af)).length
+  const installCount = filteredData.filter(row => hasValidDateValue(row.ic_000040_af)).length
+  const readinessCount = filteredData.filter(row => hasValidDateValue(row.imp_integ_af)).length
+  const activatedCount = filteredData.filter(row => hasValidDateValue(row.rfs_af)).length
+  const rfcCount = filteredData.filter(row => hasValidDateValue(row.rfc_approved)).length
+  // FATP: Count rows where fatp_accepted_af is not null/empty and is a valid date
+  // In minimal mode, null fields are omitted (undefined), so we need to check both existence and value
+  const fatpCount = filteredData.filter(row => {
+    // Check if field exists in row (minimal mode omits null fields)
+    if (!hasField(row, 'fatp_accepted_af')) return false
+    // Check if value is valid
+    return hasValidDateValue(row.fatp_accepted_af)
+  }).length
+  const hotnewsCount = filteredData.filter(row => hasValidDateValue(row.hotnews_af)).length
+  const endorseCount = filteredData.filter(row => hasValidDateValue(row.endorse_af)).length
+  const pacCount = filteredData.filter(row => hasValidDateValue(row.pac_accepted_af)).length
+  
+  // Debug logging for FATP (only log if count is 0 to help diagnose issues)
+  if (fatpCount === 0 && filteredData.length > 0) {
+    // Sample a few rows to check if fatp_accepted_af exists in data
+    const sampleRows = filteredData.slice(0, 3).map(r => ({ 
+      system_key: r.system_key, 
+      has_fatp: !!r.fatp_accepted_af,
+      fatp_value: r.fatp_accepted_af 
+    }))
+    console.warn(`[AOP Site Data] Fallback calculation: FATP count is 0. Sample rows:`, sampleRows)
+  }
   const uniqueClusters = new Set<string>()
   filteredData.forEach(row => {
     if (row.region_circle) {
@@ -277,32 +311,17 @@ async function fetchDataFromDatabase(
   }
 
   // Fetch all data using pagination
-  // #region agent log
-  const paginationStartTime = Date.now();
-  fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:261',message:'Pagination loop start',data:{mode,pageSize,MAX_PAGES},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   while (hasMore && page < MAX_PAGES) {
     const from = page * pageSize
     const to = from + pageSize - 1
 
-    // #region agent log
-    const pageQueryStartTime = Date.now();
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:265',message:'Before page query',data:{page,from,to},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     const query = baseQuery.range(from, to)
     const { data: pageData, error: pageError, count } = await query
-    // #region agent log
-    const pageQueryEndTime = Date.now();
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:266',message:'After page query',data:{page,queryDuration:pageQueryEndTime-pageQueryStartTime,recordCount:pageData?.length||0,hasError:!!pageError,errorCode:pageError?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
 
     if (pageError) {
       if (pageError.code === 'PGRST116') {
         return { data: [], totalCount: 0 }
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:272',message:'Database error in pagination',data:{page,errorCode:pageError.code,errorMessage:pageError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       throw new Error(`Database error: ${pageError.message}`)
     }
 
@@ -322,10 +341,7 @@ async function fetchDataFromDatabase(
   if (page >= MAX_PAGES) {
     console.warn(`[AOP Site Data] Pagination safety limit reached at ${page} pages, fetched ${allData.length} records`)
   }
-  // #region agent log
-  const paginationEndTime = Date.now();
-  fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:292',message:'Pagination complete',data:{totalPages:page,totalRecords:allData.length,totalDuration:paginationEndTime-paginationStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
+
   return { data: allData, totalCount }
 }
 
@@ -336,17 +352,13 @@ async function fetchStatsFromDatabase(
   circles: string[],
   siteCategories: string[],
   q: string
-) {
+): Promise<{ stats: SiteDataResponse['stats'], hasFatpCount: boolean } | null> {
   const vendorNamesParam = vendorNames.length > 0 ? vendorNames : null
   const programReportsParam = programReports.length > 0 ? programReports : null
   const circlesParam = circles.length > 0 ? circles : null
   const siteCategoriesParam = siteCategories.length > 0 ? siteCategories : null
   const searchParam = q || null
 
-  // #region agent log
-  const statsQueryStartTime = Date.now();
-  fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:302',message:'Before stats RPC',data:{hasVendorFilter:!!vendorNamesParam,hasProgramFilter:!!programReportsParam},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   const { data: statsData, error: statsError } = await supabase.rpc('get_aop_stats', {
     p_vendor_names: vendorNamesParam,
     p_program_reports: programReportsParam,
@@ -354,34 +366,37 @@ async function fetchStatsFromDatabase(
     p_site_categories: siteCategoriesParam,
     p_search: searchParam
   })
-  // #region agent log
-  const statsQueryEndTime = Date.now();
-  fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:310',message:'After stats RPC',data:{duration:statsQueryEndTime-statsQueryStartTime,hasData:!!statsData,hasError:!!statsError,errorMessage:statsError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
 
   if (!statsError && statsData && statsData.length > 0) {
     const statsRow = statsData[0]
+    // Check if fatp_count exists in response (database function might not be updated yet)
+    const hasFatpCount = 'fatp_count' in statsRow && statsRow.fatp_count !== undefined
+    const fatpCount = hasFatpCount ? (Number(statsRow.fatp_count) || 0) : 0 // Default to 0 if not available
+    
+    if (!hasFatpCount) {
+      console.warn('[AOP Site Data] Database function get_aop_stats does not have fatp_count. Will use fallback calculation from fetched data.')
+    }
+    
     return {
-      totalSites: Number(statsRow.total_sites) || 0,
-      caf: Number(statsRow.caf_count) || 0,
-      mos: Number(statsRow.mos_count) || 0,
-      install: Number(statsRow.install_count) || 0,
-      readiness: Number(statsRow.readiness_count) || 0,
-      activated: Number(statsRow.activated_count) || 0,
-      rfc: Number(statsRow.rfc_count) || 0,
-      fatp: Number(statsRow.fatp_count) || 0,
-      hotnews: Number(statsRow.hotnews_count) || 0,
-      endorse: Number(statsRow.endorse_count) || 0,
-      pac: Number(statsRow.pac_count) || 0,
-      nanoClusters: Number(statsRow.cluster_count) || 0
+      stats: {
+        totalSites: Number(statsRow.total_sites) || 0,
+        caf: Number(statsRow.caf_count) || 0,
+        mos: Number(statsRow.mos_count) || 0,
+        install: Number(statsRow.install_count) || 0,
+        readiness: Number(statsRow.readiness_count) || 0,
+        activated: Number(statsRow.activated_count) || 0,
+        rfc: Number(statsRow.rfc_count) || 0,
+        fatp: fatpCount, // Always a number (0 if DB function doesn't have it yet - will be replaced by fallback)
+        hotnews: Number(statsRow.hotnews_count) || 0,
+        endorse: Number(statsRow.endorse_count) || 0,
+        pac: Number(statsRow.pac_count) || 0,
+        nanoClusters: Number(statsRow.cluster_count) || 0
+      },
+      hasFatpCount
     }
   }
 
   if (statsError) {
-    // #region agent log
-    const isTimeout = statsError.message?.includes('timeout') || statsError.message?.includes('canceling statement');
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:328',message:'Stats RPC error',data:{errorMessage:statsError.message,isTimeout},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     console.warn('Database function get_aop_stats failed:', statsError)
     // Don't throw - let caller use fallback calculation
   }
@@ -390,10 +405,6 @@ async function fetchStatsFromDatabase(
 }
 
 export async function GET(request: NextRequest) {
-  // #region agent log
-  const requestStartTime = Date.now();
-  fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:342',message:'API route entry',data:{timestamp:requestStartTime,url:request.url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   try {
     const { searchParams } = new URL(request.url)
 
@@ -438,10 +449,6 @@ export async function GET(request: NextRequest) {
     // Fetch from database
     console.log(`[AOP Site Data] Fetching from database (mode: ${mode})...`)
     const startTime = Date.now()
-    // #region agent log
-    const dbQueryStartTime = Date.now();
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:386',message:'Before database query',data:{mode,hasCachedStats:!!cachedStats,filterHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
 
     // If we have cached stats, we can skip stats fetch
     let stats: SiteDataResponse['stats']
@@ -449,39 +456,49 @@ export async function GET(request: NextRequest) {
 
     if (cachedStats) {
       console.log(`[AOP Site Data] Using cached stats for filter: ${filterHash}`)
-      stats = cachedStats
-      // Still need to fetch data
-      // #region agent log
-      const fetchDataStartTime = Date.now();
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:396',message:'Before fetchDataFromDatabase',data:{mode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      dataResult = await fetchDataFromDatabase(vendorNames, programReports, circles, siteCategories, q, mode)
-      // #region agent log
-      const fetchDataEndTime = Date.now();
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:396',message:'After fetchDataFromDatabase',data:{duration:fetchDataEndTime-fetchDataStartTime,recordCount:dataResult.data.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
+      // Check if cached stats has fatp (might be old cache from before fatp was added)
+      if (cachedStats.fatp === undefined) {
+        console.warn('[AOP Site Data] Cached stats missing fatp, will recalculate from fetched data')
+        // Fetch data first, then recalculate fatp from data
+        dataResult = await fetchDataFromDatabase(vendorNames, programReports, circles, siteCategories, q, mode)
+        const fallbackStats = calculateStatsFromData(dataResult.data)
+        // Merge cached stats with fallback fatp
+        stats = { ...cachedStats, fatp: fallbackStats.fatp }
+        // Update cache with new stats that include fatp
+        setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch(err => {
+          console.error('[AOP Site Data] Failed to update cached stats:', err)
+        })
+      } else {
+        stats = cachedStats
+        // Still need to fetch data
+        dataResult = await fetchDataFromDatabase(vendorNames, programReports, circles, siteCategories, q, mode)
+      }
     } else {
       // Fetch data and stats in parallel
-      // #region agent log
-      const parallelStartTime = Date.now();
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:399',message:'Before parallel fetch',data:{mode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      const [fetchedData, dbStats] = await Promise.all([
+      const [fetchedData, dbStatsResult] = await Promise.all([
         fetchDataFromDatabase(vendorNames, programReports, circles, siteCategories, q, mode),
         fetchStatsFromDatabase(vendorNames, programReports, circles, siteCategories, q)
       ])
-      // #region agent log
-      const parallelEndTime = Date.now();
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:399',message:'After parallel fetch',data:{duration:parallelEndTime-parallelStartTime,dataCount:fetchedData.data.length,hasStats:!!dbStats},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       dataResult = fetchedData
-      // If stats RPC timeout or failed, calculate from fetched data (fallback)
-      if (!dbStats) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:404',message:'Stats RPC failed, using fallback calculation',data:{recordCount:fetchedData.data.length},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
+      // If stats RPC timeout or failed, OR if fatp_count is missing from DB function, calculate from fetched data (fallback)
+      if (!dbStatsResult) {
+        // No stats from DB function - use full fallback
+        stats = calculateStatsFromData(dataResult.data)
+        console.log(`[AOP Site Data] Using fallback stats calculation. FATP count: ${stats.fatp}`)
+      } else if (!dbStatsResult.hasFatpCount) {
+        // DB function exists but missing fatp_count - merge with fallback for fatp only
+        const fallbackStats = calculateStatsFromData(dataResult.data)
+        stats = { ...dbStatsResult.stats, fatp: fallbackStats.fatp }
+        console.log(`[AOP Site Data] Database function missing fatp_count, using fallback calculation. FATP count: ${fallbackStats.fatp}`)
+        // Update cache with stats that include fatp
+        setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch(err => {
+          console.error('[AOP Site Data] Failed to update cached stats with fatp:', err)
+        })
+      } else {
+        // DB function has all fields including fatp
+        stats = dbStatsResult.stats
+        console.log(`[AOP Site Data] Using database function stats. FATP count: ${stats.fatp}`)
       }
-      stats = dbStats || calculateStatsFromData(dataResult.data)
       
       // Cache only stats (small data, ~1KB) - don't cache full data (too large ~20MB)
       setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch(err => {
@@ -504,14 +521,10 @@ export async function GET(request: NextRequest) {
       totalCount,
       stats
     }
-    // #region agent log
-    const responseSizeEstimate = JSON.stringify(responseData).length;
-    const totalDuration = Date.now() - requestStartTime;
-    const responseSizeMB = responseSizeEstimate / 1024 / 1024;
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:420',message:'Before response',data:{fetchTime,totalDuration,recordCount:mappedData.length,responseSizeBytes:responseSizeEstimate,responseSizeMB:responseSizeMB.toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     
     // Warn if response size is too large (could cause issues)
+    const responseSizeEstimate = JSON.stringify(responseData).length
+    const responseSizeMB = responseSizeEstimate / 1024 / 1024
     if (responseSizeMB > 20) {
       console.warn(`[AOP Site Data] Large response size: ${responseSizeMB.toFixed(2)}MB. Consider pagination or filtering.`)
     }
@@ -524,10 +537,6 @@ export async function GET(request: NextRequest) {
     // NOTE: We don't cache full response because data is too large (40k+ records = ~20MB)
     // Vercel KV has 256KB limit per value. We only cache stats above.
 
-    // #region agent log
-    const responseTime = Date.now();
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:431',message:'Returning success response',data:{totalDuration:responseTime-requestStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     return NextResponse.json({
       status: 'success',
       ...responseData,
@@ -540,12 +549,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error in AOP site-data API route:', error)
-    // #region agent log
-    const errorTime = Date.now();
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aop/site-data/route.ts:444',message:'Error caught',data:{errorMessage,errorStack,timeSinceStart:errorTime-requestStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     return NextResponse.json(
       {
         status: 'error',

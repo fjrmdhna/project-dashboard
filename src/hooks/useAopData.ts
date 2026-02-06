@@ -399,7 +399,8 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
     if (row.imp_integ_af) readiness++
     if (row.rfs_af) activated++
     if (row.rfc_approved) rfc++
-    if (row.fatp_accepted_af) fatp++
+    // FATP: Check if fatp_accepted_af exists and is not null/empty (matches API fallback logic)
+    if (row.fatp_accepted_af && String(row.fatp_accepted_af).trim() !== '') fatp++
     if (row.hotnews_af) hotnews++
     if (row.endorse_af) endorse++
     if (row.pac_accepted_af) pac++
