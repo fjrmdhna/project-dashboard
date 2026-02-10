@@ -218,31 +218,33 @@ function buildHybridBuckets(anchorDate?: string, span: number = 5, rows: Row[] =
 
 function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, rangeEnd: Date): Bucket[] {
   const weeks: Bucket[] = [];
-  
-  // Start from the first day of the month
-  let cursor = new Date(monthStart);
-  let weekInMonth = 1; // Week counter within the month (W1, W2, W3, W4, W5)
 
-  while (cursor <= monthEnd && weekInMonth <= 5) {
+  // Start from the first day of the month; weeks are labeled by week-of-year (from start of year)
+  let cursor = new Date(monthStart);
+  let weekCount = 0;
+  const maxWeeksPerMonth = 5;
+
+  while (cursor <= monthEnd && weekCount < maxWeeksPerMonth) {
     const weekStart = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate(), 0, 0, 0, 0);
-    
-    // Calculate days until end of week (Sunday)
-    // JavaScript: Sunday = 0, Monday = 1, ..., Saturday = 6
-    const dayOfWeek = cursor.getDay(); // 0 = Sunday
-    const daysUntilSunday = dayOfWeek === 0 ? 0 : (7 - dayOfWeek); // If Sunday, stay; else go to next Sunday
-    
+    // End of week: Sunday (same as before for period boundaries)
+    const dayOfWeek = cursor.getDay();
+    const daysUntilSunday = dayOfWeek === 0 ? 0 : (7 - dayOfWeek);
     const weekEndDate = new Date(weekStart);
     weekEndDate.setDate(weekEndDate.getDate() + daysUntilSunday);
     weekEndDate.setHours(23, 59, 59, 999);
 
-    // Limit to end of month
     const monthLimitedEnd = weekEndDate.getTime() > monthEnd.getTime() ? monthEnd : weekEndDate;
     const { start, end } = clampRange(weekStart, monthLimitedEnd, rangeStart, rangeEnd);
 
     if (start <= end) {
-      const weekLabel = `W${weekInMonth}`;
+      const weekNo = getWeekNumber(weekStart);
+      const weekLabel = `W${weekNo}`;
+      // Key includes start date so sort is chronological (e.g. W52 in early Jan before W2 in mid Jan)
+      const y = start.getFullYear();
+      const m = String(start.getMonth() + 1).padStart(2, '0');
+      const d = String(start.getDate()).padStart(2, '0');
       weeks.push({
-        key: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-w${weekInMonth}`,
+        key: `${y}-${m}-${d}-w${weekNo}`,
         label: weekLabel,
         start,
         end,
@@ -250,12 +252,11 @@ function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, ra
       });
     }
 
-    // Move to next day after week end (Monday)
     const nextStart = new Date(monthLimitedEnd);
     nextStart.setDate(nextStart.getDate() + 1);
     nextStart.setHours(0, 0, 0, 0);
     cursor = nextStart;
-    weekInMonth++;
+    weekCount++;
   }
 
   return weeks;
@@ -512,30 +513,23 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
     }
 
     // Ensure data is sorted by key (chronological order)
-    // Sort by parsing the key to ensure proper chronological order
+    // Keys: "YYYY-MM" (month) or "YYYY-MM-DD-wW" (week – sort by date so W52 before W2 in Jan)
     return result.sort((a, b) => {
-      // Parse keys which are in format "YYYY-MM" or "YYYY-MM-wW"
       const parseKey = (key: string) => {
         const parts = key.split('-');
         const year = parseInt(parts[0], 10);
         const month = parseInt(parts[1], 10);
-        const week = parts[2] ? parseInt(parts[2].replace('w', ''), 10) : 0;
-        return { year, month, week };
+        // Week buckets: "YYYY-MM-DD-wW" (4 parts) -> sort by day
+        const day = parts.length >= 4 ? parseInt(parts[2], 10) : 0;
+        const week = parts[parts.length - 1]?.startsWith('w') ? parseInt(parts[parts.length - 1].replace('w', ''), 10) : 0;
+        return { year, month, day, week };
       };
-      
-      const aParsed = parseKey(a.key);
-      const bParsed = parseKey(b.key);
-      
-      // Compare year first
-      if (aParsed.year !== bParsed.year) {
-        return aParsed.year - bParsed.year;
-      }
-      // Then month
-      if (aParsed.month !== bParsed.month) {
-        return aParsed.month - bParsed.month;
-      }
-      // Then week (if applicable)
-      return aParsed.week - bParsed.week;
+      const ap = parseKey(a.key);
+      const bp = parseKey(b.key);
+      if (ap.year !== bp.year) return ap.year - bp.year;
+      if (ap.month !== bp.month) return ap.month - bp.month;
+      if (ap.day !== bp.day) return ap.day - bp.day;
+      return ap.week - bp.week;
     });
   }
 
@@ -1093,30 +1087,23 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
   
   const data = useMemo(() => {
     const aggregated = aggregate(rows ?? [], buckets, anchorDate);
-    // Ensure data is sorted by key (chronological order) - parse keys for proper sorting
+    // Ensure data is sorted by key (chronological order)
+    // Keys: "YYYY-MM" (month) or "YYYY-MM-DD-wW" (week – sort by date so W52 before W2 in Jan)
     const result = aggregated.sort((a, b) => {
-      // Parse keys which are in format "YYYY-MM" or "YYYY-MM-wW"
       const parseKey = (key: string) => {
         const parts = key.split('-');
         const year = parseInt(parts[0], 10);
         const month = parseInt(parts[1], 10);
-        const week = parts[2] ? parseInt(parts[2].replace('w', ''), 10) : 0;
-        return { year, month, week };
+        const day = parts.length >= 4 ? parseInt(parts[2], 10) : 0;
+        const week = parts[parts.length - 1]?.startsWith('w') ? parseInt(parts[parts.length - 1].replace('w', ''), 10) : 0;
+        return { year, month, day, week };
       };
-      
-      const aParsed = parseKey(a.key);
-      const bParsed = parseKey(b.key);
-      
-      // Compare year first
-      if (aParsed.year !== bParsed.year) {
-        return aParsed.year - bParsed.year;
-      }
-      // Then month
-      if (aParsed.month !== bParsed.month) {
-        return aParsed.month - bParsed.month;
-      }
-      // Then week (if applicable)
-      return aParsed.week - bParsed.week;
+      const ap = parseKey(a.key);
+      const bp = parseKey(b.key);
+      if (ap.year !== bp.year) return ap.year - bp.year;
+      if (ap.month !== bp.month) return ap.month - bp.month;
+      if (ap.day !== bp.day) return ap.day - bp.day;
+      return ap.week - bp.week;
     }).filter(point => {
       // Filter out any points with invalid labels (like "All")
       return point.label && point.label.trim() !== '' && point.label.toLowerCase() !== 'all';

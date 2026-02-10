@@ -89,6 +89,21 @@ export default async function Home() {
       progress: 0,
       mood: "primary",
       href: "/tlp-new-site",
+      underConstruction: true,
+    },
+    {
+      id: "fiberization",
+      title: "Fiberization",
+      category: "Fiber",
+      date: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      progress: 0,
+      mood: "primary",
+      href: "#",
+      underConstruction: true,
     },
   ]
 

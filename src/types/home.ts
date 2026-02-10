@@ -11,6 +11,8 @@ export interface ProjectCardData {
   mood?: ProjectMood
   href: string
   isDummy?: boolean // Flag untuk menandai card sebagai dummy/placeholder data
+  /** When true, card is not clickable and shows "Under construction" badge */
+  underConstruction?: boolean
 }
 
 export interface HeroHighlight {

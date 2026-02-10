@@ -7,26 +7,43 @@ interface ProjectCardProps {
   project: ProjectCardData
 }
 
+const cardClassName = (
+  isPrimary: boolean,
+  isDummy: boolean,
+  underConstruction: boolean
+) =>
+  cn(
+    "relative flex flex-col gap-3 rounded-3xl border border-slate-100 bg-white p-4 text-slate-900 shadow-sm transition",
+    isPrimary && "border-transparent bg-gradient-to-b from-white to-white/90 shadow-lg ring-2 ring-primary/30",
+    isDummy && "opacity-90",
+    underConstruction
+      ? "cursor-default opacity-90"
+      : "hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+  )
+
 export function ProjectCard({ project }: ProjectCardProps) {
   const isPrimary = project.mood === "primary"
   const isDummy = project.isDummy === true
+  const underConstruction = project.underConstruction === true
 
-  return (
-    <Link
-      href={project.href}
-      className={cn(
-        "relative flex flex-col gap-3 rounded-3xl border border-slate-100 bg-white p-4 text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-        isPrimary && "border-transparent bg-gradient-to-b from-white to-white/90 shadow-lg ring-2 ring-primary/30",
-        isDummy && "opacity-90",
-      )}
-    >
-      {isDummy && (
+  const content = (
+    <>
+      {isDummy && !underConstruction && (
         <span
           className="absolute right-2 top-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700"
           title="Placeholder data"
           aria-label="Placeholder data"
         >
           Demo
+        </span>
+      )}
+      {underConstruction && (
+        <span
+          className="absolute right-2 top-2 rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-medium text-slate-600"
+          title="Under construction"
+          aria-label="Under construction"
+        >
+          Under construction
         </span>
       )}
       <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide">
@@ -60,6 +77,27 @@ export function ProjectCard({ project }: ProjectCardProps) {
         </div>
         <p className="mt-1 text-xs font-semibold text-slate-900">{project.progress}%</p>
       </div>
+    </>
+  )
+
+  if (underConstruction) {
+    return (
+      <div
+        className={cardClassName(isPrimary, isDummy, true)}
+        aria-disabled="true"
+        role="article"
+      >
+        {content}
+      </div>
+    )
+  }
+
+  return (
+    <Link
+      href={project.href}
+      className={cardClassName(isPrimary, isDummy, false)}
+    >
+      {content}
     </Link>
   )
 }
