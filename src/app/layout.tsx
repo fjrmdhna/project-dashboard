@@ -3,6 +3,7 @@ import { Outfit, Fira_Code } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ZoomReset } from "@/components/ZoomReset";
+import { Analytics } from "@vercel/analytics/next";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -45,6 +46,7 @@ export default function RootLayout({
           <ZoomReset />
           {children}
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
