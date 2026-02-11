@@ -27,27 +27,42 @@ const navActions: NavigationAction[] = [
 ]
 
 export default async function Home() {
-  // Fetch progress real untuk Hermes 5G
-  // All data included - no exclusions
+  // OPTIMIZATION: Fetch both progress data in parallel instead of sequential
+  // This reduces total loading time significantly
   let hermesProgress = 0
-  try {
-    const hermesProgressData = await getProjectProgress("site_data_5g")
-    hermesProgress = hermesProgressData.progress
-  } catch (error) {
-    console.error("Error fetching Hermes 5G progress:", error)
-    // Fallback ke 0 jika error
+  let aopProgress = 0
+
+  // Use Promise.allSettled to handle errors gracefully without blocking
+  const [hermesResult, aopResult] = await Promise.allSettled([
+    getProjectProgress("site_data_5g").catch((error) => {
+      console.error("Error fetching Hermes 5G progress:", error)
+      return { scope: 0, activated: 0, progress: 0 }
+    }),
+    getProjectProgress("site_data_aop").catch((error) => {
+      console.error("Error fetching AOP progress:", error)
+      return { scope: 0, activated: 0, progress: 0 }
+    }),
+  ])
+
+  // Extract results safely
+  if (hermesResult.status === "fulfilled") {
+    hermesProgress = hermesResult.value.progress
   }
 
-  // Fetch progress real untuk AOP dari site_data_aop
-  // Mengambil semua data AOP tanpa filter spesifik
-  let aopProgress = 0
-  try {
-    const aopProgressData = await getProjectProgress("site_data_aop")
-    aopProgress = aopProgressData.progress
-  } catch (error) {
-    console.error("Error fetching AOP progress:", error)
-    // Fallback ke 0 jika error
+  if (aopResult.status === "fulfilled") {
+    aopProgress = aopResult.value.progress
   }
+
+  // Optimize: Calculate date once instead of 4 times
+  const currentDate = new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+
+  // Validate progress values (clamp between 0-100, handle NaN/undefined)
+  const validatedHermesProgress = Math.max(0, Math.min(100, Number.isNaN(hermesProgress) || hermesProgress === undefined ? 0 : hermesProgress))
+  const validatedAopProgress = Math.max(0, Math.min(100, Number.isNaN(aopProgress) || aopProgress === undefined ? 0 : aopProgress))
 
   // Build projects array dengan data real untuk Hermes 5G dan AOP
   const projects: ProjectCardData[] = [
@@ -55,12 +70,8 @@ export default async function Home() {
       id: "hermes",
       title: "Hermes 5G",
       category: "RAN",
-      date: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-      progress: hermesProgress,
+      date: currentDate,
+      progress: validatedHermesProgress,
       mood: "primary",
       href: "/hermes-5g",
     },
@@ -68,12 +79,8 @@ export default async function Home() {
       id: "aop",
       title: "AOP",
       category: "RAN",
-      date: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-      progress: aopProgress,
+      date: currentDate,
+      progress: validatedAopProgress,
       mood: "primary",
       href: "/aop",
     },
@@ -81,11 +88,7 @@ export default async function Home() {
       id: "tlp-new-site",
       title: "TLP New Site",
       category: "RAN",
-      date: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
+      date: currentDate,
       progress: 0,
       mood: "primary",
       href: "/tlp-new-site",
@@ -95,11 +98,7 @@ export default async function Home() {
       id: "fiberization",
       title: "Fiberization",
       category: "Fiber",
-      date: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
+      date: currentDate,
       progress: 0,
       mood: "primary",
       href: "#",

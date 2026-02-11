@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Outfit, Fira_Code } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ZoomReset } from "@/components/ZoomReset";
@@ -44,6 +45,7 @@ export default function RootLayout({
         >
           <ZoomReset />
           {children}
+          <SpeedInsights />
         </ThemeProvider>
       </body>
     </html>

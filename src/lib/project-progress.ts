@@ -1,5 +1,6 @@
 import { supabase } from "./supabase"
 import { EXCLUDED_PROGRAM_REPORTS } from "./hermes-5g-constants"
+import { getCacheOrFetch } from "./redis"
 
 export interface ProjectProgress {
   scope: number
@@ -23,6 +24,24 @@ export interface ProjectProgressFilters {
  * @returns Object berisi scope, activated, dan progress percentage
  */
 export async function getProjectProgress(
+  tableName: string,
+  filters?: ProjectProgressFilters
+): Promise<ProjectProgress> {
+  // Generate cache key based on table name and filters
+  const cacheKey = `project-progress:${tableName}:${JSON.stringify(filters || {})}`
+  const CACHE_TTL_SECONDS = 5 * 60 // 5 minutes cache
+  
+  // Try to get from cache first
+  return await getCacheOrFetch(
+    cacheKey,
+    async () => {
+      return await fetchProjectProgressFromDB(tableName, filters)
+    },
+    CACHE_TTL_SECONDS
+  )
+}
+
+async function fetchProjectProgressFromDB(
   tableName: string,
   filters?: ProjectProgressFilters
 ): Promise<ProjectProgress> {
