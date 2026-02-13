@@ -123,6 +123,8 @@ function normalizeRanScoreForFilter(value: string | null | undefined): string {
 }
 
 export interface AopSiteData extends MatrixRow {
+  site_id?: string | null
+  site_name?: string | null
   rfc_approved?: string | null
   fatp_accepted_af?: string | null  // FATP - Matrix milestone
   patp_accepted_af?: string | null  // PATP - Matrix milestone
@@ -317,10 +319,12 @@ function filterDataClientSide(
       if (!trialGbFactory.includes(rowValue)) return false
     }
 
-    // Search filter
+    // Search filter (must match API: system_key, site_id, site_name, vendor_name; program_report for consistency)
     if (searchLower) {
       const searchFields = [
         row.system_key,
+        row.site_id,
+        row.site_name,
         row.vendor_name,
         row.program_report
       ].filter(Boolean).map(s => (s || '').toLowerCase())

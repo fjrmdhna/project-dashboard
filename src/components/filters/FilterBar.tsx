@@ -427,7 +427,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search sites, vendors..."
+            placeholder="Search by site name, vendor, system key, site ID..."
             className="w-full bg-white/5 rounded-md h-7 pl-6 pr-6 text-xs text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
           />
           {searchInput && (

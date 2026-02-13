@@ -64,9 +64,11 @@ const FULL_COLUMNS = [
 // Minimal columns for dashboard (reduces data from ~27MB to ~10MB)
 // Includes fields needed by dashboard components AND client-side filtering
 const MINIMAL_COLUMNS = [
-  'system_key',        // Required for key
-  'vendor_name',       // VendorLeaderboard + Filter
-  'program_report',    // Filter
+  'system_key',        // Required for key + Search
+  'site_id',           // Search
+  'site_name',        // Search
+  'vendor_name',       // VendorLeaderboard + Filter + Search
+  'program_report',    // Filter + Search
   'region_circle',     // Readiness/Activated cards + Filter
   'site_category',     // Filter
   'ran_score',         // RAN Score filter
@@ -120,7 +122,10 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       
       // Always include system_key (required)
       mapped.system_key = row.system_key
-      
+      // Include for client-side search (system key, site id, site name)
+      if (row.site_id != null && row.site_id !== '') mapped.site_id = String(row.site_id).trim()
+      if (row.site_name) mapped.site_name = row.site_name.trim()
+
       // Only include non-empty values
       if (row.vendor_name) mapped.vendor_name = row.vendor_name.trim()
       if (row.program_report) mapped.program_report = row.program_report.trim()
