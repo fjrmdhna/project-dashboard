@@ -52,6 +52,45 @@ interface FilterOptions {
 const FILTER_OPTIONS_CACHE = new Map<string, { options: FilterOptions; fetchedAt: number }>()
 const FILTER_OPTIONS_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
+/**
+ * Prefetch filter options into the shared cache so that when the user opens
+ * "Edit filters" the dropdowns are already populated (no wait on first open).
+ * Call this when the page mounts (e.g. AOP page) with the same endpoint/variant
+ * used by FilterBar.
+ */
+export async function prefetchFilterOptions(
+  endpoint: string,
+  variant: 'default' | 'aop' = 'default'
+): Promise<void> {
+  const cacheKey = `${variant}:${endpoint}`
+  const cached = FILTER_OPTIONS_CACHE.get(cacheKey)
+  if (cached && (Date.now() - cached.fetchedAt) < FILTER_OPTIONS_TTL_MS) {
+    return
+  }
+  try {
+    const response = await fetch(endpoint)
+    if (!response.ok) return
+    const data = await response.json()
+    if (data.status !== 'success') return
+    const options: FilterOptions = {
+      vendors: data.data.vendors || [],
+      programs: data.data.programs || [],
+      cities: data.data.cities || [],
+      nanoClusters: data.data.nanoClusters || [],
+      regions: data.data.regions || [],
+      years: data.data.years || [],
+      circles: data.data.circles || [],
+      siteCategories: data.data.siteCategories || [],
+      ranScores: data.data.ranScores || [],
+      priorityCongestUrgent: data.data.priorityCongestUrgent || [],
+      trialGbFactory: data.data.trialGbFactory || []
+    }
+    FILTER_OPTIONS_CACHE.set(cacheKey, { options, fetchedAt: Date.now() })
+  } catch {
+    // Prefetch is best-effort; FilterBar will refetch when opened if needed
+  }
+}
+
 // Fungsi helper untuk memendekkan teks yang terlalu panjang
 const truncateText = (text: string | undefined | null, maxLength: number = 20): string => {
   if (!text || typeof text !== 'string') return '';
@@ -375,25 +414,21 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
     (value.priority_congest_urgent?.length || 0) > 0 ||
     (value.trial_gb_factory?.length || 0) > 0
 
-  // Grid layout: AOP 8 filters (Circle, Site Category, RAN Score, Year, Priority, Trial GB Factory); default (Hermes) 8 filters
-  const gridClass =
-    variant === "aop"
-      ? "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(8,minmax(0,1fr))_auto] md:items-center md:gap-2"
-      : "grid grid-cols-2 gap-3 text-xs flex-shrink-0 min-w-0 w-full md:grid-cols-[minmax(0,2fr)_repeat(7,minmax(0,1fr))_auto] md:items-center md:gap-2"
-  
+  const rowGridClass = "grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs flex-shrink-0 w-full items-center"
+  const cellClass = "min-w-0"
+
   return (
     <div className="h-full flex flex-col min-w-0">
-      {/* Filter Controls - Responsive grid layout */}
-      <div className={gridClass}>
-        {/* Search Input */}
-        <div className="col-span-2 md:col-span-1 relative min-w-0">
+      {/* Row 1: Search + first set of filters — fixed 5 columns, no wrap */}
+      <div className={rowGridClass}>
+        <div className={`${cellClass} col-span-2 sm:col-span-1 relative`}>
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
           <input
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search sites, vendors..."
-            className="w-full bg-white/5 rounded-md h-6 pl-6 pr-6 text-xs text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
+            className="w-full bg-white/5 rounded-md h-7 pl-6 pr-6 text-xs text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
           />
           {searchInput && (
             <button 
@@ -405,161 +440,63 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
           )}
         </div>
 
-        {/* Vendor Filter */}
-        <MultiSelect
-          options={options.vendors}
-          selected={value.vendor_name}
-          placeholder="Vendor"
-          onChange={handleVendorChange}
-          disabled={false}
-          width="w-full"
-          className="col-span-2 md:col-span-1"
-        />
-
-        {/* Program Filter */}
-        <MultiSelect
-          options={options.programs}
-          selected={value.program_report}
-          placeholder="Program"
-          onChange={handleProgramChange}
-          disabled={false}
-          width="w-full"
-          className="col-span-2 md:col-span-1"
-        />
-
-        {/* City & Cluster Filters - Default variant only */}
-        {variant !== "aop" && (
+        {variant === "aop" ? (
           <>
-            <MultiSelect
-              options={options.cities}
-              selected={value.imp_ttp}
-              placeholder="City"
-              onChange={handleCityChange}
-              disabled={false}
-              width="w-full"
-              className="col-span-2 md:col-span-1"
-            />
-
-            <MultiSelect
-              options={options.nanoClusters}
-              selected={value.nano_cluster}
-              placeholder="Cluster"
-              onChange={handleNanoClusterChange}
-              disabled={false}
-              width="w-full"
-              className="col-span-2 md:col-span-1"
-            />
-
-            <MultiSelect
-              options={options.circles}
-              selected={value.circle || []}
-              placeholder="Circle"
-              onChange={handleCircleChange}
-              disabled={false}
-              width="w-full"
-              className="col-span-2 md:col-span-1"
-            />
-
-            <MultiSelect
-              options={options.years}
-              selected={value.year || []}
-              placeholder="Year"
-              onChange={handleYearChange}
-              disabled={false}
-              width="w-full"
-              className="col-span-2 md:col-span-1"
-            />
-
-            <MultiSelect
-              options={options.siteCategories || []}
-              selected={value.site_category ?? []}
-              placeholder="Site Category"
-              onChange={handleSiteCategoryChange}
-              disabled={false}
-              width="w-full"
-              className="col-span-2 md:col-span-1"
-            />
+            <div className={cellClass}><MultiSelect options={options.vendors} selected={value.vendor_name} placeholder="Vendor" onChange={handleVendorChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={cellClass}><MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={cellClass}><MultiSelect options={options.circles} selected={value.circle ?? []} placeholder="Circle" onChange={handleCircleChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={cellClass}><MultiSelect options={options.siteCategories || []} selected={value.site_category ?? []} placeholder="Site Category" onChange={handleSiteCategoryChange} disabled={false} width="w-full" staticLabel /></div>
+          </>
+        ) : (
+          <>
+            <div className={cellClass}><MultiSelect options={options.vendors} selected={value.vendor_name} placeholder="Vendor" onChange={handleVendorChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={cellClass}><MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={cellClass}><MultiSelect options={options.cities} selected={value.imp_ttp} placeholder="City" onChange={handleCityChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={cellClass}><MultiSelect options={options.nanoClusters} selected={value.nano_cluster} placeholder="Cluster" onChange={handleNanoClusterChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={cellClass}><MultiSelect options={options.circles} selected={value.circle || []} placeholder="Circle" onChange={handleCircleChange} disabled={false} width="w-full" staticLabel /></div>
           </>
         )}
+      </div>
 
-        {/* Circle, Site Category, RAN Score, Year Filters - AOP variant only */}
-        {variant === "aop" && (
+      {/* Row 2: Remaining filters + Reset — fixed 5 columns */}
+      <div className={`${rowGridClass} mt-2`}>
+        {variant === "aop" ? (
           <>
-            <MultiSelect
-              options={options.circles}
-              selected={value.circle ?? []}
-              placeholder="Circle"
-              onChange={handleCircleChange}
-              disabled={false}
-              width="w-full"
-              className="col-span-2 md:col-span-1"
-            />
-            {/* Site Category Filter */}
-            <MultiSelect
-              options={options.siteCategories || []}
-              selected={value.site_category ?? []}
-              placeholder="Site Category"
-              onChange={handleSiteCategoryChange}
-              disabled={false}
-              width="w-full"
-              className="col-span-2 md:col-span-1"
-            />
-            {/* RAN Score Filter */}
-            <MultiSelect
-              options={options.ranScores || []}
-              selected={value.ran_score ?? []}
-              placeholder="RAN Score"
-              onChange={handleRanScoreChange}
-              disabled={false}
-              width="w-full"
-              className="col-span-2 md:col-span-1"
-            />
-            {/* Year Filter */}
-            <MultiSelect
-              options={options.years || []}
-              selected={value.year ?? []}
-              placeholder="Year"
-              onChange={handleYearChange}
-              disabled={false}
-              width="w-full"
-              className="col-span-2 md:col-span-1"
-            />
-            {/* Priority Congest Urgent Filter */}
-            <MultiSelect
-              options={options.priorityCongestUrgent || []}
-              selected={value.priority_congest_urgent ?? []}
-              placeholder="Priority"
-              onChange={handlePriorityCongestUrgentChange}
-              disabled={false}
-              width="w-full"
-              className="col-span-2 md:col-span-1"
-            />
-            {/* Trial GB Factory Filter (pic_indosat; blank = Other) */}
-            <MultiSelect
-              options={options.trialGbFactory || []}
-              selected={value.trial_gb_factory ?? []}
-              placeholder="Trial GB Factory"
-              onChange={handleTrialGbFactoryChange}
-              disabled={false}
-              width="w-full"
-              className="col-span-2 md:col-span-1"
-            />
+            <div className={cellClass}><MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={cellClass}><MultiSelect options={options.years || []} selected={value.year ?? []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={cellClass}><MultiSelect options={options.priorityCongestUrgent || []} selected={value.priority_congest_urgent ?? []} placeholder="Priority" onChange={handlePriorityCongestUrgentChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={cellClass}><MultiSelect options={options.trialGbFactory || []} selected={value.trial_gb_factory ?? []} placeholder="Trial GB Factory" onChange={handleTrialGbFactoryChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={`${cellClass} hidden sm:block justify-self-end`}>
+              <button
+                onClick={handleReset}
+                className={`inline-flex items-center justify-center rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${
+                  hasActiveFilters ? 'border-white/20 bg-white/10 text-white hover:bg-white/20' : 'border-white/5 bg-transparent text-gray-400 cursor-not-allowed'
+                }`}
+                disabled={!hasActiveFilters}
+                aria-label="Reset filters"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={cellClass}><MultiSelect options={options.years || []} selected={value.year || []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={cellClass}><MultiSelect options={options.siteCategories || []} selected={value.site_category ?? []} placeholder="Site Category" onChange={handleSiteCategoryChange} disabled={false} width="w-full" staticLabel /></div>
+            <div className={`${cellClass} hidden sm:block sm:col-start-5 justify-self-end`}>
+              <button
+                onClick={handleReset}
+                className={`inline-flex items-center justify-center rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${
+                  hasActiveFilters ? 'border-white/20 bg-white/10 text-white hover:bg-white/20' : 'border-white/5 bg-transparent text-gray-400 cursor-not-allowed'
+                }`}
+                disabled={!hasActiveFilters}
+                aria-label="Reset filters"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
           </>
         )}
-
-        {/* Reset Button - Desktop */}
-        <button
-          onClick={handleReset}
-          className={`hidden md:inline-flex items-center justify-center md:col-span-1 md:justify-self-end rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${
-            hasActiveFilters
-              ? 'border-white/20 bg-white/10 text-white hover:bg-white/20'
-              : 'border-white/5 bg-transparent text-gray-400 cursor-not-allowed'
-          }`}
-          disabled={!hasActiveFilters}
-          aria-label="Reset filters"
-        >
-          <X className="h-3 w-3" />
-        </button>
       </div>
 
       {/* Reset Button - Mobile */}

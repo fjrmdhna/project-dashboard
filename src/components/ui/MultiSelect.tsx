@@ -12,6 +12,8 @@ export interface MultiSelectProps {
   className?: string
   disabled?: boolean
   width?: string
+  /** When true, button label always shows placeholder (e.g. "Vendor"); when false, shows selection count or value. Default false. */
+  staticLabel?: boolean
 }
 
 export function MultiSelect({
@@ -21,7 +23,8 @@ export function MultiSelect({
   onChange,
   className = "",
   disabled = false,
-  width = "auto"
+  width = "auto",
+  staticLabel = false
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -121,12 +124,14 @@ export function MultiSelect({
       : options
   }, [options, searchTerm])
 
-  // Display label
-  const label = selected.length === 0 
-    ? placeholder 
-    : selected.length === 1 
-      ? selected[0] 
-      : `${selected.length} selected`
+  // Display label: static (always placeholder) or dynamic (selection/count)
+  const label = staticLabel
+    ? placeholder
+    : selected.length === 0
+      ? placeholder
+      : selected.length === 1
+        ? selected[0]
+        : `${selected.length} selected`
   
   // Determine button width based on placeholder
   const getButtonWidth = () => {
@@ -220,7 +225,7 @@ export function MultiSelect({
         onClick={handleToggle}
         disabled={disabled}
       >
-        <span className="truncate max-w-[80px] text-xs text-left">{label}</span>
+        <span className="truncate min-w-0 text-xs text-left">{label}</span>
         <ChevronDown className="h-3 w-3 opacity-70 flex-shrink-0" />
       </button>
 

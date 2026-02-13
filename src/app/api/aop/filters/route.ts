@@ -20,7 +20,6 @@ export async function GET(request: NextRequest) {
       CACHE_KEYS.AOP_FILTERS,
       async () => {
         console.log('[AOP Filters API] Fetching from database...')
-        // Pass forceRefresh to also clear in-memory cache
         return await getAopFilterOptions(forceRefresh)
       },
       CACHE_TTL.FILTERS // 10 minutes
