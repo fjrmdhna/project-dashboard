@@ -29,6 +29,8 @@ export interface FilterBarProps {
   onChange: (value: FilterValue) => void
   onReset?: () => void
   variant?: "default" | "aop"
+  /** When true (e.g. Hermes page), render all filters in one horizontal row with horizontal scroll on narrow viewports. Only applies to variant "default". */
+  singleRow?: boolean
   endpoint?: string
 }
 
@@ -98,7 +100,7 @@ const truncateText = (text: string | undefined | null, maxLength: number = 20): 
   return text.substring(0, maxLength - 3) + '...';
 }
 
-export function FilterBar({ value, onChange, onReset, variant = "default", endpoint = "/api/filters" }: FilterBarProps) {
+export function FilterBar({ value, onChange, onReset, variant = "default", singleRow = false, endpoint = "/api/filters" }: FilterBarProps) {
   const [, startTransition] = useTransition()
   const cacheKey = `${variant}:${endpoint}`
   // State lokal untuk search input (sebelum debounce)
@@ -417,87 +419,152 @@ export function FilterBar({ value, onChange, onReset, variant = "default", endpo
   const rowGridClass = "grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs flex-shrink-0 w-full items-center"
   const cellClass = "min-w-0"
 
+  // Single-row layout for Hermes (variant default + singleRow): one compact row, no scroll, fits viewport
+  const isHermesSingleRow = variant === "default" && singleRow
+
   return (
     <div className="h-full flex flex-col min-w-0">
-      {/* Row 1: Search + first set of filters — fixed 5 columns, no wrap */}
-      <div className={rowGridClass}>
-        <div className={`${cellClass} col-span-2 sm:col-span-1 relative`}>
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search by site name, vendor, system key, site ID..."
-            className="w-full bg-white/5 rounded-md h-7 pl-6 pr-6 text-xs text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
-          />
-          {searchInput && (
-            <button 
-              onClick={() => setSearchInput("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+      {isHermesSingleRow ? (
+        /* Hermes: all filters in one row — CSS Grid so everything fits without horizontal scroll */
+        <div className="grid grid-cols-[minmax(0,1.4fr)_repeat(7,minmax(0,1fr))_auto] gap-1.5 w-full items-center text-xs">
+          <div className="min-w-0 relative">
+            <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search by site..."
+              className="w-full min-w-0 bg-white/5 rounded-md h-6 pl-5 pr-5 text-xs text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput("")}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                aria-label="Clear search"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <div className="min-w-0">
+            <MultiSelect options={options.vendors} selected={value.vendor_name} placeholder="Vendor" onChange={handleVendorChange} disabled={false} width="w-full" staticLabel />
+          </div>
+          <div className="min-w-0">
+            <MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel />
+          </div>
+          <div className="min-w-0">
+            <MultiSelect options={options.cities} selected={value.imp_ttp} placeholder="City" onChange={handleCityChange} disabled={false} width="w-full" staticLabel />
+          </div>
+          <div className="min-w-0">
+            <MultiSelect options={options.nanoClusters} selected={value.nano_cluster} placeholder="Cluster" onChange={handleNanoClusterChange} disabled={false} width="w-full" staticLabel />
+          </div>
+          <div className="min-w-0">
+            <MultiSelect options={options.circles} selected={value.circle || []} placeholder="Circle" onChange={handleCircleChange} disabled={false} width="w-full" staticLabel />
+          </div>
+          <div className="min-w-0">
+            <MultiSelect options={options.years || []} selected={value.year || []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel />
+          </div>
+          <div className="min-w-0">
+            <MultiSelect options={options.siteCategories || []} selected={value.site_category ?? []} placeholder="Site Category" onChange={handleSiteCategoryChange} disabled={false} width="w-full" staticLabel />
+          </div>
+          <div className="flex justify-end min-w-0">
+            <button
+              type="button"
+              onClick={handleReset}
+              className={`inline-flex items-center justify-center rounded-md h-6 px-1.5 text-xs font-semibold transition-colors border flex-shrink-0 ${
+                hasActiveFilters ? 'border-white/20 bg-white/10 text-white hover:bg-white/20' : 'border-white/5 bg-transparent text-gray-400 cursor-not-allowed'
+              }`}
+              disabled={!hasActiveFilters}
+              aria-label="Reset filters"
             >
               <X className="h-3 w-3" />
             </button>
-          )}
+          </div>
         </div>
-
-        {variant === "aop" ? (
-          <>
-            <div className={cellClass}><MultiSelect options={options.vendors} selected={value.vendor_name} placeholder="Vendor" onChange={handleVendorChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={cellClass}><MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={cellClass}><MultiSelect options={options.circles} selected={value.circle ?? []} placeholder="Circle" onChange={handleCircleChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={cellClass}><MultiSelect options={options.siteCategories || []} selected={value.site_category ?? []} placeholder="Site Category" onChange={handleSiteCategoryChange} disabled={false} width="w-full" staticLabel /></div>
-          </>
-        ) : (
-          <>
-            <div className={cellClass}><MultiSelect options={options.vendors} selected={value.vendor_name} placeholder="Vendor" onChange={handleVendorChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={cellClass}><MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={cellClass}><MultiSelect options={options.cities} selected={value.imp_ttp} placeholder="City" onChange={handleCityChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={cellClass}><MultiSelect options={options.nanoClusters} selected={value.nano_cluster} placeholder="Cluster" onChange={handleNanoClusterChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={cellClass}><MultiSelect options={options.circles} selected={value.circle || []} placeholder="Circle" onChange={handleCircleChange} disabled={false} width="w-full" staticLabel /></div>
-          </>
-        )}
-      </div>
-
-      {/* Row 2: Remaining filters + Reset — fixed 5 columns */}
-      <div className={`${rowGridClass} mt-2`}>
-        {variant === "aop" ? (
-          <>
-            <div className={cellClass}><MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={cellClass}><MultiSelect options={options.years || []} selected={value.year ?? []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={cellClass}><MultiSelect options={options.priorityCongestUrgent || []} selected={value.priority_congest_urgent ?? []} placeholder="Priority" onChange={handlePriorityCongestUrgentChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={cellClass}><MultiSelect options={options.trialGbFactory || []} selected={value.trial_gb_factory ?? []} placeholder="Trial GB Factory" onChange={handleTrialGbFactoryChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={`${cellClass} hidden sm:block justify-self-end`}>
-              <button
-                onClick={handleReset}
-                className={`inline-flex items-center justify-center rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${
-                  hasActiveFilters ? 'border-white/20 bg-white/10 text-white hover:bg-white/20' : 'border-white/5 bg-transparent text-gray-400 cursor-not-allowed'
-                }`}
-                disabled={!hasActiveFilters}
-                aria-label="Reset filters"
-              >
-                <X className="h-3 w-3" />
-              </button>
+      ) : (
+        <>
+          {/* Row 1: Search + first set of filters — fixed 5 columns, no wrap */}
+          <div className={rowGridClass}>
+            <div className={`${cellClass} col-span-2 sm:col-span-1 relative`}>
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search by site name, vendor, system key, site ID..."
+                className="w-full bg-white/5 rounded-md h-7 pl-6 pr-6 text-xs text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
+              />
+              {searchInput && (
+                <button 
+                  onClick={() => setSearchInput("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </div>
-          </>
-        ) : (
-          <>
-            <div className={cellClass}><MultiSelect options={options.years || []} selected={value.year || []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={cellClass}><MultiSelect options={options.siteCategories || []} selected={value.site_category ?? []} placeholder="Site Category" onChange={handleSiteCategoryChange} disabled={false} width="w-full" staticLabel /></div>
-            <div className={`${cellClass} hidden sm:block sm:col-start-5 justify-self-end`}>
-              <button
-                onClick={handleReset}
-                className={`inline-flex items-center justify-center rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${
-                  hasActiveFilters ? 'border-white/20 bg-white/10 text-white hover:bg-white/20' : 'border-white/5 bg-transparent text-gray-400 cursor-not-allowed'
-                }`}
-                disabled={!hasActiveFilters}
-                aria-label="Reset filters"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+
+            {variant === "aop" ? (
+              <>
+                <div className={cellClass}><MultiSelect options={options.vendors} selected={value.vendor_name} placeholder="Vendor" onChange={handleVendorChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.circles} selected={value.circle ?? []} placeholder="Circle" onChange={handleCircleChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.siteCategories || []} selected={value.site_category ?? []} placeholder="Site Category" onChange={handleSiteCategoryChange} disabled={false} width="w-full" staticLabel /></div>
+              </>
+            ) : (
+              <>
+                <div className={cellClass}><MultiSelect options={options.vendors} selected={value.vendor_name} placeholder="Vendor" onChange={handleVendorChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.cities} selected={value.imp_ttp} placeholder="City" onChange={handleCityChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.nanoClusters} selected={value.nano_cluster} placeholder="Cluster" onChange={handleNanoClusterChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.circles} selected={value.circle || []} placeholder="Circle" onChange={handleCircleChange} disabled={false} width="w-full" staticLabel /></div>
+              </>
+            )}
+          </div>
+
+          {/* Row 2: Remaining filters + Reset — fixed 5 columns */}
+          <div className={`${rowGridClass} mt-2`}>
+            {variant === "aop" ? (
+              <>
+                <div className={cellClass}><MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.years || []} selected={value.year ?? []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.priorityCongestUrgent || []} selected={value.priority_congest_urgent ?? []} placeholder="Priority" onChange={handlePriorityCongestUrgentChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.trialGbFactory || []} selected={value.trial_gb_factory ?? []} placeholder="Trial GB Factory" onChange={handleTrialGbFactoryChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={`${cellClass} hidden sm:block justify-self-end`}>
+                  <button
+                    onClick={handleReset}
+                    className={`inline-flex items-center justify-center rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${
+                      hasActiveFilters ? 'border-white/20 bg-white/10 text-white hover:bg-white/20' : 'border-white/5 bg-transparent text-gray-400 cursor-not-allowed'
+                    }`}
+                    disabled={!hasActiveFilters}
+                    aria-label="Reset filters"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className={cellClass}><MultiSelect options={options.years || []} selected={value.year || []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.siteCategories || []} selected={value.site_category ?? []} placeholder="Site Category" onChange={handleSiteCategoryChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={`${cellClass} hidden sm:block sm:col-start-5 justify-self-end`}>
+                  <button
+                    onClick={handleReset}
+                    className={`inline-flex items-center justify-center rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${
+                      hasActiveFilters ? 'border-white/20 bg-white/10 text-white hover:bg-white/20' : 'border-white/5 bg-transparent text-gray-400 cursor-not-allowed'
+                    }`}
+                    disabled={!hasActiveFilters}
+                    aria-label="Reset filters"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Reset Button - Mobile */}
       <div className="mt-3 flex justify-start md:hidden">

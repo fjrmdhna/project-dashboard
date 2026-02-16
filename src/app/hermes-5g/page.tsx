@@ -429,13 +429,14 @@ export default function Hermes5GPage() {
     />
   )
 
-  // FilterBar component
+  // FilterBar component — single row layout for Hermes
   const filterBar = (
     <div className="flex h-full flex-col gap-3">
       <FilterBar
         value={filter}
         onChange={handleFilterChange}
         onReset={handleFilterReset}
+        singleRow
       />
     </div>
   )
@@ -615,6 +616,7 @@ export default function Hermes5GPage() {
                   value={filter}
                   onChange={handleFilterChange}
                   onReset={handleFilterReset}
+                  singleRow
                 />
               </div>
             )}

@@ -5,7 +5,6 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ZoomReset } from "@/components/ZoomReset";
-import { VercelAnalyticsDebug } from "@/components/VercelAnalyticsDebug";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -49,7 +48,6 @@ export default function RootLayout({
           {children}
           <SpeedInsights />
           <Analytics />
-          <VercelAnalyticsDebug analyticsInLayout={true} />
         </ThemeProvider>
       </body>
     </html>
