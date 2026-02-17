@@ -14,8 +14,8 @@ function buildFilterQuery(searchParams: URLSearchParams) {
   const programReports = searchParams.getAll('program_report')
   const impTtps = searchParams.getAll('imp_ttp')
   const nanoClusters = searchParams.getAll('nano_cluster')
-  const regionCircles = searchParams.getAll('region_circle') // Circle filter from region_circle
-  const siteCategories = searchParams.getAll('site_category')
+  const regionCircles = searchParams.getAll('region_circle')
+  const ranScores = searchParams.getAll('ran_score') // Hermes uses RAN Score filter
   const years = searchParams.getAll('year')
   const search = searchParams.get('q')
 
@@ -60,21 +60,17 @@ function buildFilterQuery(searchParams: URLSearchParams) {
     query = query.in('year', years)
   }
 
-  // Site category filter - normalized matching (New Site / Expansion)
-  if (siteCategories.length > 0) {
-    const siteCategoryConditions = siteCategories
-      .map(sc => {
-        const lower = sc.trim().toLowerCase()
-        if (lower === 'new site') {
-          return 'site_category.ilike.%new%'
-        }
-        if (lower === 'expansion') {
-          return 'site_category.ilike.%existing%,site_category.ilike.%upgrade%'
-        }
-        return `site_category.ilike.%${sc.trim()}%`
-      })
-      .join(',')
-    query = query.or(siteCategoryConditions)
+  // RAN Score filter (Hermes): normalized to "New Site" | "Expansion"
+  // New Site = ran_score contains "new site"; Expansion = ran_score is null or does not contain "new site"
+  if (ranScores.length > 0) {
+    const hasNewSite = ranScores.some(rs => rs.trim() === 'New Site')
+    const hasExpansion = ranScores.some(rs => rs.trim() === 'Expansion')
+    if (hasNewSite && !hasExpansion) {
+      query = query.ilike('ran_score', '%new%site%')
+    } else if (hasExpansion && !hasNewSite) {
+      query = query.or('ran_score.is.null,ran_score.not.ilike.%new%site%')
+    }
+    // If both selected, no ran_score filter (all rows)
   }
 
   if (search && search.trim().length > 0) {

@@ -75,18 +75,18 @@ export default function Hermes5GPage() {
   const filterContext = useFilter()
   
   // Convert filter context to FilterValue format - support multiselect
-  // Note: regionFilter is used for circle filter (from region_circle)
+  // Note: regionFilter is used for circle filter (from region_circle). Hermes uses ran_score (RAN Score) instead of site_category.
   const currentFilter: FilterValue = useMemo(() => ({
     q: filterContext.searchTerm,
     vendor_name: filterContext.vendorFilter !== 'all' ? filterContext.vendorFilter.split(',').filter(Boolean) : [],
     program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
     imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
     nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
-    circle: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [], // Using regionFilter for circle (from region_circle)
+    circle: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [],
     year: filterContext.yearFilter !== 'all' ? filterContext.yearFilter.split(',').filter(Boolean) : [],
-    site_category: filterContext.siteCategoryFilter !== 'all' ? filterContext.siteCategoryFilter.split(',').filter(Boolean) : [],
+    ran_score: filterContext.ranScoreFilter !== 'all' ? filterContext.ranScoreFilter.split(',').filter(Boolean) : [],
     status: filterContext.statusFilters || []
-  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.siteCategoryFilter, filterContext.statusFilters])
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.ranScoreFilter, filterContext.statusFilters])
   
   // Convert filter context to FilterValue format - use debouncedFilters from context (already debounced 300ms)
   // FilterContext already handles debouncing, so we use debouncedFilters directly
@@ -95,33 +95,32 @@ export default function Hermes5GPage() {
   const debouncedFilterValue: FilterValue = useMemo(() => {
     const debounced = filterContext.debouncedFilters || filterContext
     const circleValue = debounced.regionFilter !== 'all' ? debounced.regionFilter.split(',').filter(Boolean) : []
-    const siteCategoryValue = debounced.siteCategoryFilter !== 'all' ? debounced.siteCategoryFilter.split(',').filter(Boolean) : []
+    const ranScoreValue = debounced.ranScoreFilter !== 'all' ? debounced.ranScoreFilter.split(',').filter(Boolean) : []
     return {
       q: debounced.searchTerm || '',
       vendor_name: debounced.vendorFilter !== 'all' ? debounced.vendorFilter.split(',').filter(Boolean) : [],
       program_report: debounced.programFilter !== 'all' ? debounced.programFilter.split(',').filter(Boolean) : [],
       imp_ttp: debounced.cityFilter !== 'all' ? debounced.cityFilter.split(',').filter(Boolean) : [],
       nano_cluster: debounced.nanoClusterFilter !== 'all' ? debounced.nanoClusterFilter.split(',').filter(Boolean) : [],
-      circle: circleValue, // Using regionFilter for circle (from region_circle)
+      circle: circleValue,
       year: debounced.yearFilter !== 'all' ? debounced.yearFilter.split(',').filter(Boolean) : [],
-      site_category: siteCategoryValue,
+      ran_score: ranScoreValue,
       status: debounced.statusFilters || []
     }
-  }, [filterContext.debouncedFilters]) // FIX: Use debouncedFilters as single dependency to ensure we get debounced values
+  }, [filterContext.debouncedFilters])
 
   // Current filter (non-debounced) for display purposes
-  // Note: regionFilter is used for circle filter (from region_circle)
   const filterValue: FilterValue = useMemo(() => ({
     q: filterContext.searchTerm || '',
     vendor_name: filterContext.vendorFilter !== 'all' ? filterContext.vendorFilter.split(',').filter(Boolean) : [],
     program_report: filterContext.programFilter !== 'all' ? filterContext.programFilter.split(',').filter(Boolean) : [],
     imp_ttp: filterContext.cityFilter !== 'all' ? filterContext.cityFilter.split(',').filter(Boolean) : [],
     nano_cluster: filterContext.nanoClusterFilter !== 'all' ? filterContext.nanoClusterFilter.split(',').filter(Boolean) : [],
-    circle: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [], // Using regionFilter for circle (from region_circle)
+    circle: filterContext.regionFilter !== 'all' ? filterContext.regionFilter.split(',').filter(Boolean) : [],
     year: filterContext.yearFilter !== 'all' ? filterContext.yearFilter.split(',').filter(Boolean) : [],
-    site_category: filterContext.siteCategoryFilter !== 'all' ? filterContext.siteCategoryFilter.split(',').filter(Boolean) : [],
+    ran_score: filterContext.ranScoreFilter !== 'all' ? filterContext.ranScoreFilter.split(',').filter(Boolean) : [],
     status: filterContext.statusFilters || []
-  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.siteCategoryFilter, filterContext.statusFilters])
+  }), [filterContext.searchTerm, filterContext.vendorFilter, filterContext.programFilter, filterContext.cityFilter, filterContext.nanoClusterFilter, filterContext.regionFilter, filterContext.yearFilter, filterContext.ranScoreFilter, filterContext.statusFilters])
 
   const [isPending, startTransition] = useTransition()
 
@@ -132,8 +131,7 @@ export default function Hermes5GPage() {
   const stableNanoClusters = useMemo(() => debouncedFilterValue.nano_cluster || [], [debouncedFilterValue.nano_cluster])
   const stableRanScores = useMemo(() => debouncedFilterValue.ran_score || [], [debouncedFilterValue.ran_score])
   const stableYears = useMemo(() => debouncedFilterValue.year || [], [debouncedFilterValue.year])
-  const stableCircles = useMemo(() => debouncedFilterValue.circle || [], [debouncedFilterValue.circle]) // Using circle instead of region
-  const stableSiteCategories = useMemo(() => debouncedFilterValue.site_category || [], [debouncedFilterValue.site_category])
+  const stableCircles = useMemo(() => debouncedFilterValue.circle || [], [debouncedFilterValue.circle])
   const stableSearch = debouncedFilterValue.q || ''
 
   // Fetch data from API menggunakan debounced filter with stable references
@@ -150,8 +148,8 @@ export default function Hermes5GPage() {
     nanoClusters: stableNanoClusters,
     ranScores: stableRanScores,
     years: stableYears,
-    circles: stableCircles, // Using circles instead of regions
-    siteCategories: stableSiteCategories,
+    circles: stableCircles,
+    siteCategories: [], // Hermes uses RAN Score filter instead of Site Category
     search: stableSearch
   })
   
@@ -221,7 +219,7 @@ export default function Hermes5GPage() {
     filter.imp_ttp.length +
     filter.nano_cluster.length +
     (filter.circle?.length || 0) +
-    (filter.site_category?.length || 0)
+    (filter.ran_score?.length || 0)
   )
 
   const hasActiveFilters = activeFilterCount > 0
@@ -282,10 +280,10 @@ export default function Hermes5GPage() {
       filterContext.setCityFilter(newFilters.imp_ttp.length > 0 ? newFilters.imp_ttp.join(',') : 'all')
       filterContext.setNanoClusterFilter(newFilters.nano_cluster.length > 0 ? newFilters.nano_cluster.join(',') : 'all')
       const circleValue = newFilters.circle && newFilters.circle.length > 0 ? newFilters.circle.join(',') : 'all'
-      const siteCategoryValue = newFilters.site_category && newFilters.site_category.length > 0 ? newFilters.site_category.join(',') : 'all'
-      filterContext.setRegionFilter(circleValue) // Using circle for regionFilter
+      const ranScoreValue = newFilters.ran_score && newFilters.ran_score.length > 0 ? newFilters.ran_score.join(',') : 'all'
+      filterContext.setRegionFilter(circleValue)
       filterContext.setYearFilter(newFilters.year && newFilters.year.length > 0 ? newFilters.year.join(',') : 'all')
-      filterContext.setSiteCategoryFilter(siteCategoryValue)
+      filterContext.setRanScoreFilter(ranScoreValue)
     })
   }
 
@@ -327,11 +325,9 @@ export default function Hermes5GPage() {
       params.append('year', value)
     })
 
-    filter.site_category?.forEach((value) => {
-      params.append('site_category', value)
+    filter.ran_score?.forEach((value) => {
+      params.append('ran_score', value)
     })
-
-    // ran_score filter removed - no longer used
 
     return params
   }

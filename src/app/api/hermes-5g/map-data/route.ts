@@ -33,7 +33,7 @@ interface MapPoint {
   region?: string | null
   region_circle?: string | null
   year?: string | null
-  site_category?: string | null
+  ran_score?: string | null
 }
 
 function parseCoordinate(value: unknown): number | null {
@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
         region: (row as any).region ?? null,
         region_circle: (row as any).region_circle ?? null,
         year: (row as any).year ?? null,
-        site_category: (row as any).site_category ?? null
+        ran_score: (row as any).ran_score ?? null
       })
     }
 

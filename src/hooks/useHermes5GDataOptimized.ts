@@ -6,6 +6,7 @@ import { useApiCache } from './useApiCache'
 import { fetchWithRetry } from '@/lib/api-utils'
 import { format, subDays } from 'date-fns'
 import { getProgramReportsForDisplayName, getDisplayNameForProgramReport } from '@/lib/hermes-program-mapping'
+import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-5g-utils'
 
 export interface Hermes5GSiteData extends MatrixRow {
   rfc_approved?: string | null
@@ -155,8 +156,9 @@ function filterDataClientSide(
   const impTtpSet = impTtps.length > 0 ? new Set(impTtps) : null
   const nanoClusterSet = nanoClusters.length > 0 ? new Set(nanoClusters) : null
   const yearSet = years.length > 0 ? new Set(years) : null
-  const ranScoreLowerSet =
-    ranScores.length > 0 ? new Set(ranScores.map(rs => rs.toLowerCase().trim())) : null
+  // Hermes RAN Score filter: options are normalized ("New Site" | "Expansion"); match row by normalizing its ran_score
+  const ranScoreFilterSet =
+    ranScores.length > 0 ? new Set(ranScores) : null
 
   const normalizeCircle = (value: string): string => {
     if (!value) return ''
@@ -230,10 +232,10 @@ function filterDataClientSide(
       return false
     }
     
-    // RAN Score filter (case-insensitive)
-    if (ranScoreLowerSet) {
-      const rowRanScore = (row.ran_score || '').toLowerCase().trim()
-      if (!ranScoreLowerSet.has(rowRanScore)) {
+    // RAN Score filter: normalize row value to "New Site" | "Expansion" and match against filter
+    if (ranScoreFilterSet) {
+      const normalizedRowRanScore = normalizeRanScoreForHermesFilter(row.ran_score)
+      if (!ranScoreFilterSet.has(normalizedRowRanScore)) {
         rejectedByRanScore++
         return false
       }
