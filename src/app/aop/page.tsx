@@ -223,6 +223,7 @@ const INITIAL_FILTER: FilterValue = {
   circle: [],
   site_category: [],
   ran_score: [],
+  wbs_status: ["Active"], // Default: show only "Active" WBS status
   year: [],
   priority_congest_urgent: [],
   trial_gb_factory: []
@@ -235,6 +236,7 @@ const AOP_TEMPLATE_FILTER_KEYS = [
   { key: "circle" as const, label: "Circle" },
   { key: "site_category" as const, label: "Site Category" },
   { key: "ran_score" as const, label: "RAN Score" },
+  { key: "wbs_status" as const, label: "WBS Status" },
   { key: "year" as const, label: "Year" },
   { key: "priority_congest_urgent" as const, label: "Priority" },
   { key: "trial_gb_factory" as const, label: "Trial GB Factory" }
@@ -422,6 +424,7 @@ export default function AopPage() {
   const stableCircles = useMemo(() => debouncedFilterValue.circle || [], [debouncedFilterValue.circle])
   const stableSiteCategories = useMemo(() => debouncedFilterValue.site_category || [], [debouncedFilterValue.site_category])
   const stableRanScores = useMemo(() => debouncedFilterValue.ran_score || [], [debouncedFilterValue.ran_score])
+  const stableWbsStatus = useMemo(() => debouncedFilterValue.wbs_status || [], [debouncedFilterValue.wbs_status])
   const stableYears = useMemo(() => debouncedFilterValue.year || [], [debouncedFilterValue.year])
   const stablePriorityCongestUrgent = useMemo(() => debouncedFilterValue.priority_congest_urgent || [], [debouncedFilterValue.priority_congest_urgent])
   const stableTrialGbFactory = useMemo(() => debouncedFilterValue.trial_gb_factory || [], [debouncedFilterValue.trial_gb_factory])
@@ -434,6 +437,7 @@ export default function AopPage() {
     circles: stableCircles,
     siteCategories: stableSiteCategories,
     ranScores: stableRanScores,
+    wbsStatus: stableWbsStatus,
     years: stableYears,
     priorityCongestUrgent: stablePriorityCongestUrgent,
     trialGbFactory: stableTrialGbFactory,
@@ -504,6 +508,7 @@ export default function AopPage() {
     (filterValue.circle?.length ?? 0) +
     (filterValue.site_category?.length ?? 0) +
     (filterValue.ran_score?.length ?? 0) +
+    (filterValue.wbs_status?.length ?? 0) +
     (filterValue.year?.length ?? 0) +
     (filterValue.priority_congest_urgent?.length ?? 0) +
     (filterValue.trial_gb_factory?.length ?? 0)
@@ -998,7 +1003,12 @@ export default function AopPage() {
   />
   const gapStatusCard = <GapStatusCard rows={rows} isLoading={aopLoading} />
   const progressCurve = (
-    <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} yearFilter={2026} />
+    <ProgressCurveLineChart
+      rows={rows}
+      anchorDate={new Date().toISOString()}
+      yearFilter={2026}
+      forecastSource={selectedTemplateName?.toLowerCase().includes('lebaran') ? 'rfs_forecast' : 'rfs_ff'}
+    />
   )
   const dailyRunrate = (
     <DailyRunrateCard 

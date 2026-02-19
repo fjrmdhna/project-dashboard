@@ -72,12 +72,14 @@ const MINIMAL_COLUMNS = [
   'region_circle',     // Readiness/Activated cards + Filter
   'site_category',     // Filter
   'ran_score',         // RAN Score filter
+  'wbs_status',        // WBS Status filter
   'year',              // Year filter
   'ic_000010_af',      // RFI - ReadinessCard
   'imp_integ_af',      // Readiness - VendorLeaderboard
   'mocn_activation_forecast', // Baseline - ProgressCurve (replaces rfs_bf)
   'rfs_bf',            // Legacy Baseline - kept for backward compatibility
   'rfs_ff',            // Forecast - ProgressCurve, VendorLeaderboard, DailyRunrate
+  'rfs_forecast',     // Forecast (alternate, e.g. for Lebaran template) - ProgressCurve
   'rfs_af',            // Actual - ProgressCurve, ActivatedCard, VendorLeaderboard, DailyRunrate
   'ready_for_acpt_date', // RFA - MatrixStatsCard (Ready for Acceptance)
   'rfi_accepted',      // CAF stats
@@ -132,6 +134,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       if (row.region_circle) mapped.region_circle = row.region_circle.trim()
       if (row.site_category) mapped.site_category = row.site_category.trim()
       if (row.ran_score) mapped.ran_score = row.ran_score.trim()
+      if (row.wbs_status) mapped.wbs_status = row.wbs_status.trim()
       if (row.year) mapped.year = row.year.trim()
       
       // Stats fields - only include if not null/empty
@@ -143,6 +146,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       if (row.mocn_activation_forecast) mapped.mocn_activation_forecast = row.mocn_activation_forecast.trim()
       if (row.rfs_bf) mapped.rfs_bf = row.rfs_bf.trim()
       if (row.rfs_ff) mapped.rfs_ff = row.rfs_ff.trim()
+      if (row.rfs_forecast) mapped.rfs_forecast = row.rfs_forecast.trim()
       if (row.rfs_af) mapped.rfs_af = row.rfs_af.trim()
       if (row.ready_for_acpt_date) mapped.ready_for_acpt_date = row.ready_for_acpt_date.trim()
       if (row.rfc_approved) mapped.rfc_approved = row.rfc_approved.trim()

@@ -6,8 +6,9 @@ import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, L
 
 export type Row = {
   mocn_activation_forecast?: string | null; // Baseline date (MOCN Activation Forecast)
-  rfs_ff?: string | null;                   // Forecast date
-  rfs_af?: string | null;                   // Actual date
+  rfs_ff?: string | null;                   // Forecast date (default)
+  rfs_forecast?: string | null;             // Forecast date (alternate, e.g. Lebaran template)
+  rfs_af?: string | null;                    // Actual date
   // Legacy fields (for backward compatibility with other pages)
   rfs_bf?: string | null;                   // Legacy baseline (kept for backward compatibility)
   rfs_forecast_lock?: string | null;        // forecast date (legacy)
@@ -19,6 +20,8 @@ export type ProgressCurveProps = {
   anchorDate?: string;        // ISO; default today
   monthsSpan?: number;        // Number of months to display (default 5)
   yearFilter?: number;        // Filter to show only specific year (e.g., 2026)
+  /** When 'rfs_forecast', use rfs_forecast column for forecast line (e.g. Lebaran template); default 'rfs_ff'. */
+  forecastSource?: 'rfs_ff' | 'rfs_forecast';
   className?: string;
 };
 
@@ -125,7 +128,7 @@ type ProgressCurveTooltipProps = {
   payload?: ProgressCurveTooltipItem[];
 };
 
-function buildHybridBuckets(anchorDate?: string, span: number = 5, rows: Row[] = [], yearFilter?: number): Bucket[] {
+function buildHybridBuckets(anchorDate?: string, span: number = 5, rows: Row[] = [], yearFilter?: number, forecastSource: 'rfs_ff' | 'rfs_forecast' = 'rfs_ff'): Bucket[] {
   const anchor = toStart(anchorDate ? new Date(anchorDate) : new Date());
 
   // If yearFilter is provided, use year-based range instead of span-based
@@ -146,8 +149,8 @@ function buildHybridBuckets(anchorDate?: string, span: number = 5, rows: Row[] =
     // Calculate rangeStart based on span
     rangeStart = toStart(addMonths(anchor, -monthsBefore));
 
-    // Calculate rangeEnd dynamically based on the latest date from mocn_activation_forecast or rfs_ff
-    // This ensures the chart extends to show all planned/forecast data
+    // Calculate rangeEnd dynamically based on the latest date from mocn_activation_forecast or forecast column
+    const forecastVal = (r: Row) => forecastSource === 'rfs_forecast' ? r.rfs_forecast : r.rfs_ff;
     let latestFutureDate: Date | null = null;
     
     for (const row of rows) {
@@ -157,8 +160,8 @@ function buildHybridBuckets(anchorDate?: string, span: number = 5, rows: Row[] =
         latestFutureDate = baselineDate;
       }
       
-      // Check rfs_ff (forecast)
-      const forecastDate = safeDate(row.rfs_ff);
+      // Check forecast column (rfs_ff or rfs_forecast)
+      const forecastDate = safeDate(forecastVal(row));
       if (forecastDate && (!latestFutureDate || forecastDate > latestFutureDate)) {
         latestFutureDate = forecastDate;
       }
@@ -277,7 +280,7 @@ type Point = {
 
 // Function to aggregate data into buckets with cumulative values
 // OPTIMIZED: Single-pass aggregation instead of O(buckets * rows) nested loops
-function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[] {
+function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string, forecastSource: 'rfs_ff' | 'rfs_forecast' = 'rfs_ff'): Point[] {
   if (!buckets.length) return [];
 
   const inRange = (val?: string | null, s?: Date, e?: Date) => {
@@ -291,14 +294,15 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
     return !!(d && endDate && d <= endDate);
   };
 
-  // Detect data format: AOP (has mocn_activation_forecast/rfs_ff) or Hermes 5G (has rfs_forecast_lock/imp_integ_af)
-  const isAopFormat = rows.some(row => row.mocn_activation_forecast || row.rfs_ff);
+  // Detect data format: AOP (has mocn_activation_forecast/rfs_ff/rfs_forecast) or Hermes 5G (has rfs_forecast_lock/imp_integ_af)
+  const isAopFormat = rows.some(row => row.mocn_activation_forecast || row.rfs_ff || row.rfs_forecast);
   const isHermesFormat = rows.some(row => row.rfs_forecast_lock || row.imp_integ_af);
 
   // AOP Format: baseline, forecast, actual
   if (isAopFormat) {
     // OPTIMIZATION: Single pass through rows to count per bucket
     // Instead of O(buckets * rows), we do O(rows + buckets)
+    const getForecastDate = (r: Row) => safeDate(forecastSource === 'rfs_forecast' ? r.rfs_forecast : r.rfs_ff);
     
     // Step 1: Extract and parse all dates ONCE (O(rows))
     const baselineDates: number[] = [];
@@ -308,7 +312,7 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string): Point[]
     for (const row of rows) {
       // Baseline now uses mocn_activation_forecast instead of rfs_bf
       const baselineDate = safeDate(row.mocn_activation_forecast);
-      const forecastDate = safeDate(row.rfs_ff);
+      const forecastDate = getForecastDate(row);
       const actualDate = safeDate(row.rfs_af);
       
       if (baselineDate) baselineDates.push(baselineDate.getTime());
@@ -1077,16 +1081,16 @@ const PlanReadinessDotWithLabel = (props: any) => {
 };
 
 // Main component
-export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, yearFilter, className }: ProgressCurveProps) {
+export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, yearFilter, forecastSource = 'rfs_ff', className }: ProgressCurveProps) {
   // Memoize buckets and data to prevent unnecessary recalculations
   const buckets = useMemo(() => {
-    const builtBuckets = buildHybridBuckets(anchorDate, monthsSpan, rows ?? [], yearFilter);
+    const builtBuckets = buildHybridBuckets(anchorDate, monthsSpan, rows ?? [], yearFilter, forecastSource);
     // Ensure buckets are sorted by start date (should already be sorted, but double-check)
     return builtBuckets.sort((a, b) => a.start.getTime() - b.start.getTime());
-  }, [anchorDate, monthsSpan, rows, yearFilter]);
+  }, [anchorDate, monthsSpan, rows, yearFilter, forecastSource]);
   
   const data = useMemo(() => {
-    const aggregated = aggregate(rows ?? [], buckets, anchorDate);
+    const aggregated = aggregate(rows ?? [], buckets, anchorDate, forecastSource);
     // Ensure data is sorted by key (chronological order)
     // Keys: "YYYY-MM" (month) or "YYYY-MM-DD-wW" (week – sort by date so W52 before W2 in Jan)
     const result = aggregated.sort((a, b) => {
@@ -1109,14 +1113,12 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
       return point.label && point.label.trim() !== '' && point.label.toLowerCase() !== 'all';
     });
     return result;
-  }, [rows, buckets, anchorDate]);
+  }, [rows, buckets, anchorDate, forecastSource]);
   
   // Detect format from original rows data (consistent with aggregate function)
-  // This ensures format detection matches the aggregation logic
   const isAopFormat = useMemo(() => {
     if (!rows || rows.length === 0) return false;
-    // Check if any row has AOP format fields (mocn_activation_forecast or rfs_ff)
-    return rows.some(row => row.mocn_activation_forecast || row.rfs_ff);
+    return rows.some(row => row.mocn_activation_forecast || row.rfs_ff || row.rfs_forecast);
   }, [rows]);
 
   return (

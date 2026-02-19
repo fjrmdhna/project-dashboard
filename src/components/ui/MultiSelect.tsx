@@ -14,6 +14,8 @@ export interface MultiSelectProps {
   width?: string
   /** When true, button label always shows placeholder (e.g. "Vendor"); when false, shows selection count or value. Default false. */
   staticLabel?: boolean
+  /** When true, treat option selection as case-insensitive (e.g. "Active" matches "active"). Use for fields like WBS Status where API may return different casing. */
+  caseInsensitiveMatch?: boolean
 }
 
 export function MultiSelect({
@@ -24,7 +26,8 @@ export function MultiSelect({
   className = "",
   disabled = false,
   width = "auto",
-  staticLabel = false
+  staticLabel = false,
+  caseInsensitiveMatch = false
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -70,17 +73,24 @@ export function MultiSelect({
     }
   }
 
+  const isOptionSelected = useCallback((option: string) => {
+    const current = selectedRef.current
+    if (caseInsensitiveMatch) return current.some(s => (s ?? '').toLowerCase() === (option ?? '').toLowerCase())
+    return current.includes(option)
+  }, [caseInsensitiveMatch])
+
   // Handle option selection
   // FIX: Use selectedRef.current to always get the latest selected value
-  // This prevents stale closure issue when user clicks rapidly
   const handleOptionClick = useCallback((option: string) => {
     const currentSelected = selectedRef.current
-    const newSelected = currentSelected.includes(option)
-      ? currentSelected.filter(item => item !== option)
+    const alreadySelected = caseInsensitiveMatch
+      ? currentSelected.some(s => (s ?? '').toLowerCase() === (option ?? '').toLowerCase())
+      : currentSelected.includes(option)
+    const newSelected = alreadySelected
+      ? currentSelected.filter(item => (caseInsensitiveMatch ? (item ?? '').toLowerCase() !== (option ?? '').toLowerCase() : item !== option))
       : [...currentSelected, option]
-    
     onChange(newSelected)
-  }, [onChange])
+  }, [onChange, caseInsensitiveMatch])
 
   // Handle clear all
   const handleClearAll = () => {
@@ -205,7 +215,7 @@ export function MultiSelect({
               onMouseDown={(e) => e.preventDefault()}
             >
               <div className="flex-shrink-0 w-3.5 h-3.5 border rounded flex items-center justify-center border-white/20">
-                {selected.includes(option) && <Check className="h-2.5 w-2.5 text-blue-500" />}
+                {isOptionSelected(option) && <Check className="h-2.5 w-2.5 text-blue-500" />}
               </div>
               <span className="responsive-text-sm text-white truncate">{option}</span>
             </button>

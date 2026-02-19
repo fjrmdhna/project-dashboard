@@ -132,11 +132,13 @@ export interface AopSiteData extends MatrixRow {
   region_circle?: string | null
   site_category?: string | null
   ran_score?: string | null
+  wbs_status?: string | null
   priority_congest_urgent?: string | null
   pic_indosat?: string | null  // Trial GB Factory filter; blank = "Other"
   mocn_activation_forecast?: string | null  // Baseline for ProgressCurve
   rfs_bf?: string | null                    // Legacy baseline
   rfs_ff?: string | null
+  rfs_forecast?: string | null              // Alternate forecast (e.g. Lebaran template)
   year?: string | null
   issue_category?: string | null
 }
@@ -211,6 +213,7 @@ export interface UseAopDataOptions {
   circles?: string[]
   siteCategories?: string[]
   ranScores?: string[]
+  wbsStatus?: string[]
   years?: string[]
   priorityCongestUrgent?: string[]
   trialGbFactory?: string[]  // pic_indosat; blank in data = "Other"
@@ -249,6 +252,7 @@ function filterDataClientSide(
   circles: string[],
   siteCategories: string[],
   ranScores: string[],
+  wbsStatus: string[],
   years: string[],
   priorityCongestUrgent: string[],
   trialGbFactory: string[],
@@ -258,7 +262,7 @@ function filterDataClientSide(
 
   const hasFilters = vendorNames.length > 0 || programReports.length > 0 ||
                      circles.length > 0 || siteCategories.length > 0 ||
-                     ranScores.length > 0 || years.length > 0 ||
+                     ranScores.length > 0 || wbsStatus.length > 0 || years.length > 0 ||
                      priorityCongestUrgent.length > 0 || trialGbFactory.length > 0 || search.length > 0
 
   if (!hasFilters) return data
@@ -299,6 +303,13 @@ function filterDataClientSide(
       const normalizedRowRanScore = normalizeRanScoreForFilter(row.ran_score)
       const matchesRanScore = ranScores.some(rs => normalizedRowRanScore === normalizeRanScoreForFilter(rs))
       if (!matchesRanScore) return false
+    }
+
+    // WBS Status filter (case-insensitive so default "Active" matches DB variants)
+    if (wbsStatus.length > 0) {
+      const rowWbs = (row.wbs_status ?? '').trim().toLowerCase()
+      const matchesWbs = wbsStatus.some((ws) => rowWbs === (ws ?? '').trim().toLowerCase())
+      if (!matchesWbs) return false
     }
     
     // Year filter
@@ -490,7 +501,7 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
 }
 
 export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
-  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], ranScores = [], years = [], priorityCongestUrgent = [], trialGbFactory = [], search = '' } = options
+  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], ranScores = [], wbsStatus = [], years = [], priorityCongestUrgent = [], trialGbFactory = [], search = '' } = options
 
   // OPTIMIZATION: Always fetch ALL data (no filter) and filter client-side
   // This makes filter changes instant instead of waiting 15-20s for API
@@ -545,6 +556,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       circles.length > 0 ||
       siteCategories.length > 0 ||
       ranScores.length > 0 ||
+      wbsStatus.length > 0 ||
       years.length > 0 ||
       priorityCongestUrgent.length > 0 ||
       trialGbFactory.length > 0 ||
@@ -558,6 +570,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
           circles,
           siteCategories,
           ranScores,
+          wbsStatus,
           years,
           priorityCongestUrgent,
           trialGbFactory,
@@ -578,7 +591,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       filteredStats: stats,
       aggregated: agg
     }
-  }, [baseData, vendorNames, programReports, circles, siteCategories, ranScores, years, priorityCongestUrgent, trialGbFactory, search])
+  }, [baseData, vendorNames, programReports, circles, siteCategories, ranScores, wbsStatus, years, priorityCongestUrgent, trialGbFactory, search])
 
   // Refetch function
   const refetch = useCallback(async () => {

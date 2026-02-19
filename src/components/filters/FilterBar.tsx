@@ -19,6 +19,7 @@ export interface FilterValue {
   circle?: string[]
   site_category?: string[] // Site category filter for AOP
   ran_score?: string[] // RAN Score filter for AOP
+  wbs_status?: string[] // WBS Status filter for AOP
   priority_congest_urgent?: string[] // Priority filter for AOP
   trial_gb_factory?: string[] // Trial GB Factory (pic_indosat); blank = "Other"
 }
@@ -45,6 +46,7 @@ interface FilterOptions {
   circles: string[]
   siteCategories?: string[] // Site categories for AOP
   ranScores?: string[] // RAN Scores for AOP
+  wbsStatus?: string[] // WBS Status for AOP
   priorityCongestUrgent?: string[] // Priority filter for AOP
   trialGbFactory?: string[] // Trial GB Factory (pic_indosat); blank shown as "Other"
 }
@@ -84,6 +86,7 @@ export async function prefetchFilterOptions(
       circles: data.data.circles || [],
       siteCategories: data.data.siteCategories || [],
       ranScores: data.data.ranScores || [],
+      wbsStatus: data.data.wbsStatus || [],
       priorityCongestUrgent: data.data.priorityCongestUrgent || [],
       trialGbFactory: data.data.trialGbFactory || []
     }
@@ -119,6 +122,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
       circles: [],
       siteCategories: [],
       ranScores: [],
+      wbsStatus: [],
       priorityCongestUrgent: [],
       trialGbFactory: []
     }
@@ -174,6 +178,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
               circles: data.data.circles || [],
               siteCategories: data.data.siteCategories || [],
               ranScores: data.data.ranScores || [],
+              wbsStatus: data.data.wbsStatus || [],
               priorityCongestUrgent: data.data.priorityCongestUrgent || [],
               trialGbFactory: data.data.trialGbFactory || []
             }
@@ -380,11 +385,16 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
     onChange({ ...value, trial_gb_factory: selected })
   }, [onChange, value])
 
+  // Handler untuk WBS Status selection (AOP variant)
+  const handleWbsStatusChange = useCallback((selected: string[]) => {
+    onChange({ ...value, wbs_status: selected })
+  }, [onChange, value])
+
   // Handler untuk reset semua filter
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [], ran_score: [], priority_congest_urgent: [], trial_gb_factory: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [], ran_score: [], wbs_status: [], priority_congest_urgent: [], trial_gb_factory: [] })
   }
 
   // Handler untuk remove individual filter
@@ -413,6 +423,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
     (value.status?.length || 0) > 0 ||
     (value.site_category?.length || 0) > 0 ||
     (value.ran_score?.length || 0) > 0 ||
+    (value.wbs_status?.length || 0) > 0 ||
     (value.priority_congest_urgent?.length || 0) > 0 ||
     (value.trial_gb_factory?.length || 0) > 0
 
@@ -523,15 +534,16 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
             )}
           </div>
 
-          {/* Row 2: Remaining filters + Reset — fixed 5 columns */}
-          <div className={`${rowGridClass} mt-2`}>
+          {/* Row 2: Remaining filters + Reset — AOP: 6 columns (5 filters + reset), default: 5 columns */}
+          <div className={`${variant === "aop" ? "grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs flex-shrink-0 w-full items-center mt-2" : `${rowGridClass} mt-2`}`}>
             {variant === "aop" ? (
               <>
                 <div className={cellClass}><MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.years || []} selected={value.year ?? []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.priorityCongestUrgent || []} selected={value.priority_congest_urgent ?? []} placeholder="Priority" onChange={handlePriorityCongestUrgentChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.trialGbFactory || []} selected={value.trial_gb_factory ?? []} placeholder="Trial GB Factory" onChange={handleTrialGbFactoryChange} disabled={false} width="w-full" staticLabel /></div>
-                <div className={`${cellClass} hidden sm:block justify-self-end`}>
+                <div className={cellClass}><MultiSelect options={options.wbsStatus || []} selected={value.wbs_status ?? []} placeholder="WBS Status" onChange={handleWbsStatusChange} disabled={false} width="w-full" staticLabel caseInsensitiveMatch /></div>
+                <div className={`${cellClass} hidden sm:flex justify-end`}>
                   <button
                     onClick={handleReset}
                     className={`inline-flex items-center justify-center rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${
@@ -704,6 +716,20 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
               <X
                 className="h-2 w-2 cursor-pointer"
                 onClick={() => removeFilter('ran_score', ranScore)}
+              />
+            </div>
+          ))}
+
+          {value.wbs_status?.map(wbs => (
+            <div
+              key={`wbs-status-${wbs}`}
+              className="bg-emerald-500/20 text-emerald-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`WBS Status: ${wbs}`}
+            >
+              <span>WBS: {truncateText(wbs, 12)}</span>
+              <X
+                className="h-2 w-2 cursor-pointer"
+                onClick={() => removeFilter('wbs_status', wbs)}
               />
             </div>
           ))}
