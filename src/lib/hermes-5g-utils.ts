@@ -199,6 +199,19 @@ const normalizeSiteCategoryValue = (value: string): string => {
   return value.trim().toLowerCase().replace(/\b\w/g, char => char.toUpperCase())
 }
 
+/**
+ * Normalize ran_score for Hermes filter: two groups only.
+ * - Contains "new site" (case-insensitive) → "New Site"
+ * - All other values → "Expansion"
+ * Single source of truth for Hermes RAN Score filter options and matching.
+ */
+export function normalizeRanScoreForHermesFilter(value: string | null | undefined): 'New Site' | 'Expansion' {
+  if (!value || typeof value !== 'string') return 'Expansion'
+  const lower = value.toLowerCase().trim()
+  if (lower.includes('new site')) return 'New Site'
+  return 'Expansion'
+}
+
 export interface FilterOptionsResponse {
   status: 'success' | 'error';
   data: FilterOptionsData;
@@ -471,6 +484,16 @@ export async function getFilterOptions(options: { forceRefresh?: boolean } = {})
       }
     })
     const normalizedSiteCategories = Array.from(siteCategoriesMap.values()).sort()
+
+    // Normalize ran_score for Hermes: "new site" → "New Site", all others → "Expansion"
+    const ranScoresSet = new Set<'New Site' | 'Expansion'>()
+    ;(ranScoresData || []).forEach(row => {
+      const raw = row.ran_score
+      if (raw && typeof raw === 'string' && raw.trim()) {
+        ranScoresSet.add(normalizeRanScoreForHermesFilter(raw))
+      }
+    })
+    const ranScoresNormalized = Array.from(ranScoresSet).sort() // ["Expansion", "New Site"]
     
     const data: FilterOptionsData = {
       vendors: [...new Set(vendorsData?.map(row => row.vendor_name) || [])].sort(),
@@ -480,13 +503,7 @@ export async function getFilterOptions(options: { forceRefresh?: boolean } = {})
       regions: [], // Deprecated: kept for backward compatibility, use circles instead
       circles: normalizedCircles, // Normalized circles (Title Case, no duplicates)
       years: [...new Set(yearsData?.map(row => row.year) || [])].sort((a, b) => b.localeCompare(a)), // Sort descending (newest first)
-      ranScores: [
-        ...new Set(
-          (ranScoresData || [])
-            .map(row => row.ran_score)
-            .filter((value): value is string => Boolean(value))
-        )
-      ].sort(),
+      ranScores: ranScoresNormalized,
       siteCategories: normalizedSiteCategories
     };
     

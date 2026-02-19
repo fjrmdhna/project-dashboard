@@ -22,7 +22,7 @@ export interface HermesMapPoint {
   region?: string | null
   region_circle?: string | null
   year?: string | null
-  site_category?: string | null
+  ran_score?: string | null
 }
 
 export interface Hermes5GMapProps {

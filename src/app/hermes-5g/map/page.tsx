@@ -22,7 +22,7 @@ import type { HermesMapPoint, StatusLabel } from '@/components/maps/Hermes5GMap'
 import { useFilter } from '@/contexts/FilterContext'
 import { FilterBar, FilterValue } from '@/components/filters/FilterBar'
 import { getProgramReportsForDisplayName } from '@/lib/hermes-program-mapping'
-import { normalizeSiteCategoryValue } from '@/lib/supabase'
+import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-5g-utils'
 
 interface MapApiSuccess {
   status: 'success'
@@ -121,7 +121,7 @@ export default function Hermes5GMapPage() {
     [cachedMapResponse?.data?.colors]
   )
 
-  // Convert debounced filter context to FilterValue format - support multiselect
+  // Convert debounced filter context to FilterValue format - Hermes uses ran_score (RAN Score) instead of site_category
   const currentFilter: FilterValue = useMemo(() => {
     const debounced = filterContext.debouncedFilters || filterContext
     return {
@@ -133,7 +133,7 @@ export default function Hermes5GMapPage() {
       region: debounced.regionFilter !== 'all' ? debounced.regionFilter.split(',').filter(Boolean) : [],
       year: debounced.yearFilter !== 'all' ? debounced.yearFilter.split(',').filter(Boolean) : [],
       circle: debounced.circleFilter !== 'all' ? debounced.circleFilter.split(',').filter(Boolean) : [],
-      site_category: debounced.siteCategoryFilter !== 'all' ? debounced.siteCategoryFilter.split(',').filter(Boolean) : [],
+      ran_score: debounced.ranScoreFilter !== 'all' ? debounced.ranScoreFilter.split(',').filter(Boolean) : [],
       status: debounced.statusFilters || []
     }
   }, [filterContext.debouncedFilters])
@@ -175,11 +175,10 @@ export default function Hermes5GMapPage() {
       currentFilter.circle?.length ?
         new Set(currentFilter.circle.map(normalizeCircle)) : null
 
-    // Site category: normalize to "New Site" / "Expansion" for comparison
-    const siteCategorySet =
-      currentFilter.site_category?.length
-        ? new Set(currentFilter.site_category.map((sc: string) => normalizeSiteCategoryValue(sc).toLowerCase()))
-        : null
+    // RAN Score filter: options are normalized ("New Site" | "Expansion"); match point by normalizing ran_score
+    const ranScoreSet =
+      currentFilter.ran_score?.length
+        ? new Set(currentFilter.ran_score) : null
 
     const filtered = raw.points.filter((p: HermesMapPoint) => {
       if (vendorSet && !vendorSet.has(p.vendorName ?? '')) return false
@@ -192,9 +191,9 @@ export default function Hermes5GMapPage() {
         const pCircle = normalizeCircle(p.region_circle ?? '')
         if (!pCircle || !circleSet.has(pCircle)) return false
       }
-      if (siteCategorySet) {
-        const pCat = normalizeSiteCategoryValue(p.site_category ?? '').toLowerCase()
-        if (!pCat || !siteCategorySet.has(pCat)) return false
+      if (ranScoreSet) {
+        const normalizedRanScore = normalizeRanScoreForHermesFilter(p.ran_score)
+        if (!ranScoreSet.has(normalizedRanScore)) return false
       }
       if (statusSet && !statusSet.has(p.status)) return false
       if (q) {
@@ -224,9 +223,9 @@ export default function Hermes5GMapPage() {
               const pCircle = normalizeCircle(p.region_circle ?? '')
               if (!pCircle || !circleSet.has(pCircle)) return false
             }
-            if (siteCategorySet) {
-              const pCat = normalizeSiteCategoryValue(p.site_category ?? '').toLowerCase()
-              if (!pCat || !siteCategorySet.has(pCat)) return false
+            if (ranScoreSet) {
+              const normalizedRanScore = normalizeRanScoreForHermesFilter(p.ran_score)
+              if (!ranScoreSet.has(normalizedRanScore)) return false
             }
             if (q) {
               const searchable = [p.id, p.vendorName, p.programReport].filter(Boolean).join(' ').toLowerCase()
@@ -289,7 +288,7 @@ export default function Hermes5GMapPage() {
     filterContext.setRegionFilter(newFilters.region?.length ? newFilters.region.join(',') : 'all')
     filterContext.setYearFilter(newFilters.year?.length ? newFilters.year.join(',') : 'all')
     filterContext.setCircleFilter(newFilters.circle?.length ? newFilters.circle.join(',') : 'all')
-    filterContext.setSiteCategoryFilter(newFilters.site_category?.length ? newFilters.site_category.join(',') : 'all')
+    filterContext.setRanScoreFilter(newFilters.ran_score?.length ? newFilters.ran_score.join(',') : 'all')
   }
 
   const handleFilterReset = () => {
@@ -350,12 +349,15 @@ export default function Hermes5GMapPage() {
       </header>
 
       <main className="mx-auto flex h-[calc(100vh-120px)] max-w-[1440px] flex-col gap-5 px-6 py-5 lg:h-[calc(100vh-140px)] transition-opacity duration-300">
-        {/* Filter Bar */}
-        <div className="rounded-2xl border border-white/10 bg-[#0B1533]/60 p-4">
+        {/* Filter Bar — single compact row, no scroll (Hermes map only) */}
+        <div className="rounded-2xl border border-white/10 bg-[#0B1533]/60 px-4 py-3">
           <FilterBar
             value={currentFilter}
             onChange={handleFilterChange}
             onReset={handleFilterReset}
+            variant="default"
+            singleRow
+            endpoint="/api/filters"
           />
         </div>
 

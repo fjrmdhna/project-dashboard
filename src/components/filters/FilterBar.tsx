@@ -477,7 +477,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
             <MultiSelect options={options.years || []} selected={value.year || []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel />
           </div>
           <div className="min-w-0">
-            <MultiSelect options={options.siteCategories || []} selected={value.site_category ?? []} placeholder="Site Category" onChange={handleSiteCategoryChange} disabled={false} width="w-full" staticLabel />
+            <MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel />
           </div>
           <div className="flex justify-end min-w-0">
             <button
@@ -559,7 +559,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
             ) : (
               <>
                 <div className={cellClass}><MultiSelect options={options.years || []} selected={value.year || []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel /></div>
-                <div className={cellClass}><MultiSelect options={options.siteCategories || []} selected={value.site_category ?? []} placeholder="Site Category" onChange={handleSiteCategoryChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={`${cellClass} hidden sm:block sm:col-start-5 justify-self-end`}>
                   <button
                     onClick={handleReset}
