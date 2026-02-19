@@ -18,7 +18,8 @@ export interface FilterValue {
   year?: string[] // Year filter
   circle?: string[]
   site_category?: string[] // Site category filter for AOP
-  ran_score?: string[] // RAN Score filter for AOP
+  ran_score?: string[] // RAN Score filter (Hermes / default variant)
+  pm_indosat?: string[] // Project filter for AOP (column pm_indosat)
   wbs_status?: string[] // WBS Status filter for AOP
   priority_congest_urgent?: string[] // Priority filter for AOP
   trial_gb_factory?: string[] // Trial GB Factory (pic_indosat); blank = "Other"
@@ -45,7 +46,8 @@ interface FilterOptions {
   years: string[] // Years for Hermes 5G
   circles: string[]
   siteCategories?: string[] // Site categories for AOP
-  ranScores?: string[] // RAN Scores for AOP
+  ranScores?: string[] // RAN Scores (Hermes / default variant)
+  projects?: string[] // Project options for AOP (pm_indosat)
   wbsStatus?: string[] // WBS Status for AOP
   priorityCongestUrgent?: string[] // Priority filter for AOP
   trialGbFactory?: string[] // Trial GB Factory (pic_indosat); blank shown as "Other"
@@ -61,18 +63,21 @@ const FILTER_OPTIONS_TTL_MS = 5 * 60 * 1000 // 5 minutes
  * "Edit filters" the dropdowns are already populated (no wait on first open).
  * Call this when the page mounts (e.g. AOP page) with the same endpoint/variant
  * used by FilterBar.
+ * @param forceRefresh - If true, bypasses server cache so options (e.g. projects) are fresh from DB. Use for AOP on first load when Redis may have stale shape.
  */
 export async function prefetchFilterOptions(
   endpoint: string,
-  variant: 'default' | 'aop' = 'default'
+  variant: 'default' | 'aop' = 'default',
+  forceRefresh = false
 ): Promise<void> {
   const cacheKey = `${variant}:${endpoint}`
   const cached = FILTER_OPTIONS_CACHE.get(cacheKey)
-  if (cached && (Date.now() - cached.fetchedAt) < FILTER_OPTIONS_TTL_MS) {
+  if (!forceRefresh && cached && (Date.now() - cached.fetchedAt) < FILTER_OPTIONS_TTL_MS) {
     return
   }
   try {
-    const response = await fetch(endpoint)
+    const url = forceRefresh ? `${endpoint}?refresh=true` : endpoint
+    const response = await fetch(url)
     if (!response.ok) return
     const data = await response.json()
     if (data.status !== 'success') return
@@ -86,6 +91,7 @@ export async function prefetchFilterOptions(
       circles: data.data.circles || [],
       siteCategories: data.data.siteCategories || [],
       ranScores: data.data.ranScores || [],
+      projects: data.data.projects || [],
       wbsStatus: data.data.wbsStatus || [],
       priorityCongestUrgent: data.data.priorityCongestUrgent || [],
       trialGbFactory: data.data.trialGbFactory || []
@@ -122,6 +128,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
       circles: [],
       siteCategories: [],
       ranScores: [],
+      projects: [],
       wbsStatus: [],
       priorityCongestUrgent: [],
       trialGbFactory: []
@@ -178,6 +185,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
               circles: data.data.circles || [],
               siteCategories: data.data.siteCategories || [],
               ranScores: data.data.ranScores || [],
+              projects: data.data.projects || [],
               wbsStatus: data.data.wbsStatus || [],
               priorityCongestUrgent: data.data.priorityCongestUrgent || [],
               trialGbFactory: data.data.trialGbFactory || []
@@ -235,57 +243,6 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
               
               if (hasUnnormalizedValues) {
                 console.log('[FilterBar] Detected stale priorityCongestUrgent cache, forcing refresh...')
-                hasRetried = true
-                await fetchOptions(true)
-                return
-              }
-            }
-            
-            // For AOP variant: detect stale cache by checking if ranScores are normalized
-            // Normalized ranScores should have:
-            // - "Co Expansion" (unified, no dash) for all values containing "co" and "expansion"
-            // - "Co New Site" for values containing "co" and "new site"
-            // - "New Site 2026" for values containing "new site" and "2026" (without "co")
-            // - "New Site 2025" for values containing "new site" and "2025" (without "co")
-            // - "Expansion 2026" for values containing "expansion" and "2026" (without "co")
-            // - "Expansion 2025" for values containing "expansion" and "2025" (without "co")
-            // If we see long values like "CO - Expansion - Forecast" or unnormalized new site/expansion + year, cache is stale
-            if (variant === 'aop' && !hasRetried && newOptions.ranScores && newOptions.ranScores.length > 0) {
-              const hasUnnormalizedValues = newOptions.ranScores.some((rs: string) => {
-                const lower = rs.toLowerCase()
-                // Use word boundary to check for "co" as a separate word, not substring
-                const hasCoAsWord = /\bco\b/i.test(rs)
-                
-                // Check if value contains "co" and "new site" but is not normalized to "Co New Site"
-                if (hasCoAsWord && lower.includes('new site') && rs !== 'Co New Site') {
-                  return true
-                }
-                // Check if value contains "co" and "expansion" but is not normalized to "Co Expansion"
-                // All variations (with or without dash) should be "Co Expansion"
-                if (hasCoAsWord && lower.includes('expansion') && rs !== 'Co Expansion') {
-                  return true
-                }
-                // Check if value contains "new site" and "2026" (without "co") but is not normalized to "New Site 2026"
-                if (!hasCoAsWord && lower.includes('new site') && lower.includes('2026') && rs !== 'New Site 2026') {
-                  return true
-                }
-                // Check if value contains "new site" and "2025" (without "co") but is not normalized to "New Site 2025"
-                if (!hasCoAsWord && lower.includes('new site') && lower.includes('2025') && rs !== 'New Site 2025') {
-                  return true
-                }
-                // Check if value contains "expansion" and "2026" (without "co") but is not normalized to "Expansion 2026"
-                if (!hasCoAsWord && lower.includes('expansion') && lower.includes('2026') && rs !== 'Expansion 2026') {
-                  return true
-                }
-                // Check if value contains "expansion" and "2025" (without "co") but is not normalized to "Expansion 2025"
-                if (!hasCoAsWord && lower.includes('expansion') && lower.includes('2025') && rs !== 'Expansion 2025') {
-                  return true
-                }
-                return false
-              })
-              
-              if (hasUnnormalizedValues) {
-                console.log('[FilterBar] Detected stale ranScores cache, forcing refresh...')
                 hasRetried = true
                 await fetchOptions(true)
                 return
@@ -368,10 +325,14 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
     onChange({ ...value, site_category: selected })
   }, [onChange, value])
 
-  // Handler untuk RAN score selection (AOP variant)
+  // Handler untuk RAN score selection (default/Hermes variant)
   const handleRanScoreChange = useCallback((selected: string[]) => {
-    console.log('RAN score filter changed:', selected)
     onChange({ ...value, ran_score: selected })
+  }, [onChange, value])
+
+  // Handler untuk Project selection (AOP variant, pm_indosat)
+  const handleProjectChange = useCallback((selected: string[]) => {
+    onChange({ ...value, pm_indosat: selected })
   }, [onChange, value])
   
   // Handler untuk Priority Congest Urgent selection (AOP variant)
@@ -394,7 +355,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
   const handleReset = () => {
     setSearchInput("")
     onReset?.()
-    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [], ran_score: [], wbs_status: [], priority_congest_urgent: [], trial_gb_factory: [] })
+    onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [], ran_score: [], pm_indosat: [], wbs_status: [], priority_congest_urgent: [], trial_gb_factory: [] })
   }
 
   // Handler untuk remove individual filter
@@ -423,6 +384,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
     (value.status?.length || 0) > 0 ||
     (value.site_category?.length || 0) > 0 ||
     (value.ran_score?.length || 0) > 0 ||
+    (value.pm_indosat?.length || 0) > 0 ||
     (value.wbs_status?.length || 0) > 0 ||
     (value.priority_congest_urgent?.length || 0) > 0 ||
     (value.trial_gb_factory?.length || 0) > 0
@@ -538,7 +500,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
           <div className={`${variant === "aop" ? "grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs flex-shrink-0 w-full items-center mt-2" : `${rowGridClass} mt-2`}`}>
             {variant === "aop" ? (
               <>
-                <div className={cellClass}><MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.projects || []} selected={value.pm_indosat ?? []} placeholder="Project" onChange={handleProjectChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.years || []} selected={value.year ?? []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.priorityCongestUrgent || []} selected={value.priority_congest_urgent ?? []} placeholder="Priority" onChange={handlePriorityCongestUrgentChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.trialGbFactory || []} selected={value.trial_gb_factory ?? []} placeholder="Trial GB Factory" onChange={handleTrialGbFactoryChange} disabled={false} width="w-full" staticLabel /></div>
@@ -716,6 +678,20 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
               <X
                 className="h-2 w-2 cursor-pointer"
                 onClick={() => removeFilter('ran_score', ranScore)}
+              />
+            </div>
+          ))}
+
+          {value.pm_indosat?.map(project => (
+            <div
+              key={`project-${project}`}
+              className="bg-rose-500/20 text-rose-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
+              title={`Project: ${project}`}
+            >
+              <span>Project: {truncateText(project, 12)}</span>
+              <X
+                className="h-2 w-2 cursor-pointer"
+                onClick={() => removeFilter('pm_indosat', project)}
               />
             </div>
           ))}

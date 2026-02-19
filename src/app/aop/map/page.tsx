@@ -121,7 +121,7 @@ const INITIAL_FILTER: FilterValue = {
   status: [],
   circle: [],
   site_category: [],
-  ran_score: [],
+  pm_indosat: [],  // Project (pm_indosat)
   year: [],
   priority_congest_urgent: [],
   trial_gb_factory: []
@@ -261,8 +261,8 @@ export default function AopMapPage() {
       debouncedFilterValue.site_category?.forEach((value) => {
         params.append('site_category', value)
       })
-      debouncedFilterValue.ran_score?.forEach((value) => {
-        params.append('ran_score', value)
+      debouncedFilterValue.pm_indosat?.forEach((value) => {
+        params.append('pm_indosat', value)
       })
       debouncedFilterValue.year?.forEach((value) => {
         params.append('year', value)

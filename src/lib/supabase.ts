@@ -556,10 +556,6 @@ export async function getAopFilterOptions(forceRefresh = false) {
                 // Normalize site_category: group by "New Site" or "Expansion"
                 formatted = normalizeSiteCategoryValue(trimmed)
                 normalizedKey = formatted.toLowerCase()
-              } else if (column === 'ran_score') {
-                // Normalize ran_score: group by "Co - Expansion"
-                formatted = normalizeRanScoreValue(trimmed)
-                normalizedKey = formatted.toLowerCase()
               } else if (column === 'priority_congest_urgent') {
                 // Normalize priority_congest_urgent: group by "Prio Lebaran"
                 formatted = normalizePriorityCongestUrgentValue(trimmed)
@@ -597,7 +593,6 @@ export async function getAopFilterOptions(forceRefresh = false) {
       .sort((a, b) => a.localeCompare(b))
     
     console.log(`[AOP Filters] Returning ${result.length} distinct ${column} values:`, result.slice(0, 10).join(', '), result.length > 10 ? '...' : '')
-    
     return result
   }
 
@@ -645,34 +640,26 @@ export async function getAopFilterOptions(forceRefresh = false) {
   }
 
   // OPTIMIZED: Fetch semua columns secara paralel dengan pagination per column
-  const [vendors, programs, circles, siteCategories, ranScoresRaw, years, priorityCongestUrgent, wbsStatus, trialGbFactory] = await Promise.all([
+  const [vendors, programs, circles, siteCategories, projectsRaw, years, priorityCongestUrgent, wbsStatus, trialGbFactory] = await Promise.all([
     fetchDistinctValuesOptimized('vendor_name'),
     fetchDistinctValuesOptimized('program_report'),
     fetchDistinctValuesOptimized('region_circle'),
     fetchDistinctValuesOptimized('site_category'),
-    fetchDistinctValuesOptimized('ran_score'),
+    fetchDistinctValuesOptimized('pm_indosat'),
     fetchDistinctValuesOptimized('year'),
     fetchDistinctValuesOptimized('priority_congest_urgent'),
     fetchDistinctValuesOptimized('wbs_status'),
     fetchPicIndosatValues()
   ])
 
-  // Normalize ranScores: apply normalization and deduplicate
-  const normalizedRanScores = new Set<string>()
-  for (const rs of ranScoresRaw) {
-    if (rs) {
-      const normalized = normalizeRanScoreValue(rs)
-      normalizedRanScores.add(normalized)
-    }
-  }
-  const ranScores = Array.from(normalizedRanScores).sort()
+  const projects = projectsRaw.filter(Boolean).sort((a, b) => a.localeCompare(b))
 
   const result = {
     vendors,
     programs,
     circles,
     siteCategories,
-    ranScores,
+    projects,
     years: years.sort((a, b) => b.localeCompare(a)), // Sort years descending (newest first)
     priorityCongestUrgent,
     wbsStatus,

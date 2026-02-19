@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { SITE_DATA_AOP_SELECT_COLUMNS, SITE_DATA_AOP_HEADERS } from '@/lib/site-data-aop-columns'
-import { normalizeRanScoreValue, normalizePriorityCongestUrgentValue } from '@/lib/supabase'
+import { normalizePriorityCongestUrgentValue } from '@/lib/supabase'
 
 const EXPORT_ROW_LIMIT = 50000
 
@@ -15,7 +15,7 @@ function buildFilterQuery(searchParams: URLSearchParams) {
   const programReports = searchParams.getAll('program_report')
   const circles = searchParams.getAll('region_circle')
   const siteCategories = searchParams.getAll('site_category')
-  const ranScores = searchParams.getAll('ran_score')
+  const pmIndosat = searchParams.getAll('pm_indosat')
   const years = searchParams.getAll('year')
   const priorityCongestUrgent = searchParams.getAll('priority_congest_urgent')
   const trialGbFactory = searchParams.getAll('trial_gb_factory')
@@ -58,59 +58,8 @@ function buildFilterQuery(searchParams: URLSearchParams) {
     query = query.or(siteCategoryConditions)
   }
 
-  if (ranScores.length > 0) {
-    // Normalize ran_score values and build query conditions
-    // Handle "Co Expansion", "Co New Site", "New Site 2026", "New Site 2025", "Expansion 2026", and "Expansion 2025" normalization
-    const ranScoreConditions = ranScores
-      .map(rs => {
-        const normalized = normalizeRanScoreValue(rs.trim())
-        const lowerNormalized = normalized.toLowerCase()
-        
-        // If normalized to "Co New Site", match all variations containing "co" and "new site"
-        if (lowerNormalized === 'co new site') {
-          // Match variations like: "CO New Site", "Co New Site", "co-new-site", etc.
-          return `ran_score.ilike.%co%new%site%`
-        }
-        
-        // If normalized to "Co Expansion", match all variations containing "co" and "expansion" (with or without dash)
-        if (lowerNormalized === 'co expansion') {
-          // Match variations like: "CO Expansion", "Co Expansion", "Co - Expansion", "co-expansion", etc.
-          return `ran_score.ilike.%co%expansion%`
-        }
-        
-        // If normalized to "New Site 2026", match all variations containing "new site" and "2026" (without "co")
-        if (lowerNormalized === 'new site 2026') {
-          // Match variations like: "New Site 2026", "new site 2026", "New Site 2026 Aop", etc.
-          // But exclude those with "co" (those should match "Co New Site" instead)
-          return `ran_score.ilike.%new%site%2026%`
-        }
-        
-        // If normalized to "New Site 2025", match all variations containing "new site" and "2025" (without "co")
-        if (lowerNormalized === 'new site 2025') {
-          // Match variations like: "New Site 2025", "new site 2025", "New Site 2025 Aop", etc.
-          // But exclude those with "co" (those should match "Co New Site" instead)
-          return `ran_score.ilike.%new%site%2025%`
-        }
-        
-        // If normalized to "Expansion 2026", match all variations containing "expansion" and "2026" (without "co")
-        if (lowerNormalized === 'expansion 2026') {
-          // Match variations like: "Expansion 2026", "expansion 2026", etc.
-          // But exclude those with "co" (those should match "Co Expansion" instead)
-          return `ran_score.ilike.%expansion%2026%`
-        }
-        
-        // If normalized to "Expansion 2025", match all variations containing "expansion" and "2025" (without "co")
-        if (lowerNormalized === 'expansion 2025') {
-          // Match variations like: "Expansion 2025", "expansion 2025", etc.
-          // But exclude those with "co" (those should match "Co Expansion" instead)
-          return `ran_score.ilike.%expansion%2025%`
-        }
-        
-        // For other values, use exact match (case-insensitive)
-        return `ran_score.ilike.${normalized}`
-      })
-      .join(',')
-    query = query.or(ranScoreConditions)
+  if (pmIndosat.length > 0) {
+    query = query.in('pm_indosat', pmIndosat.map((p) => p.trim()).filter(Boolean))
   }
 
   if (years.length > 0) {

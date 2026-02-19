@@ -22,6 +22,8 @@ export type ProgressCurveProps = {
   yearFilter?: number;        // Filter to show only specific year (e.g., 2026)
   /** When 'rfs_forecast', use rfs_forecast column for forecast line (e.g. Lebaran template); default 'rfs_ff'. */
   forecastSource?: 'rfs_ff' | 'rfs_forecast';
+  /** When true, hide the baseline line (e.g. when Lebaran template is selected). */
+  hideBaseline?: boolean;
   className?: string;
 };
 
@@ -1081,7 +1083,7 @@ const PlanReadinessDotWithLabel = (props: any) => {
 };
 
 // Main component
-export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, yearFilter, forecastSource = 'rfs_ff', className }: ProgressCurveProps) {
+export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, yearFilter, forecastSource = 'rfs_ff', hideBaseline = false, className }: ProgressCurveProps) {
   // Memoize buckets and data to prevent unnecessary recalculations
   const buckets = useMemo(() => {
     const builtBuckets = buildHybridBuckets(anchorDate, monthsSpan, rows ?? [], yearFilter, forecastSource);
@@ -1112,8 +1114,11 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
       // Filter out any points with invalid labels (like "All")
       return point.label && point.label.trim() !== '' && point.label.toLowerCase() !== 'all';
     });
+    if (hideBaseline) {
+      return result.map(p => ({ ...p, baseline: null, isLastBaseline: false }));
+    }
     return result;
-  }, [rows, buckets, anchorDate, forecastSource]);
+  }, [rows, buckets, anchorDate, forecastSource, hideBaseline]);
   
   // Detect format from original rows data (consistent with aggregate function)
   const isAopFormat = useMemo(() => {
@@ -1161,14 +1166,16 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
              {/* Render based on detected format */}
              {isAopFormat ? (
               <>
-                <Line 
-                  dataKey="baseline" 
-                  name="Baseline" 
-                  stroke="#2196F3" 
-                  strokeWidth={0.8} 
-                  dot={<BaselineDotWithLabel />}
-                  isAnimationActive={false}
-                />
+                {!hideBaseline && (
+                  <Line 
+                    dataKey="baseline" 
+                    name="Baseline" 
+                    stroke="#2196F3" 
+                    strokeWidth={0.8} 
+                    dot={<BaselineDotWithLabel />}
+                    isAnimationActive={false}
+                  />
+                )}
                 <Line 
                   dataKey="forecast" 
                   name="Forecast" 

@@ -7,7 +7,7 @@ export const AOP_TEMPLATE_FILTER_KEYS = [
   { key: "program_report" as const, label: "Program" },
   { key: "circle" as const, label: "Circle" },
   { key: "site_category" as const, label: "Site Category" },
-  { key: "ran_score" as const, label: "RAN Score" },
+  { key: "pm_indosat" as const, label: "Project" },
   { key: "year" as const, label: "Year" },
   { key: "priority_congest_urgent" as const, label: "Priority" },
   { key: "trial_gb_factory" as const, label: "Trial GB Factory" },

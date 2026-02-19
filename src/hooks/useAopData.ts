@@ -65,63 +65,6 @@ function normalizePriorityCongestUrgentForFilter(value: string | null | undefine
   return lowerValue
 }
 
-// Helper function to normalize ran_score for filtering
-// Must match the normalization in supabase.ts
-function normalizeRanScoreForFilter(value: string | null | undefined): string {
-  if (!value) return ''
-  
-  // Normalize multiple spaces to single space before checking
-  const normalizedSpaces = value.replace(/\s+/g, ' ').trim()
-  const lowerValue = normalizedSpaces.toLowerCase()
-  
-  // Check for "co" and "new site" (case-insensitive, handles multiple spaces and dashes)
-  // Pattern: "co" as a word (not substring like in "scope") followed by optional spaces/dashes and "new site"
-  // Use word boundary to ensure "co" is a separate word, not part of another word
-  const hasCoAsWord = /\bco\b/i.test(normalizedSpaces)
-  if (hasCoAsWord && lowerValue.includes('new site')) {
-    return 'co new site'
-  }
-  
-  // Check for "co" and "expansion" (case-insensitive, handles multiple spaces and dashes)
-  // All variations (with or without dash) -> "co expansion" (unified, no dash)
-  // This takes priority over expansion + year normalization
-  // Use word boundary to ensure "co" is a separate word, not part of another word
-  if (hasCoAsWord && lowerValue.includes('expansion')) {
-    return 'co expansion'
-  }
-  
-  // Check for "new site" and "2026" (case-insensitive, without "co" as a word)
-  // Pattern: "new site" followed by optional spaces and "2026"
-  // Use word boundary to ensure "co" is not present as a separate word
-  if (!hasCoAsWord && lowerValue.includes('new site') && lowerValue.includes('2026')) {
-    return 'new site 2026'
-  }
-  
-  // Check for "new site" and "2025" (case-insensitive, without "co" as a word)
-  // Pattern: "new site" followed by optional spaces and "2025"
-  // Use word boundary to ensure "co" is not present as a separate word
-  if (!hasCoAsWord && lowerValue.includes('new site') && lowerValue.includes('2025')) {
-    return 'new site 2025'
-  }
-  
-  // Check for "expansion" and "2026" (case-insensitive, without "co" as a word)
-  // Pattern: "expansion" followed by optional spaces and "2026"
-  // Use word boundary to ensure "co" is not present as a separate word
-  if (!hasCoAsWord && lowerValue.includes('expansion') && lowerValue.includes('2026')) {
-    return 'expansion 2026'
-  }
-  
-  // Check for "expansion" and "2025" (case-insensitive, without "co" as a word)
-  // Pattern: "expansion" followed by optional spaces and "2025"
-  // Use word boundary to ensure "co" is not present as a separate word
-  if (!hasCoAsWord && lowerValue.includes('expansion') && lowerValue.includes('2025')) {
-    return 'expansion 2025'
-  }
-  
-  // Return lowercase normalized value for others
-  return lowerValue
-}
-
 export interface AopSiteData extends MatrixRow {
   site_id?: string | null
   site_name?: string | null
@@ -132,6 +75,7 @@ export interface AopSiteData extends MatrixRow {
   region_circle?: string | null
   site_category?: string | null
   ran_score?: string | null
+  pm_indosat?: string | null  // Project filter (AOP)
   wbs_status?: string | null
   priority_congest_urgent?: string | null
   pic_indosat?: string | null  // Trial GB Factory filter; blank = "Other"
@@ -212,7 +156,7 @@ export interface UseAopDataOptions {
   programReports?: string[]
   circles?: string[]
   siteCategories?: string[]
-  ranScores?: string[]
+  pmIndosat?: string[]  // Project filter (pm_indosat column)
   wbsStatus?: string[]
   years?: string[]
   priorityCongestUrgent?: string[]
@@ -251,7 +195,7 @@ function filterDataClientSide(
   programReports: string[],
   circles: string[],
   siteCategories: string[],
-  ranScores: string[],
+  pmIndosat: string[],
   wbsStatus: string[],
   years: string[],
   priorityCongestUrgent: string[],
@@ -262,7 +206,7 @@ function filterDataClientSide(
 
   const hasFilters = vendorNames.length > 0 || programReports.length > 0 ||
                      circles.length > 0 || siteCategories.length > 0 ||
-                     ranScores.length > 0 || wbsStatus.length > 0 || years.length > 0 ||
+                     pmIndosat.length > 0 || wbsStatus.length > 0 || years.length > 0 ||
                      priorityCongestUrgent.length > 0 || trialGbFactory.length > 0 || search.length > 0
 
   if (!hasFilters) return data
@@ -296,13 +240,11 @@ function filterDataClientSide(
       if (!matchesCategory) return false
     }
     
-    // RAN Score filter (normalized matching)
-    // Filter values are normalized (e.g., "Co - Expansion")
-    // Row values need to be normalized before comparison
-    if (ranScores.length > 0) {
-      const normalizedRowRanScore = normalizeRanScoreForFilter(row.ran_score)
-      const matchesRanScore = ranScores.some(rs => normalizedRowRanScore === normalizeRanScoreForFilter(rs))
-      if (!matchesRanScore) return false
+    // Project filter (pm_indosat, exact match)
+    if (pmIndosat.length > 0) {
+      const rowVal = (row.pm_indosat ?? '').trim()
+      const matchesProject = pmIndosat.some((p) => (p ?? '').trim() === rowVal)
+      if (!matchesProject) return false
     }
 
     // WBS Status filter (case-insensitive so default "Active" matches DB variants)
@@ -501,7 +443,7 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
 }
 
 export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
-  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], ranScores = [], wbsStatus = [], years = [], priorityCongestUrgent = [], trialGbFactory = [], search = '' } = options
+  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], pmIndosat = [], wbsStatus = [], years = [], priorityCongestUrgent = [], trialGbFactory = [], search = '' } = options
 
   // OPTIMIZATION: Always fetch ALL data (no filter) and filter client-side
   // This makes filter changes instant instead of waiting 15-20s for API
@@ -555,7 +497,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       programReports.length > 0 ||
       circles.length > 0 ||
       siteCategories.length > 0 ||
-      ranScores.length > 0 ||
+      pmIndosat.length > 0 ||
       wbsStatus.length > 0 ||
       years.length > 0 ||
       priorityCongestUrgent.length > 0 ||
@@ -569,7 +511,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
           programReports,
           circles,
           siteCategories,
-          ranScores,
+          pmIndosat,
           wbsStatus,
           years,
           priorityCongestUrgent,
@@ -591,7 +533,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       filteredStats: stats,
       aggregated: agg
     }
-  }, [baseData, vendorNames, programReports, circles, siteCategories, ranScores, wbsStatus, years, priorityCongestUrgent, trialGbFactory, search])
+  }, [baseData, vendorNames, programReports, circles, siteCategories, pmIndosat, wbsStatus, years, priorityCongestUrgent, trialGbFactory, search])
 
   // Refetch function
   const refetch = useCallback(async () => {

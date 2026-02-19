@@ -7,7 +7,7 @@ const AOP_PAYLOAD_KEYS = [
   'program_report',
   'circle',
   'site_category',
-  'ran_score',
+  'pm_indosat',
   'year',
   'priority_congest_urgent',
   'trial_gb_factory'

@@ -81,7 +81,7 @@ const FILTER_COLUMNS = [
   'region',
   'region_circle',
   'site_category',
-  'ran_score',
+  'pm_indosat',
   'year',
   'priority_congest_urgent'
 ].join(',')
@@ -126,7 +126,7 @@ async function fetchMapDataFromDatabase(
   programReports: string[],
   circles: string[],
   siteCategories: string[],
-  ranScores: string[],
+  pmIndosat: string[],
   years: string[],
   priorityCongestUrgent: string[],
   q: string
@@ -134,7 +134,7 @@ async function fetchMapDataFromDatabase(
   // Determine if we need filter columns
   const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
                      circles.length > 0 || siteCategories.length > 0 || 
-                     ranScores.length > 0 || years.length > 0 || 
+                     pmIndosat.length > 0 || years.length > 0 || 
                      priorityCongestUrgent.length > 0 || q.length > 0
   
   const columns = hasFilters ? FILTER_COLUMNS : MAP_COLUMNS
@@ -187,13 +187,8 @@ async function fetchMapDataFromDatabase(
       query = query.or(siteCategoryConditions)
     }
 
-    if (ranScores.length > 0) {
-      // Use case-insensitive matching for ran_score (ilike with OR conditions)
-      // Since ran_score values might have different casing in database
-      const ranScoreConditions = ranScores
-        .map(rs => `ran_score.ilike.%${rs.trim()}%`)
-        .join(',')
-      query = query.or(ranScoreConditions)
+    if (pmIndosat.length > 0) {
+      query = query.in('pm_indosat', pmIndosat.map((p) => p.trim()).filter(Boolean))
     }
 
     if (years.length > 0) {
@@ -360,7 +355,7 @@ export async function GET(request: NextRequest) {
     const programReports = searchParams.getAll('program_report') || []
     const circles = searchParams.getAll('region_circle') || []
     const siteCategories = searchParams.getAll('site_category') || []
-    const ranScores = searchParams.getAll('ran_score') || []
+    const pmIndosat = searchParams.getAll('pm_indosat') || []
     const years = searchParams.getAll('year') || []
     const priorityCongestUrgent = searchParams.getAll('priority_congest_urgent') || []
     const statusFilters = searchParams.getAll('status') || []
@@ -371,7 +366,7 @@ export async function GET(request: NextRequest) {
       programReports,
       circles,
       siteCategories,
-      ranScores,
+      pmIndosat,
       years,
       priorityCongestUrgent,
       search: q
@@ -405,7 +400,7 @@ export async function GET(request: NextRequest) {
       programReports,
       circles,
       siteCategories,
-      ranScores,
+      pmIndosat,
       years,
       priorityCongestUrgent,
       q

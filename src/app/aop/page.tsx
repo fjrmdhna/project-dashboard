@@ -222,7 +222,7 @@ const INITIAL_FILTER: FilterValue = {
   status: [],
   circle: [],
   site_category: [],
-  ran_score: [],
+  pm_indosat: [],        // Project filter (pm_indosat)
   wbs_status: ["Active"], // Default: show only "Active" WBS status
   year: [],
   priority_congest_urgent: [],
@@ -235,7 +235,7 @@ const AOP_TEMPLATE_FILTER_KEYS = [
   { key: "program_report" as const, label: "Program" },
   { key: "circle" as const, label: "Circle" },
   { key: "site_category" as const, label: "Site Category" },
-  { key: "ran_score" as const, label: "RAN Score" },
+  { key: "pm_indosat" as const, label: "Project" },
   { key: "wbs_status" as const, label: "WBS Status" },
   { key: "year" as const, label: "Year" },
   { key: "priority_congest_urgent" as const, label: "Priority" },
@@ -423,7 +423,7 @@ export default function AopPage() {
   const stableProgramReports = useMemo(() => debouncedFilterValue.program_report || [], [debouncedFilterValue.program_report])
   const stableCircles = useMemo(() => debouncedFilterValue.circle || [], [debouncedFilterValue.circle])
   const stableSiteCategories = useMemo(() => debouncedFilterValue.site_category || [], [debouncedFilterValue.site_category])
-  const stableRanScores = useMemo(() => debouncedFilterValue.ran_score || [], [debouncedFilterValue.ran_score])
+  const stablePmIndosat = useMemo(() => debouncedFilterValue.pm_indosat || [], [debouncedFilterValue.pm_indosat])
   const stableWbsStatus = useMemo(() => debouncedFilterValue.wbs_status || [], [debouncedFilterValue.wbs_status])
   const stableYears = useMemo(() => debouncedFilterValue.year || [], [debouncedFilterValue.year])
   const stablePriorityCongestUrgent = useMemo(() => debouncedFilterValue.priority_congest_urgent || [], [debouncedFilterValue.priority_congest_urgent])
@@ -436,7 +436,7 @@ export default function AopPage() {
     programReports: stableProgramReports,
     circles: stableCircles,
     siteCategories: stableSiteCategories,
-    ranScores: stableRanScores,
+    pmIndosat: stablePmIndosat,
     wbsStatus: stableWbsStatus,
     years: stableYears,
     priorityCongestUrgent: stablePriorityCongestUrgent,
@@ -498,7 +498,7 @@ export default function AopPage() {
     []
   )
 
-  // Calculate active filter count (include ran_score, year, priority_congest_urgent, trial_gb_factory)
+  // Calculate active filter count (include pm_indosat/Project, year, priority_congest_urgent, trial_gb_factory)
   const activeFilterCount = (
     (filterValue.q ? 1 : 0) +
     (filterValue.vendor_name?.length || 0) +
@@ -507,7 +507,7 @@ export default function AopPage() {
     (filterValue.nano_cluster?.length || 0) +
     (filterValue.circle?.length ?? 0) +
     (filterValue.site_category?.length ?? 0) +
-    (filterValue.ran_score?.length ?? 0) +
+    (filterValue.pm_indosat?.length ?? 0) +
     (filterValue.wbs_status?.length ?? 0) +
     (filterValue.year?.length ?? 0) +
     (filterValue.priority_congest_urgent?.length ?? 0) +
@@ -562,9 +562,10 @@ export default function AopPage() {
     fetchTemplates("mount")
   }, [fetchTemplates])
 
-  // Prefetch filter options on page load so "Edit filters" dropdowns are instant when opened
+  // Prefetch filter options on page load so "Edit filters" dropdowns are instant when opened.
+  // Force refresh for AOP so Redis/stale cache does not serve old payload without projects.
   useEffect(() => {
-    prefetchFilterOptions("/api/aop/filters", "aop")
+    prefetchFilterOptions("/api/aop/filters", "aop", true)
   }, [])
 
   const handleSaveTemplate = async () => {
@@ -615,12 +616,10 @@ export default function AopPage() {
     for (const { key } of AOP_TEMPLATE_FILTER_KEYS) {
       if (key === "q") {
         const v = filterValue.q?.trim()
-        if (v) payload[key] = v
+        payload[key] = v ?? ""
       } else {
         const arr = (filterValue as unknown as Record<string, unknown>)[key]
-        if (Array.isArray(arr) && arr.length > 0) {
-          payload[key] = arr.filter((x): x is string => typeof x === "string")
-        }
+        payload[key] = Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : []
       }
     }
     return payload
@@ -696,8 +695,8 @@ export default function AopPage() {
       params.append('site_category', value)
     })
     
-    filterValue.ran_score?.forEach((value) => {
-      params.append('ran_score', value)
+    filterValue.pm_indosat?.forEach((value) => {
+      params.append('pm_indosat', value)
     })
     
     filterValue.year?.forEach((value) => {
@@ -1002,12 +1001,14 @@ export default function AopPage() {
     aggregatedByCircle={deferredAggregated?.byCircle}
   />
   const gapStatusCard = <GapStatusCard rows={rows} isLoading={aopLoading} />
+  const isLebaranTemplate = selectedTemplateName?.toLowerCase().includes('lebaran')
   const progressCurve = (
     <ProgressCurveLineChart
       rows={rows}
       anchorDate={new Date().toISOString()}
       yearFilter={2026}
-      forecastSource={selectedTemplateName?.toLowerCase().includes('lebaran') ? 'rfs_forecast' : 'rfs_ff'}
+      forecastSource={isLebaranTemplate ? 'rfs_forecast' : 'rfs_ff'}
+      hideBaseline={isLebaranTemplate}
     />
   )
   const dailyRunrate = (

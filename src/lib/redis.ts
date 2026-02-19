@@ -193,7 +193,8 @@ export interface FilterParams {
   programReports?: string[]
   circles?: string[]
   siteCategories?: string[]
-  ranScores?: string[]
+  ranScores?: string[]   // Hermes
+  pmIndosat?: string[]  // AOP (Project / pm_indosat)
   years?: string[]
   priorityCongestUrgent?: string[]
   search?: string
@@ -212,6 +213,7 @@ export function getFilterHash(filters: FilterParams): string {
     c: filters.circles?.slice().sort() || [],
     s: filters.siteCategories?.slice().sort() || [],
     r: filters.ranScores?.slice().sort() || [],
+    pm: filters.pmIndosat?.slice().sort() || [],
     y: filters.years?.slice().sort() || [],
     pcu: filters.priorityCongestUrgent?.slice().sort() || [],
     q: (filters.search || '').toLowerCase().trim()
@@ -239,6 +241,7 @@ export function isEmptyFilter(filters: FilterParams): boolean {
     (!filters.circles || filters.circles.length === 0) &&
     (!filters.siteCategories || filters.siteCategories.length === 0) &&
     (!filters.ranScores || filters.ranScores.length === 0) &&
+    (!filters.pmIndosat || filters.pmIndosat.length === 0) &&
     (!filters.years || filters.years.length === 0) &&
     (!filters.priorityCongestUrgent || filters.priorityCongestUrgent.length === 0) &&
     (!filters.search || filters.search.trim() === '')

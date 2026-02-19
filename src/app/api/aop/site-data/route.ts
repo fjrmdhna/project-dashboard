@@ -71,7 +71,8 @@ const MINIMAL_COLUMNS = [
   'program_report',    // Filter + Search
   'region_circle',     // Readiness/Activated cards + Filter
   'site_category',     // Filter
-  'ran_score',         // RAN Score filter
+  'ran_score',         // Legacy; kept for compatibility
+  'pm_indosat',        // Project filter (AOP)
   'wbs_status',        // WBS Status filter
   'year',              // Year filter
   'ic_000010_af',      // RFI - ReadinessCard
@@ -134,6 +135,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       if (row.region_circle) mapped.region_circle = row.region_circle.trim()
       if (row.site_category) mapped.site_category = row.site_category.trim()
       if (row.ran_score) mapped.ran_score = row.ran_score.trim()
+      if (row.pm_indosat) mapped.pm_indosat = row.pm_indosat.trim()
       if (row.wbs_status) mapped.wbs_status = row.wbs_status.trim()
       if (row.year) mapped.year = row.year.trim()
       
