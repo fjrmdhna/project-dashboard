@@ -36,6 +36,24 @@ interface MapPoint {
   ran_score?: string | null
 }
 
+/** Filterable row for sites with invalid coordinates (client applies same filter and counts). */
+export interface InvalidCoordinateRow {
+  id: string
+  status: StatusLabel
+  vendorName?: string | null
+  programReport?: string | null
+  impTtp?: string | null
+  nanoCluster?: string | null
+  region?: string | null
+  region_circle?: string | null
+  year?: string | null
+  ran_score?: string | null
+  /** Raw lat value from source (invalid/missing for these rows); for export and audit. */
+  lat?: string | number | null
+  /** Raw long value from source (invalid/missing for these rows); for export and audit. */
+  long?: string | number | null
+}
+
 function parseCoordinate(value: unknown): number | null {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null
@@ -100,14 +118,28 @@ export async function GET(request: NextRequest) {
     }
 
     const points: MapPoint[] = []
-    let invalidCoordinatesCount = 0
+    const invalidCoordinateRows: InvalidCoordinateRow[] = []
 
     for (const row of data) {
       const lat = parseCoordinate(row.lat)
       const long = parseCoordinate(row.long)
 
       if (lat === null || long === null) {
-        invalidCoordinatesCount++
+        const status = resolveStatus(row)
+        invalidCoordinateRows.push({
+          id: row.system_key,
+          status,
+          vendorName: row.vendor_name ?? null,
+          programReport: row.program_report ?? null,
+          impTtp: row.imp_ttp ?? null,
+          nanoCluster: row.nano_cluster ?? null,
+          region: (row as any).region ?? null,
+          region_circle: (row as any).region_circle ?? null,
+          year: (row as any).year ?? null,
+          ran_score: (row as any).ran_score ?? null,
+          lat: row.lat != null ? row.lat : null,
+          long: row.long != null ? row.long : null
+        })
         continue
       }
 
@@ -134,12 +166,11 @@ export async function GET(request: NextRequest) {
     }
 
     const durationMs = Date.now() - t0
-    // Lightweight runtime evidence for map performance
     console.log('[hermes-5g/map-data] success', {
       durationMs,
       mainCount: data.length,
       points: points.length,
-      invalidCoordinates: invalidCoordinatesCount
+      invalidCoordinateRows: invalidCoordinateRows.length
     })
 
     return NextResponse.json({
@@ -149,7 +180,8 @@ export async function GET(request: NextRequest) {
         counts,
         total: points.length,
         colors: STATUS_COLOR_MAP,
-        invalidCoordinates: invalidCoordinatesCount
+        invalidCoordinates: invalidCoordinateRows.length,
+        invalidCoordinateRows
       },
       timestamp: new Date().toISOString()
     })

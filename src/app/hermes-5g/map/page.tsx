@@ -1,8 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { RefreshCw } from 'lucide-react'
+import { Download, RefreshCw } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useApiCache } from '@/hooks/useApiCache'
 
@@ -24,6 +24,22 @@ import { FilterBar, FilterValue } from '@/components/filters/FilterBar'
 import { getProgramReportsForDisplayName } from '@/lib/hermes-program-mapping'
 import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-5g-utils'
 
+/** Row shape for filtering invalid-coordinate sites (same filterable fields as map points). */
+interface InvalidCoordinateRow {
+  id: string
+  status: string
+  vendorName?: string | null
+  programReport?: string | null
+  impTtp?: string | null
+  nanoCluster?: string | null
+  region?: string | null
+  region_circle?: string | null
+  year?: string | null
+  ran_score?: string | null
+  lat?: string | number | null
+  long?: string | number | null
+}
+
 interface MapApiSuccess {
   status: 'success'
   data: {
@@ -32,6 +48,7 @@ interface MapApiSuccess {
     total: number
     colors: Record<StatusLabel, string>
     invalidCoordinates: number
+    invalidCoordinateRows?: InvalidCoordinateRow[]
   }
   timestamp: string
 }
@@ -100,7 +117,7 @@ export default function Hermes5GMapPage() {
   }, [])
 
   const { data: cachedMapResponse, loading, error, refetch } = useApiCache<MapApiSuccess>(
-    'hermes-map-all-v1',
+    'hermes-map-all-v2',
     fetchMapAll,
     {
       staleTime: 5 * 60 * 1000,
@@ -115,38 +132,44 @@ export default function Hermes5GMapPage() {
 
   const hasInitialLoad = !!cachedMapResponse
   const lastUpdated = cachedMapResponse?.timestamp ?? null
-  const invalidCoordinates = cachedMapResponse?.data?.invalidCoordinates ?? 0
   const colors = useMemo(
     () => cachedMapResponse?.data?.colors ?? DEFAULT_COLORS,
     [cachedMapResponse?.data?.colors]
   )
 
-  // Convert debounced filter context to FilterValue format - Hermes uses ran_score (RAN Score) instead of site_category
+  // Convert debounced filter context to FilterValue format - Hermes uses ran_score (RAN Score) instead of site_category.
+  // Circle filter must use regionFilter (same as overview) so filters persist when navigating overview ↔ map.
+  // Use circle only for region_circle (circleSet); do NOT set region from circle value — "Kalisumapa" is region_circle, not region, so applying it to region would yield 0 sites.
   const currentFilter: FilterValue = useMemo(() => {
     const debounced = filterContext.debouncedFilters || filterContext
+    const circleValue = debounced.regionFilter !== 'all' ? debounced.regionFilter.split(',').filter(Boolean) : []
     return {
       q: debounced.searchTerm,
       vendor_name: debounced.vendorFilter !== 'all' ? debounced.vendorFilter.split(',').filter(Boolean) : [],
       program_report: debounced.programFilter !== 'all' ? debounced.programFilter.split(',').filter(Boolean) : [],
       imp_ttp: debounced.cityFilter !== 'all' ? debounced.cityFilter.split(',').filter(Boolean) : [],
       nano_cluster: debounced.nanoClusterFilter !== 'all' ? debounced.nanoClusterFilter.split(',').filter(Boolean) : [],
-      region: debounced.regionFilter !== 'all' ? debounced.regionFilter.split(',').filter(Boolean) : [],
+      region: [],
       year: debounced.yearFilter !== 'all' ? debounced.yearFilter.split(',').filter(Boolean) : [],
-      circle: debounced.circleFilter !== 'all' ? debounced.circleFilter.split(',').filter(Boolean) : [],
+      circle: circleValue,
       ran_score: debounced.ranScoreFilter !== 'all' ? debounced.ranScoreFilter.split(',').filter(Boolean) : [],
       status: debounced.statusFilters || []
     }
   }, [filterContext.debouncedFilters])
 
-  // Client-side filter: apply currentFilter to cached points (no extra fetch)
-  const { points, counts, totalCounts } = useMemo(() => {
+  // Client-side filter: apply currentFilter to cached points and to invalidCoordinateRows so counts match filter
+  const { points, counts, totalCounts, invalidCoordinatesFiltered, filteredInvalidRows } = useMemo(() => {
     const raw = cachedMapResponse?.data
-    if (!raw?.points?.length) {
-      return {
-        points: [] as HermesMapPoint[],
-        counts: { ...DEFAULT_COUNTS },
-        totalCounts: { ...DEFAULT_COUNTS }
-      }
+    const invalidRows = raw?.invalidCoordinateRows ?? []
+    const emptyResult = {
+      points: [] as HermesMapPoint[],
+      counts: { ...DEFAULT_COUNTS },
+      totalCounts: { ...DEFAULT_COUNTS },
+      invalidCoordinatesFiltered: invalidRows.length,
+      filteredInvalidRows: [] as InvalidCoordinateRow[]
+    }
+    if (!raw?.points?.length && !invalidRows.length) {
+      return emptyResult
     }
     const q = (currentFilter.q ?? '').toLowerCase().trim()
     const vendorSet = currentFilter.vendor_name?.length ? new Set(currentFilter.vendor_name) : null
@@ -156,8 +179,11 @@ export default function Hermes5GMapPage() {
     const yearSet = currentFilter.year?.length ? new Set(currentFilter.year) : null
     const statusSet = currentFilter.status?.length ? new Set(currentFilter.status) : null
 
-    // Program: expand display names to actual program_report values (filter options use display names)
-    const allProgramReports = [...new Set(raw.points.map((p: HermesMapPoint) => p.programReport).filter(Boolean))] as string[]
+    // Program: expand display names to actual program_report values (include invalid rows for options)
+    const allProgramReports = [...new Set([
+      ...(raw?.points ?? []).map((p: HermesMapPoint) => p.programReport),
+      ...invalidRows.map((r: InvalidCoordinateRow) => r.programReport)
+    ].filter(Boolean))] as string[]
     let programSet: Set<string> | null = null
     if (currentFilter.program_report?.length) {
       const expanded = new Set<string>()
@@ -175,12 +201,12 @@ export default function Hermes5GMapPage() {
       currentFilter.circle?.length ?
         new Set(currentFilter.circle.map(normalizeCircle)) : null
 
-    // RAN Score filter: options are normalized ("New Site" | "Expansion"); match point by normalizing ran_score
     const ranScoreSet =
       currentFilter.ran_score?.length
         ? new Set(currentFilter.ran_score) : null
 
-    const filtered = raw.points.filter((p: HermesMapPoint) => {
+    type FilterableRow = { id: string; status: string; vendorName?: string | null; programReport?: string | null; impTtp?: string | null; nanoCluster?: string | null; region?: string | null; region_circle?: string | null; year?: string | null; ran_score?: string | null }
+    const matchesFilter = (p: FilterableRow, includeStatus = true) => {
       if (vendorSet && !vendorSet.has(p.vendorName ?? '')) return false
       if (programSet && !programSet.has(p.programReport ?? '')) return false
       if (impTtpSet && !impTtpSet.has(p.impTtp ?? '')) return false
@@ -195,13 +221,17 @@ export default function Hermes5GMapPage() {
         const normalizedRanScore = normalizeRanScoreForHermesFilter(p.ran_score)
         if (!ranScoreSet.has(normalizedRanScore)) return false
       }
-      if (statusSet && !statusSet.has(p.status)) return false
+      if (includeStatus && statusSet && !statusSet.has(p.status)) return false
       if (q) {
         const searchable = [p.id, p.vendorName, p.programReport].filter(Boolean).join(' ').toLowerCase()
         if (!searchable.includes(q)) return false
       }
       return true
-    })
+    }
+
+    const filtered = (raw?.points ?? []).filter((p: HermesMapPoint) => matchesFilter(p))
+    const filteredInvalidRows = invalidRows.filter((r: InvalidCoordinateRow) => matchesFilter(r))
+    const filteredInvalidCount = filteredInvalidRows.length
 
     const countsByStatus: Record<string, number> = { ...DEFAULT_COUNTS }
     filtered.forEach((p: HermesMapPoint) => {
@@ -212,27 +242,7 @@ export default function Hermes5GMapPage() {
     const totalFiltered =
       !statusSet || statusSet.size === 0
         ? filtered
-        : raw.points.filter((p: HermesMapPoint) => {
-            if (vendorSet && !vendorSet.has(p.vendorName ?? '')) return false
-            if (programSet && !programSet.has(p.programReport ?? '')) return false
-            if (impTtpSet && !impTtpSet.has(p.impTtp ?? '')) return false
-            if (nanoSet && !nanoSet.has(p.nanoCluster ?? '')) return false
-            if (regionSet && !regionSet.has(p.region ?? '')) return false
-            if (yearSet && !yearSet.has(p.year ?? '')) return false
-            if (circleSet) {
-              const pCircle = normalizeCircle(p.region_circle ?? '')
-              if (!pCircle || !circleSet.has(pCircle)) return false
-            }
-            if (ranScoreSet) {
-              const normalizedRanScore = normalizeRanScoreForHermesFilter(p.ran_score)
-              if (!ranScoreSet.has(normalizedRanScore)) return false
-            }
-            if (q) {
-              const searchable = [p.id, p.vendorName, p.programReport].filter(Boolean).join(' ').toLowerCase()
-              if (!searchable.includes(q)) return false
-            }
-            return true
-          })
+        : (raw?.points ?? []).filter((p: HermesMapPoint) => matchesFilter(p, false))
     const totalCountsByStatus: Record<string, number> = { ...DEFAULT_COUNTS }
     totalFiltered.forEach((p: HermesMapPoint) => {
       totalCountsByStatus[p.status] = (totalCountsByStatus[p.status] ?? 0) + 1
@@ -241,9 +251,17 @@ export default function Hermes5GMapPage() {
     return {
       points: filtered as HermesMapPoint[],
       counts: countsByStatus as Record<StatusLabel, number>,
-      totalCounts: totalCountsByStatus as Record<StatusLabel, number>
+      totalCounts: totalCountsByStatus as Record<StatusLabel, number>,
+      invalidCoordinatesFiltered: filteredInvalidCount,
+      filteredInvalidRows
     }
   }, [cachedMapResponse, currentFilter])
+
+  // Use filter-aware invalid count when API provides invalidCoordinateRows; otherwise fallback to API total
+  const invalidCoordinates =
+    cachedMapResponse?.data?.invalidCoordinateRows
+      ? invalidCoordinatesFiltered
+      : (cachedMapResponse?.data?.invalidCoordinates ?? 0)
 
   const visiblePoints = useMemo(() => points, [points])
 
@@ -265,6 +283,43 @@ export default function Hermes5GMapPage() {
     }
   }, [filterContext])
 
+  const [isExportingInvalid, setIsExportingInvalid] = useState(false)
+  const handleExportInvalidCoordinates = useCallback(async () => {
+    if (!filteredInvalidRows?.length || isExportingInvalid) return
+    setIsExportingInvalid(true)
+    try {
+      const XLSX = await import('xlsx')
+      const formatCoord = (v: string | number | null | undefined): string =>
+        v === null || v === undefined ? '' : String(v)
+
+      const sheetData = filteredInvalidRows.map((row) => ({
+        'System Key': row.id,
+        Status: row.status,
+        Vendor: row.vendorName ?? '',
+        'Program Report': row.programReport ?? '',
+        City: row.impTtp ?? '',
+        Cluster: row.nanoCluster ?? '',
+        Region: row.region ?? '',
+        Circle: row.region_circle ?? '',
+        Year: row.year ?? '',
+        'RAN Score': row.ran_score ?? '',
+        Lat: formatCoord(row.lat),
+        Long: formatCoord(row.long),
+        Note: 'Invalid coordinates'
+      }))
+      const worksheet = XLSX.utils.json_to_sheet(sheetData)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Invalid coordinates')
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')
+      const filename = `hermes-5g-invalid-coordinates-${timestamp}.xlsx`
+      XLSX.writeFile(workbook, filename)
+    } catch (error) {
+      console.error('Export invalid coordinates failed:', error)
+    } finally {
+      setIsExportingInvalid(false)
+    }
+  }, [filteredInvalidRows, isExportingInvalid])
+
   const headerTitle = 'Hermes 5G Progress Map'
 
   // Show loading state until hydration is complete
@@ -280,14 +335,14 @@ export default function Hermes5GMapPage() {
   }
 
   const handleFilterChange = (newFilters: FilterValue) => {
-    filterContext.setSearchTerm(newFilters.q)
+    filterContext.setSearchTerm(newFilters.q ?? '')
     filterContext.setVendorFilter(newFilters.vendor_name?.length ? newFilters.vendor_name.join(',') : 'all')
     filterContext.setProgramFilter(newFilters.program_report?.length ? newFilters.program_report.join(',') : 'all')
     filterContext.setCityFilter(newFilters.imp_ttp?.length ? newFilters.imp_ttp.join(',') : 'all')
     filterContext.setNanoClusterFilter(newFilters.nano_cluster?.length ? newFilters.nano_cluster.join(',') : 'all')
-    filterContext.setRegionFilter(newFilters.region?.length ? newFilters.region.join(',') : 'all')
+    const circleValue = newFilters.circle?.length ? newFilters.circle.join(',') : 'all'
+    filterContext.setRegionFilter(circleValue)
     filterContext.setYearFilter(newFilters.year?.length ? newFilters.year.join(',') : 'all')
-    filterContext.setCircleFilter(newFilters.circle?.length ? newFilters.circle.join(',') : 'all')
     filterContext.setRanScoreFilter(newFilters.ran_score?.length ? newFilters.ran_score.join(',') : 'all')
   }
 
@@ -381,13 +436,25 @@ export default function Hermes5GMapPage() {
                   </p>
                   {invalidCoordinates > 0 && (
                     <div className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <svg className="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
-                        </svg>
-                        <span className="text-xs font-medium text-amber-200">
-                          {invalidCoordinates} sites with invalid coordinates
-                        </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <svg className="h-4 w-4 shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+                          </svg>
+                          <span className="text-xs font-medium text-amber-200">
+                            {invalidCoordinates} sites with invalid coordinates
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleExportInvalidCoordinates}
+                          disabled={isExportingInvalid}
+                          className="shrink-0 rounded p-1.5 text-amber-200 transition hover:bg-amber-500/20 hover:text-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={isExportingInvalid ? 'Exporting...' : 'Export to Excel'}
+                          aria-label={isExportingInvalid ? 'Exporting...' : 'Export invalid coordinates to Excel'}
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
                   )}

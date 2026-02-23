@@ -1,7 +1,11 @@
 {
   "extends": ["next/core-web-vitals"],
   "rules": {
-    "no-console": "warn",
-    "prefer-const": "error"
+    "no-console": "off",
+    "prefer-const": "error",
+    "@next/next/no-img-element": "off",
+    "jsx-a11y/role-has-required-aria-props": "warn",
+    "jsx-a11y/role-supports-aria-props": "warn",
+    "react-hooks/exhaustive-deps": "warn"
   }
 }
