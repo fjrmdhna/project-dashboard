@@ -5,6 +5,7 @@ import { SITE_DATA_AOP_SELECT_COLUMNS, SITE_DATA_AOP_HEADERS } from '@/lib/site-
 import { normalizePriorityCongestUrgentValue } from '@/lib/supabase'
 
 const EXPORT_ROW_LIMIT = 50000
+const EXPORT_PAGE_SIZE = 1000
 
 const VALID_TYPES = new Set(['aop'])
 
@@ -61,6 +62,8 @@ function buildFilterQuery(searchParams: URLSearchParams) {
   if (pmIndosat.length > 0) {
     query = query.in('pm_indosat', pmIndosat.map((p) => p.trim()).filter(Boolean))
   }
+
+  // WBS Status: not applied here; applied after fetch with same trim+lower logic as UI (useAopData)
 
   if (years.length > 0) {
     query = query.in('year', years)
@@ -177,20 +180,120 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    let query = buildFilterQuery(searchParams)
-    query = query.range(0, EXPORT_ROW_LIMIT - 1)
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error('[aop/export] Supabase error', error)
-      return NextResponse.json(
-        { status: 'error', message: 'Failed to fetch data from Supabase.' },
-        { status: 500 }
-      )
+    const filterSnapshot = {
+      vendorNames: searchParams.getAll('vendor_name'),
+      programReports: searchParams.getAll('program_report'),
+      circles: searchParams.getAll('region_circle'),
+      siteCategories: searchParams.getAll('site_category'),
+      pmIndosat: searchParams.getAll('pm_indosat'),
+      years: searchParams.getAll('year'),
+      priorityCongestUrgent: searchParams.getAll('priority_congest_urgent'),
+      trialGbFactory: searchParams.getAll('trial_gb_factory'),
+      wbsStatus: searchParams.getAll('wbs_status'),
+      search: searchParams.get('q')
     }
 
-    const rows = (data || []) as unknown as Record<string, unknown>[]
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': '65284a'
+      },
+      body: JSON.stringify({
+        sessionId: '65284a',
+        runId: 'initial',
+        hypothesisId: 'H1',
+        location: 'src/app/api/aop/export/route.ts:GET:beforeQuery',
+        message: 'AOP export API filters',
+        data: filterSnapshot,
+        timestamp: Date.now()
+      })
+    }).catch(() => {})
+    // #endregion agent log
+
+    const baseQuery = buildFilterQuery(searchParams)
+    const allData: Record<string, unknown>[] = []
+    let page = 0
+    let hasMore = true
+
+    while (hasMore && allData.length < EXPORT_ROW_LIMIT) {
+      const from = page * EXPORT_PAGE_SIZE
+      const to = Math.min(from + EXPORT_PAGE_SIZE - 1, EXPORT_ROW_LIMIT - 1)
+      const { data: pageData, error } = await baseQuery.range(from, to)
+
+      if (error) {
+        console.error('[aop/export] Supabase error', error)
+        return NextResponse.json(
+          { status: 'error', message: 'Failed to fetch data from Supabase.' },
+          { status: 500 }
+        )
+      }
+
+      const chunk = (pageData || []) as unknown as Record<string, unknown>[]
+      if (chunk.length === 0) break
+      allData.push(...chunk)
+      hasMore = chunk.length === EXPORT_PAGE_SIZE && allData.length < EXPORT_ROW_LIMIT
+      page++
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': '65284a'
+      },
+      body: JSON.stringify({
+        sessionId: '65284a',
+        runId: 'initial',
+        hypothesisId: 'H1',
+        location: 'src/app/api/aop/export/route.ts:GET:afterQuery',
+        message: 'AOP export API result',
+        data: { rowsLength: allData.length },
+        timestamp: Date.now()
+      })
+    }).catch(() => {})
+    // #endregion agent log
+
+    let rows = allData
+
+    const totalBeforeFilter = rows.length
+
+    // WBS Status: apply same trim + case-insensitive logic as UI (useAopData filterDataClientSide)
+    const wbsStatusParam = searchParams.getAll('wbs_status').map((s) => s.trim()).filter(Boolean)
+    if (wbsStatusParam.length > 0) {
+      const wbsSet = new Set(wbsStatusParam.map((w) => w.toLowerCase()))
+      rows = rows.filter((row) => {
+        const raw = (row as Record<string, unknown>)['wbs_status']
+        const rowWbs = (raw ?? '').toString().trim().toLowerCase()
+        return rowWbs !== '' && wbsSet.has(rowWbs)
+      })
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': '65284a'
+        },
+        body: JSON.stringify({
+          sessionId: '65284a',
+          runId: 'post-fix',
+          hypothesisId: 'H2',
+          location: 'src/app/api/aop/export/route.ts:GET:afterWbsFilter',
+          message: 'AOP export WBS post-filter',
+          data: {
+            totalBeforeFilter,
+            totalAfterFilter: rows.length,
+            wbsStatusParam
+          },
+          timestamp: Date.now()
+        })
+      }).catch(() => {})
+      // #endregion agent log
+    }
+
     const buffer = toWorkbookBuffer(rows, 'AOP')
 
     const timestamp = new Date().toISOString().replace(/[:T]/g, '-').split('.')[0]
