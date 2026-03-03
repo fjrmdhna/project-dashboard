@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSiteData5G } from '@/lib/supabase'
-import { 
-  getCache, 
-  setCache, 
+import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-ran-score-filter'
+import {
+  getCache,
+  setCache,
   getFilterHash,
   isEmptyFilter,
-  CACHE_KEYS, 
+  CACHE_KEYS,
   CACHE_TTL,
-  type FilterParams 
+  type FilterParams
 } from '@/lib/redis'
 
 // Interface for the response data
@@ -36,10 +37,9 @@ interface SiteDataResponse {
 const MINIMAL_COLUMNS = [
   'system_key',        // Required for key
   'vendor_name',       // VendorLeaderboard + Filter
-  'program_report',    // Filter
+  'program_report',    // Filter + RAN Score derived (normalize for display)
   'imp_ttp',           // Readiness/Activated cards + Filter
   'nano_cluster',      // Readiness/Activated cards + Filter
-  'ran_score',         // RAN Score filter
   'year',              // Year filter
   'region',            // Region filter (deprecated)
   'region_circle',     // Circle filter
@@ -67,7 +67,6 @@ const FULL_COLUMNS = [
   'program_report',
   'imp_ttp',
   'nano_cluster',
-  'ran_score',
   'issue_category',
   'caf_approved',
   'mos_af',
@@ -102,7 +101,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       program_report: row.program_report || null,
       imp_ttp: row.imp_ttp || null,
       nano_cluster: row.nano_cluster || null,
-      ran_score: row.ran_score || null,
+      ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null),
       year: row.year || null,
       region: row.region || null,
       region_circle: row.region_circle || null,
@@ -132,7 +131,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
     program_report: row.program_report,
     imp_ttp: row.imp_ttp,
     nano_cluster: row.nano_cluster,
-    ran_score: row.ran_score,
+    ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null),
     issue_category: row.issue_category,
     caf_approved: row.caf_approved || null,
     mos_af: row.mos_af || null,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSiteData5G, type SiteData5G } from '@/lib/supabase'
+import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-ran-score-filter'
 
 const STATUS_LABEL = {
   sow: 'SOW',
@@ -136,7 +137,7 @@ export async function GET(request: NextRequest) {
           region: (row as any).region ?? null,
           region_circle: (row as any).region_circle ?? null,
           year: (row as any).year ?? null,
-          ran_score: (row as any).ran_score ?? null,
+          ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null),
           lat: row.lat != null ? row.lat : null,
           long: row.long != null ? row.long : null
         })
@@ -161,7 +162,7 @@ export async function GET(request: NextRequest) {
         region: (row as any).region ?? null,
         region_circle: (row as any).region_circle ?? null,
         year: (row as any).year ?? null,
-        ran_score: (row as any).ran_score ?? null
+        ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null)
       })
     }
 

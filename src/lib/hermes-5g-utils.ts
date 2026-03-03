@@ -1,6 +1,10 @@
 import { supabase } from './supabase';
 import { EXCLUDED_PROGRAM_REPORTS, filterExcludedProgramReports, shouldExcludeProgramReport } from './hermes-5g-constants';
 import { getAllDisplayNames, getUnmappedProgramReports } from './hermes-program-mapping';
+import {
+  normalizeRanScoreForHermesFilter,
+  applyRanScoreFilterByProgramReport,
+} from './hermes-ran-score-filter';
 
 // Helper function to normalize circle values to Title Case (consistent with AOP)
 const formatCircleValue = (value: string): string =>
@@ -199,18 +203,8 @@ const normalizeSiteCategoryValue = (value: string): string => {
   return value.trim().toLowerCase().replace(/\b\w/g, char => char.toUpperCase())
 }
 
-/**
- * Normalize ran_score for Hermes filter: two groups only.
- * - Contains "new site" (case-insensitive) → "New Site"
- * - All other values → "Expansion"
- * Single source of truth for Hermes RAN Score filter options and matching.
- */
-export function normalizeRanScoreForHermesFilter(value: string | null | undefined): 'New Site' | 'Expansion' {
-  if (!value || typeof value !== 'string') return 'Expansion'
-  const lower = value.toLowerCase().trim()
-  if (lower.includes('new site')) return 'New Site'
-  return 'Expansion'
-}
+// Re-export for consumers that import from hermes-5g-utils
+export { normalizeRanScoreForHermesFilter, applyRanScoreFilterByProgramReport } from './hermes-ran-score-filter';
 
 export interface FilterOptionsResponse {
   status: 'success' | 'error';
@@ -417,12 +411,10 @@ export async function getFilterOptions(options: { forceRefresh?: boolean } = {})
       .not('year', 'is', null)
       .neq('year', '');
     
-    // Get unique RAN scores
-    const { data: ranScoresData, error: ranScoresError } = await supabase
+    // RAN Score filter options: derived from program_report ("new site" → New Site, else → Expansion)
+    const { data: programReportsForRanScore, error: ranScoresError } = await supabase
       .from('site_data_5g')
-      .select('ran_score')
-      .not('ran_score', 'is', null)
-      .neq('ran_score', '');
+      .select('program_report');
     
     // Get unique site categories from site_category
     const { data: siteCategoriesData, error: siteCategoriesError } = await supabase
@@ -485,13 +477,11 @@ export async function getFilterOptions(options: { forceRefresh?: boolean } = {})
     })
     const normalizedSiteCategories = Array.from(siteCategoriesMap.values()).sort()
 
-    // Normalize ran_score for Hermes: "new site" → "New Site", all others → "Expansion"
+    // Normalize program_report for Hermes RAN Score: "new site" → "New Site", else → "Expansion"
     const ranScoresSet = new Set<'New Site' | 'Expansion'>()
-    ;(ranScoresData || []).forEach(row => {
-      const raw = row.ran_score
-      if (raw && typeof raw === 'string' && raw.trim()) {
-        ranScoresSet.add(normalizeRanScoreForHermesFilter(raw))
-      }
+    ;(programReportsForRanScore || []).forEach((row) => {
+      const raw = row.program_report
+      ranScoresSet.add(normalizeRanScoreForHermesFilter(raw))
     })
     const ranScoresNormalized = Array.from(ranScoresSet).sort() // ["Expansion", "New Site"]
     
@@ -550,13 +540,12 @@ export async function getReadinessChartData(filters?: {
     // All program reports included - no exclusions
     const programReports = filters?.programReports || [];
 
-    // Build Supabase query with filters
+    // Build Supabase query with filters (RAN Score filter uses program_report)
     let query = supabase
       .from('site_data_5g')
-      .select('imp_ttp, imp_integ_af, ran_score')
+      .select('imp_ttp, imp_integ_af')
       .not('imp_ttp', 'is', null);
     
-    // Apply filters (multi-value)
     if (filters?.vendorNames && filters.vendorNames.length > 0) {
       query = query.in('vendor_name', filters.vendorNames)
     }
@@ -566,9 +555,7 @@ export async function getReadinessChartData(filters?: {
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
     }
-    if (filters?.ranScores && filters.ranScores.length > 0) {
-      query = query.in('ran_score', filters.ranScores)
-    }
+    query = applyRanScoreFilterByProgramReport(query, filters?.ranScores);
     
     const { data, error } = await query;
     
@@ -632,13 +619,12 @@ export async function getActivatedChartData(filters?: {
     // All program reports included - no exclusions
     const programReports = filters?.programReports || [];
 
-    // Build Supabase query with filters
+    // Build Supabase query with filters (RAN Score filter uses program_report)
     let query = supabase
       .from('site_data_5g')
-      .select('imp_ttp, rfs_af, ran_score')
+      .select('imp_ttp, rfs_af')
       .not('imp_ttp', 'is', null);
     
-    // Apply filters (multi-value)
     if (filters?.vendorNames && filters.vendorNames.length > 0) {
       query = query.in('vendor_name', filters.vendorNames)
     }
@@ -648,9 +634,7 @@ export async function getActivatedChartData(filters?: {
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
     }
-    if (filters?.ranScores && filters.ranScores.length > 0) {
-      query = query.in('ran_score', filters.ranScores)
-    }
+    query = applyRanScoreFilterByProgramReport(query, filters?.ranScores);
     
     const { data, error } = await query;
     
@@ -714,13 +698,12 @@ export async function getProgressCurveData(filters?: {
     // All program reports included - no exclusions
     const programReports = filters?.programReports || [];
 
-    // Build Supabase query with filters
+    // Build Supabase query with filters (RAN Score filter uses program_report)
     let query = supabase
       .from('site_data_5g')
-      .select('rfs_forecast_lock, imp_integ_af, rfs_af, ran_score')
+      .select('rfs_forecast_lock, imp_integ_af, rfs_af')
       .not('rfs_forecast_lock', 'is', null);
     
-    // Apply filters (multi-value)
     if (filters?.vendorNames && filters.vendorNames.length > 0) {
       query = query.in('vendor_name', filters.vendorNames)
     }
@@ -730,9 +713,7 @@ export async function getProgressCurveData(filters?: {
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
     }
-    if (filters?.ranScores && filters.ranScores.length > 0) {
-      query = query.in('ran_score', filters.ranScores)
-    }
+    query = applyRanScoreFilterByProgramReport(query, filters?.ranScores);
     
     const { data, error } = await query;
     
@@ -1099,14 +1080,13 @@ export async function getNanoClusterData(filters?: {
     // All program reports included - no exclusions
     const programReports = filters?.programReports || [];
 
-    // Build Supabase query with filters
+    // Build Supabase query with filters (RAN Score filter uses program_report)
     let query = supabase
       .from('site_data_5g')
-      .select('nano_cluster, imp_integ_af, rfs_af, ran_score')
+      .select('nano_cluster, imp_integ_af, rfs_af')
       .not('nano_cluster', 'is', null)
       .neq('nano_cluster', '');
     
-    // Apply filters (multi-value)
     if (filters?.vendorNames && filters.vendorNames.length > 0) {
       query = query.in('vendor_name', filters.vendorNames)
     }
@@ -1116,9 +1096,7 @@ export async function getNanoClusterData(filters?: {
     if (filters?.impTtps && filters.impTtps.length > 0) {
       query = query.in('imp_ttp', filters.impTtps)
     }
-    if (filters?.ranScores && filters.ranScores.length > 0) {
-      query = query.in('ran_score', filters.ranScores)
-    }
+    query = applyRanScoreFilterByProgramReport(query, filters?.ranScores);
     
     const { data, error } = await query;
     

@@ -104,6 +104,15 @@ export default async function Home() {
       href: "#",
       underConstruction: true,
     },
+    {
+      id: "commercial-atp",
+      title: "Commercial ATP",
+      category: "Commercial",
+      date: currentDate,
+      progress: 0,
+      mood: "primary",
+      href: "/commercial-atp",
+    },
   ]
 
   return (

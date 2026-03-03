@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
+import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-ran-score-filter'
 import { SITE_DATA_5G_SELECT_COLUMNS, SITE_DATA_5G_HEADERS } from '@/lib/site-data-5g-columns'
 
 const EXPORT_ROW_LIMIT = 50000
@@ -60,17 +61,15 @@ function buildFilterQuery(searchParams: URLSearchParams) {
     query = query.in('year', years)
   }
 
-  // RAN Score filter (Hermes): normalized to "New Site" | "Expansion"
-  // New Site = ran_score contains "new site"; Expansion = ran_score is null or does not contain "new site"
+  // RAN Score filter (Hermes): source = program_report. "New Site" = contains "new site", "Expansion" = else
   if (ranScores.length > 0) {
     const hasNewSite = ranScores.some(rs => rs.trim() === 'New Site')
     const hasExpansion = ranScores.some(rs => rs.trim() === 'Expansion')
     if (hasNewSite && !hasExpansion) {
-      query = query.ilike('ran_score', '%new%site%')
+      query = query.ilike('program_report', '%new%site%')
     } else if (hasExpansion && !hasNewSite) {
-      query = query.or('ran_score.is.null,ran_score.not.ilike.%new%site%')
+      query = query.or('program_report.is.null,program_report.not.ilike.%new%site%')
     }
-    // If both selected, no ran_score filter (all rows)
   }
 
   if (search && search.trim().length > 0) {
@@ -123,8 +122,12 @@ function toWorkbookBuffer(rows: Record<string, unknown>[], sheetName: string) {
   const normalizedRows = rows.map((row) => {
     const normalized: Record<string, unknown> = {}
     headers.forEach((header) => {
-      const rawValue = row[header]
-      normalized[header] = formatDateValue(rawValue)
+      if (header === 'ran_score') {
+        normalized[header] = normalizeRanScoreForHermesFilter(row.program_report as string | null | undefined)
+      } else {
+        const rawValue = row[header]
+        normalized[header] = formatDateValue(rawValue)
+      }
     })
     return normalized
   })

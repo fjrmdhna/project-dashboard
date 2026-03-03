@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { EXCLUDED_PROGRAM_REPORTS, filterExcludedProgramReports, shouldExcludeProgramReport } from './hermes-5g-constants'
+import { normalizeRanScoreForHermesFilter, applyRanScoreFilterByProgramReport } from './hermes-ran-score-filter'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://opecotutdvtahsccpqzr.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wZWNvdHV0ZHZ0YWhzY2NwcXpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU1NDU4OTcsImV4cCI6MjA1MTEyMTg5N30.sptjTg-0L1lCep8S_wriw3ixm_sXiTAFX-JiPOQFAEU'
@@ -109,7 +110,6 @@ export async function getSiteData5G(
     'program_report',
     'imp_ttp',
     'nano_cluster',
-    'ran_score',
     'issue_category',
     'caf_approved',
     'mos_af',
@@ -195,9 +195,7 @@ export async function getSiteData5G(
     query = query.in('year', filters.year)
   }
 
-  if (filters.ran_score && filters.ran_score.length > 0) {
-    query = query.in('ran_score', filters.ran_score)
-  }
+  query = applyRanScoreFilterByProgramReport(query, filters.ran_score)
 
   if (filters.search) {
     query = query.or(`system_key.ilike.%${filters.search}%,site_id.ilike.%${filters.search}%,site_name.ilike.%${filters.search}%,vendor_name.ilike.%${filters.search}%`)
@@ -287,22 +285,27 @@ export async function getFilterOptions() {
     .select('nano_cluster')
     .not('nano_cluster', 'is', null)
 
-  const { data: ranScores, error: ranScoreError } = await supabase
+  // RAN Score options: derived from program_report ("new site" → New Site, else → Expansion)
+  const { data: programReportsForRanScore, error: ranScoreError } = await supabase
     .from('site_data_5g')
-    .select('ran_score')
-    .not('ran_score', 'is', null)
-    .neq('ran_score', '')
+    .select('program_report')
 
   if (vendorError || programError || cityError || nanoClusterError || ranScoreError) {
     throw new Error(`Supabase error: ${vendorError?.message || programError?.message || cityError?.message || nanoClusterError?.message || ranScoreError?.message}`)
   }
+
+  const ranScoresSet = new Set<'New Site' | 'Expansion'>()
+  ;(programReportsForRanScore || []).forEach((row) => {
+    ranScoresSet.add(normalizeRanScoreForHermesFilter(row.program_report))
+  })
+  const ranScoresNormalized = Array.from(ranScoresSet).sort()
 
   return {
     vendors: [...new Set(vendors.map(v => v.vendor_name))].sort(),
     programs: [...new Set(programs?.map(p => p.program_report) || [])].sort(), // All programs included - no exclusions
     cities: [...new Set(cities.map(c => c.imp_ttp))].sort(),
     nanoClusters: [...new Set(nanoClusters.map(nc => nc.nano_cluster))].sort(),
-    ranScores: [...new Set((ranScores || []).map(rs => rs.ran_score).filter((value): value is string => Boolean(value)))].sort()
+    ranScores: ranScoresNormalized
   }
 }
 
