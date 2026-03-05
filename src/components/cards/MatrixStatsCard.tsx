@@ -60,6 +60,7 @@ const DEFAULT_METRIC_CONFIG = [
   { key: "install", label: "INSTALL" },
   { key: "readiness", label: "READINESS" },
   { key: "activated", label: "ACTIVATED" },
+  { key: "rfa", label: "RFA" },
   { key: "rfc", label: "RFC" },
   { key: "fatp", label: "FATP" },
   { key: "patp", label: "PATP" },
@@ -137,6 +138,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
         install: providedStats.install ?? rows.filter(row => row.ic_000040_af).length,
         readiness: rows.filter(row => row.imp_integ_af).length,
         activated: providedStats.activated ?? providedStats.rfs ?? rows.filter(row => row.rfs_af).length,
+        rfa: providedStats.rfa ?? rows.filter(row => row.ready_for_acpt_date).length,
         rfc: providedStats.rfc ?? rows.filter(row => row.rfc_approved).length,
         fatp: providedStats.fatp ?? rows.filter(row => row.fatp_accepted_af).length,
         patp: providedStats.patp ?? patpCount ?? rows.filter(row => row.patp_accepted_af).length,
@@ -185,6 +187,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
     const install = rows.filter(row => row.ic_000040_af).length
     const readiness = rows.filter(row => row.imp_integ_af).length
     const activated = rows.filter(row => row.rfs_af).length
+    const rfa = rows.filter(row => row.ready_for_acpt_date).length
     const rfc = rows.filter(row => row.rfc_approved).length
     const fatp = rows.filter(row => row.fatp_accepted_af).length
     const hotnews = rows.filter(row => row.hotnews_af).length
@@ -200,6 +203,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
       install,
       readiness,
       activated,
+      rfa,
       rfc,
       fatp,
       patp,
@@ -233,6 +237,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
     install: stats.install,
         readiness: stats.readiness!,
         activated: stats.activated!,
+    rfa: stats.rfa ?? 0,
     rfc: stats.rfc,
     fatp: stats.fatp ?? 0,
     patp: stats.patp,

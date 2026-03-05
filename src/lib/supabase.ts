@@ -22,6 +22,7 @@ export interface SiteData5G {
   imp_integ_af?: string
   rfs_af?: string
   rfs_forecast_lock?: string
+  ready_for_acpt_date?: string | null
   rfc_approved?: string
   fatp_accepted_af?: string | null
   mocn_activation_forecast?: string
@@ -121,6 +122,7 @@ export async function getSiteData5G(
     'rfs_ff',            // Forecast - ProgressCurve, VendorLeaderboard, DailyRunrate
     'rfs_bf',            // Legacy baseline - kept for backward compatibility
     'rfs_forecast_lock',
+    'ready_for_acpt_date', // RFA stats
     'rfc_approved',
     'fatp_accepted_af',  // FATP stats
     'mocn_activation_forecast',

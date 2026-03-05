@@ -32,6 +32,7 @@ export interface Hermes5GDataStats {
   install: number
   readiness: number
   activated: number
+  rfa: number
   rfc: number
   fatp: number
   hotnews: number
@@ -110,6 +111,7 @@ const EMPTY_STATS: Hermes5GDataStats = {
   install: 0,
   readiness: 0,
   activated: 0,
+  rfa: 0,
   rfc: 0,
   fatp: 0,
   hotnews: 0,
@@ -473,7 +475,7 @@ function aggregateDataSinglePassWithStats(data: Hermes5GSiteData[]): Hermes5GAgg
   // Stats (merged from calculateStatsFromFilteredData to avoid extra pass)
   const uniqueClusters = new Set<string>()
   let caf = 0, mos = 0, install = 0, readiness = 0, activated = 0
-  let rfc = 0, fatp = 0, hotnews = 0, endorse = 0, pac = 0, patp = 0
+  let rfa = 0, rfc = 0, fatp = 0, hotnews = 0, endorse = 0, pac = 0, patp = 0
 
   // Daily runrate maps (last 7 days)
   const today = new Date()
@@ -500,6 +502,7 @@ function aggregateDataSinglePassWithStats(data: Hermes5GSiteData[]): Hermes5GAgg
     if (row.ic_000040_af) install++
     if (row.imp_integ_af) readiness++
     if (row.rfs_af) activated++
+    if (row.ready_for_acpt_date) rfa++
     if (row.rfc_approved) rfc++
     if (row.fatp_accepted_af) fatp++
     if (row.hotnews_af) hotnews++
@@ -631,6 +634,7 @@ function aggregateDataSinglePassWithStats(data: Hermes5GSiteData[]): Hermes5GAgg
       install,
       readiness,
       activated,
+      rfa,
       rfc,
       fatp,
       hotnews,
@@ -648,7 +652,7 @@ function calculateStatsFromFilteredData(data: Hermes5GSiteData[]): Hermes5GDataS
   
   const uniqueClusters = new Set<string>()
   let caf = 0, mos = 0, install = 0, readiness = 0, activated = 0
-  let rfc = 0, fatp = 0, hotnews = 0, endorse = 0, pac = 0, patp = 0
+  let rfa = 0, rfc = 0, fatp = 0, hotnews = 0, endorse = 0, pac = 0, patp = 0
   
   // Single pass through data for all stats
   for (const row of data) {
@@ -657,6 +661,7 @@ function calculateStatsFromFilteredData(data: Hermes5GSiteData[]): Hermes5GDataS
     if (row.ic_000040_af) install++
     if (row.imp_integ_af) readiness++
     if (row.rfs_af) activated++
+    if (row.ready_for_acpt_date) rfa++
     if (row.rfc_approved) rfc++
     if (row.fatp_accepted_af) fatp++
     if (row.hotnews_af) hotnews++
@@ -673,6 +678,7 @@ function calculateStatsFromFilteredData(data: Hermes5GSiteData[]): Hermes5GDataS
     install,
     readiness,
     activated,
+    rfa,
     rfc,
     fatp,
     hotnews,

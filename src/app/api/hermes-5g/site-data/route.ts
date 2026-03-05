@@ -23,6 +23,7 @@ interface SiteDataResponse {
     install: number
     readiness: number
     activated: number
+    rfa: number
     rfc: number
     fatp: number
     hotnews: number
@@ -53,6 +54,7 @@ const MINIMAL_COLUMNS = [
   'rfs_af',            // Actual - ProgressCurve, ActivatedCard, VendorLeaderboard, DailyRunrate
   'caf_approved',      // CAF stats
   'mos_af',            // MOS stats
+  'ready_for_acpt_date', // RFA stats
   'rfc_approved',      // RFC stats
   'fatp_accepted_af',  // FATP stats
   'hotnews_af',        // Hotnews stats
@@ -76,6 +78,7 @@ const FULL_COLUMNS = [
   'imp_integ_af',
   'rfs_af',
   'rfs_forecast_lock',
+  'ready_for_acpt_date',
   'rfc_approved',
   'fatp_accepted_af',
   'mocn_activation_forecast',
@@ -118,6 +121,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       rfs_bf: row.rfs_bf || null,
       rfs_ff: row.rfs_ff || null,
       rfs_af: row.rfs_af || null,
+      ready_for_acpt_date: row.ready_for_acpt_date || null,
       rfc_approved: row.rfc_approved || null,
       fatp_accepted_af: row.fatp_accepted_af || null,
       hotnews_af: row.hotnews_af || null,
@@ -143,6 +147,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
     imp_integ_af: row.imp_integ_af || null,
     rfs_af: row.rfs_af || null,
     rfs_forecast_lock: row.rfs_forecast_lock || null,
+    ready_for_acpt_date: row.ready_for_acpt_date || null,
     rfc_approved: row.rfc_approved || null,
     fatp_accepted_af: row.fatp_accepted_af || null,
     mocn_activation_forecast: row.mocn_activation_forecast || null,
@@ -164,6 +169,7 @@ function calculateStatsFromData(filteredData: any[]) {
   const installCount = filteredData.filter(row => row.ic_000040_af).length
   const readinessCount = filteredData.filter(row => row.imp_integ_af).length
   const activatedCount = filteredData.filter(row => row.rfs_af).length
+  const rfaCount = filteredData.filter(row => row.ready_for_acpt_date).length
   const rfcCount = filteredData.filter(row => row.rfc_approved).length
   const fatpCount = filteredData.filter(row => row.fatp_accepted_af).length
   const hotnewsCount = filteredData.filter(row => row.hotnews_af).length
@@ -184,6 +190,7 @@ function calculateStatsFromData(filteredData: any[]) {
     install: installCount,
     readiness: readinessCount,
     activated: activatedCount,
+    rfa: rfaCount,
     rfc: rfcCount,
     fatp: fatpCount,
     hotnews: hotnewsCount,
@@ -327,6 +334,7 @@ export async function GET(request: NextRequest) {
           install: 0,
           readiness: 0,
           activated: 0,
+          rfa: 0,
           rfc: 0,
           fatp: 0,
           hotnews: 0,

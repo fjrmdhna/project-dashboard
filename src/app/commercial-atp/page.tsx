@@ -374,6 +374,7 @@ export default function CommercialATPPage() {
               mos: hermesStats.mos,
               install: hermesStats.install,
               rfs: hermesStats.activated,
+              rfa: hermesStats.rfa,
               rfc: hermesStats.rfc,
               fatp: hermesStats.fatp,
               hotnews: hermesStats.hotnews,
