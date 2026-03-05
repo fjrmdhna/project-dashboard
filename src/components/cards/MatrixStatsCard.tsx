@@ -61,6 +61,7 @@ const DEFAULT_METRIC_CONFIG = [
   { key: "readiness", label: "READINESS" },
   { key: "activated", label: "ACTIVATED" },
   { key: "rfc", label: "RFC" },
+  { key: "fatp", label: "FATP" },
   { key: "patp", label: "PATP" },
   { key: "hotnews", label: "HN" },
   { key: "endorse", label: "ENDORSE" },
@@ -127,6 +128,23 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
         pac: providedStats.pac ?? rows.filter(row => row.pac_accepted_af).length
       }
     }
+
+    if (variant !== "aop" && providedStats) {
+      return {
+        totalSites: providedStats.totalSites ?? rows.length,
+        caf: providedStats.caf ?? rows.filter(row => row.caf_approved).length,
+        mos: providedStats.mos ?? rows.filter(row => row.mos_af).length,
+        install: providedStats.install ?? rows.filter(row => row.ic_000040_af).length,
+        readiness: rows.filter(row => row.imp_integ_af).length,
+        activated: providedStats.activated ?? providedStats.rfs ?? rows.filter(row => row.rfs_af).length,
+        rfc: providedStats.rfc ?? rows.filter(row => row.rfc_approved).length,
+        fatp: providedStats.fatp ?? rows.filter(row => row.fatp_accepted_af).length,
+        patp: providedStats.patp ?? patpCount ?? rows.filter(row => row.patp_accepted_af).length,
+        hotnews: providedStats.hotnews ?? rows.filter(row => row.hotnews_af).length,
+        endorse: providedStats.endorse ?? rows.filter(row => row.endorse_af).length,
+        pac: providedStats.pac ?? rows.filter(row => row.pac_accepted_af).length
+      }
+    }
     
     const totalSites = rows.length
     
@@ -168,6 +186,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
     const readiness = rows.filter(row => row.imp_integ_af).length
     const activated = rows.filter(row => row.rfs_af).length
     const rfc = rows.filter(row => row.rfc_approved).length
+    const fatp = rows.filter(row => row.fatp_accepted_af).length
     const hotnews = rows.filter(row => row.hotnews_af).length
     const endorse = rows.filter(row => row.endorse_af).length
     const pac = rows.filter(row => row.pac_accepted_af).length
@@ -182,6 +201,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
       readiness,
       activated,
       rfc,
+      fatp,
       patp,
       hotnews,
       endorse,
@@ -214,6 +234,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
         readiness: stats.readiness!,
         activated: stats.activated!,
     rfc: stats.rfc,
+    fatp: stats.fatp ?? 0,
     patp: stats.patp,
     hotnews: stats.hotnews,
     endorse: stats.endorse,

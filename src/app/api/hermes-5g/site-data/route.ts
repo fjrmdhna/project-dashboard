@@ -24,6 +24,7 @@ interface SiteDataResponse {
     readiness: number
     activated: number
     rfc: number
+    fatp: number
     hotnews: number
     endorse: number
     pac: number
@@ -53,6 +54,7 @@ const MINIMAL_COLUMNS = [
   'caf_approved',      // CAF stats
   'mos_af',            // MOS stats
   'rfc_approved',      // RFC stats
+  'fatp_accepted_af',  // FATP stats
   'hotnews_af',        // Hotnews stats
   'endorse_af',        // Endorse stats
   'pac_accepted_af',   // PAC stats
@@ -75,6 +77,7 @@ const FULL_COLUMNS = [
   'rfs_af',
   'rfs_forecast_lock',
   'rfc_approved',
+  'fatp_accepted_af',
   'mocn_activation_forecast',
   'hotnews_af',
   'endorse_af',
@@ -116,6 +119,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       rfs_ff: row.rfs_ff || null,
       rfs_af: row.rfs_af || null,
       rfc_approved: row.rfc_approved || null,
+      fatp_accepted_af: row.fatp_accepted_af || null,
       hotnews_af: row.hotnews_af || null,
       endorse_af: row.endorse_af || null,
       pac_accepted_af: row.pac_accepted_af || null,
@@ -140,6 +144,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
     rfs_af: row.rfs_af || null,
     rfs_forecast_lock: row.rfs_forecast_lock || null,
     rfc_approved: row.rfc_approved || null,
+    fatp_accepted_af: row.fatp_accepted_af || null,
     mocn_activation_forecast: row.mocn_activation_forecast || null,
     hotnews_af: row.hotnews_af || null,
     endorse_af: row.endorse_af || null,
@@ -160,6 +165,7 @@ function calculateStatsFromData(filteredData: any[]) {
   const readinessCount = filteredData.filter(row => row.imp_integ_af).length
   const activatedCount = filteredData.filter(row => row.rfs_af).length
   const rfcCount = filteredData.filter(row => row.rfc_approved).length
+  const fatpCount = filteredData.filter(row => row.fatp_accepted_af).length
   const hotnewsCount = filteredData.filter(row => row.hotnews_af).length
   const endorseCount = filteredData.filter(row => row.endorse_af).length
   const pacCount = filteredData.filter(row => row.pac_accepted_af).length
@@ -179,6 +185,7 @@ function calculateStatsFromData(filteredData: any[]) {
     readiness: readinessCount,
     activated: activatedCount,
     rfc: rfcCount,
+    fatp: fatpCount,
     hotnews: hotnewsCount,
     endorse: endorseCount,
     pac: pacCount,
@@ -321,6 +328,7 @@ export async function GET(request: NextRequest) {
           readiness: 0,
           activated: 0,
           rfc: 0,
+          fatp: 0,
           hotnews: 0,
           endorse: 0,
           pac: 0,

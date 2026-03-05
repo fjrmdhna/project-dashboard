@@ -449,6 +449,7 @@ export default function Hermes5GPage() {
         install: hermesStats.install,
         rfs: hermesStats.activated,
         rfc: hermesStats.rfc,
+        fatp: hermesStats.fatp,
         hotnews: hermesStats.hotnews,
         endorse: hermesStats.endorse,
         pac: hermesStats.pac

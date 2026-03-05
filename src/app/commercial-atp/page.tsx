@@ -375,6 +375,7 @@ export default function CommercialATPPage() {
               install: hermesStats.install,
               rfs: hermesStats.activated,
               rfc: hermesStats.rfc,
+              fatp: hermesStats.fatp,
               hotnews: hermesStats.hotnews,
               endorse: hermesStats.endorse,
               pac: hermesStats.pac,

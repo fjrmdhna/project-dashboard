@@ -23,10 +23,12 @@ export interface SiteData5G {
   rfs_af?: string
   rfs_forecast_lock?: string
   rfc_approved?: string
+  fatp_accepted_af?: string | null
   mocn_activation_forecast?: string
   hotnews_af?: string
   endorse_af?: string
   pac_accepted_af?: string
+  patp_accepted_af?: string
   site_id?: string
   site_name?: string
   lat?: number | null
@@ -120,6 +122,7 @@ export async function getSiteData5G(
     'rfs_bf',            // Legacy baseline - kept for backward compatibility
     'rfs_forecast_lock',
     'rfc_approved',
+    'fatp_accepted_af',  // FATP stats
     'mocn_activation_forecast',
     'hotnews_af',
     'endorse_af',
