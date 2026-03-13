@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, ReactNode } from "react"
+import { useMemo, useState } from "react"
 import { BarChart3 } from "lucide-react"
 import {
   BarChart,
@@ -157,8 +157,10 @@ const ReadyLabel = (props: any) => {
 }
 
 export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default', aggregatedByCircle }: Props) {
+  const [pageIndex, setPageIndex] = useState(0)
+
   // Agregasi data untuk chart - OPTIMIZED: Use pre-aggregated data if available
-  const chartData = useMemo(() => {
+  const allChartData = useMemo(() => {
     // OPTIMIZATION: If pre-aggregated data is available, use it (O(1) instead of O(n))
     if (aggregatedByCircle && (variant === 'circle' || variant === 'city')) {
       const result: ChartItem[] = Array.from(aggregatedByCircle.entries()).map(([location, data]) => {
@@ -174,11 +176,9 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
         }
       })
       
-      const sortedResult = result.sort((a, b) => 
+      return result.sort((a, b) => 
         (b.rdy || 0) + (b.ny || 0) - ((a.rdy || 0) + (a.ny || 0))
       )
-      
-      return sortedResult.slice(0, maxCities)
     }
     
     // Fallback: Aggregate from rows (legacy path)
@@ -212,12 +212,23 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
       total: data.ny + data.rdy
     }))
     
-    const sortedResult = result.sort((a, b) => 
+    return result.sort((a, b) => 
       (b.rdy || 0) + (b.ny || 0) - ((a.rdy || 0) + (a.ny || 0))
     )
-    
-    return sortedResult.slice(0, maxCities)
-  }, [rows, maxCities, variant, dataVariant, aggregatedByCircle])
+  }, [rows, variant, dataVariant, aggregatedByCircle])
+
+  const totalPages = useMemo(() => {
+    if (!maxCities || maxCities <= 0) return 1
+    return Math.max(1, Math.ceil(allChartData.length / maxCities))
+  }, [allChartData.length, maxCities])
+
+  const chartData = useMemo(() => {
+    if (!maxCities || maxCities <= 0) return allChartData
+    const safePageIndex = Math.min(pageIndex, Math.max(0, totalPages - 1))
+    const start = safePageIndex * maxCities
+    const end = start + maxCities
+    return allChartData.slice(start, end)
+  }, [allChartData, maxCities, pageIndex, totalPages])
 
   // Hitung nilai maksimum untuk domain
   const maxValue = useMemo(() => {
@@ -253,13 +264,38 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
   return (
     <div className="readiness-card rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'calc(var(--wb-card-padding) - 4px)' }}>
       {/* Header */}
-      <div className="flex items-center gap-2 mb-1.5 flex-shrink-0">
-        <div className="bg-purple-500/20 p-1 rounded-lg">
-          <BarChart3 className="h-3.5 w-3.5 text-purple-400" />
+      <div className="flex items-center justify-between gap-2 mb-1.5 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="bg-purple-500/20 p-1 rounded-lg">
+            <BarChart3 className="h-3.5 w-3.5 text-purple-400" />
+          </div>
+          <div className="text-[10px] font-semibold bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">
+            {displayLabel}
+          </div>
         </div>
-        <div className="text-[10px] font-semibold bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">
-          {displayLabel}
-        </div>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1 text-[10px] text-white/60">
+            <button
+              type="button"
+              onClick={() => setPageIndex((prev) => Math.max(0, prev - 1))}
+              disabled={pageIndex === 0}
+              className="h-5 w-5 flex items-center justify-center rounded-full border border-white/20 bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/15 transition"
+              aria-label="Previous cities"
+            >
+              ‹
+            </button>
+            <span>{pageIndex + 1}/{totalPages}</span>
+            <button
+              type="button"
+              onClick={() => setPageIndex((prev) => Math.min(totalPages - 1, prev + 1))}
+              disabled={pageIndex >= totalPages - 1}
+              className="h-5 w-5 flex items-center justify-center rounded-full border border-white/20 bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/15 transition"
+              aria-label="Next cities"
+            >
+              ›
+            </button>
+          </div>
+        )}
       </div>
       
       <div className="flex-1 min-h-0">
