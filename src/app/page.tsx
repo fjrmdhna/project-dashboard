@@ -92,7 +92,6 @@ export default async function Home() {
       progress: 0,
       mood: "primary",
       href: "/tlp-new-site",
-      underConstruction: true,
     },
     {
       id: "fiberization",

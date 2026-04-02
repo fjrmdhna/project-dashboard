@@ -30,7 +30,7 @@ export interface Row {
 export interface MatrixStatsCardProps {
   rows: Row[]
   patpCount?: number
-  variant?: "default" | "aop"
+  variant?: "default" | "aop" | "tlp"
   stats?: {
     totalSites?: number
     // AOP variant stats
@@ -69,6 +69,12 @@ const DEFAULT_METRIC_CONFIG = [
   { key: "pac", label: "PAC" }
 ] as const
 
+// TLP New Site — Total Sites is shown separately; these match site_data_tlp columns
+const TLP_METRIC_CONFIG = [
+  { key: "rfi", label: "RFI" },
+  { key: "crfi", label: "CRFI" },
+] as const
+
 // AOP metric configuration (FATP after RFC)
 const AOP_METRIC_CONFIG = [
   { key: "rfi", label: "RFI" },
@@ -85,7 +91,10 @@ const AOP_METRIC_CONFIG = [
   { key: "pac", label: "PAC" }
 ] as const
 
-type MetricKey = (typeof DEFAULT_METRIC_CONFIG)[number]["key"] | (typeof AOP_METRIC_CONFIG)[number]["key"]
+type MetricKey =
+  | (typeof DEFAULT_METRIC_CONFIG)[number]["key"]
+  | (typeof AOP_METRIC_CONFIG)[number]["key"]
+  | (typeof TLP_METRIC_CONFIG)[number]["key"]
 
 type MetricMap = Partial<Record<MetricKey, number>>
 
@@ -108,8 +117,29 @@ function MetricItem({
   )
 }
 
+function hasMeaningfulField(value: unknown): boolean {
+  if (value === null || value === undefined) return false
+  return String(value).trim() !== ""
+}
+
 export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stats: providedStats }: MatrixStatsCardProps) {
   const stats = useMemo(() => {
+    if (variant === "tlp" && providedStats) {
+      return {
+        totalSites: providedStats.totalSites ?? rows.length,
+        rfi: providedStats.rfi ?? 0,
+        crfi: providedStats.crfi ?? 0,
+      }
+    }
+
+    if (variant === "tlp") {
+      return {
+        totalSites: rows.length,
+        rfi: rows.filter((row) => hasMeaningfulField(row.ic_000010_af)).length,
+        crfi: rows.filter((row) => hasMeaningfulField(row.rfi_accepted)).length,
+      }
+    }
+
     // OPTIMIZED: Gunakan stats dari API jika tersedia (sudah dihitung di database)
     // Fallback ke calculation dari rows jika stats tidak tersedia
     if (variant === "aop" && providedStats) {
@@ -214,37 +244,44 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
     }
   }, [rows, patpCount, variant, providedStats])
 
-  const metricConfig = variant === "aop" ? AOP_METRIC_CONFIG : DEFAULT_METRIC_CONFIG
+  const metricConfig =
+    variant === "aop" ? AOP_METRIC_CONFIG : variant === "tlp" ? TLP_METRIC_CONFIG : DEFAULT_METRIC_CONFIG
 
-  const metrics: MetricMap = variant === "aop" 
-    ? {
-        rfi: stats.rfi!,
-        crfi: stats.crfi!,
-        mos: stats.mos,
-        install: stats.install,
-        rfs: stats.rfs!,
-        rfa: stats.rfa ?? 0,
-        rfc: stats.rfc,
-        fatp: stats.fatp ?? 0,
-        patp: stats.patp,
-        hotnews: stats.hotnews,
-        endorse: stats.endorse,
-        pac: stats.pac
-      }
-    : {
-        caf: stats.caf!,
-    mos: stats.mos,
-    install: stats.install,
-        readiness: stats.readiness!,
-        activated: stats.activated!,
-    rfa: stats.rfa ?? 0,
-    rfc: stats.rfc,
-    fatp: stats.fatp ?? 0,
-    patp: stats.patp,
-    hotnews: stats.hotnews,
-    endorse: stats.endorse,
-    pac: stats.pac
-  }
+  const metrics: MetricMap =
+    variant === "tlp"
+      ? {
+          rfi: stats.rfi ?? 0,
+          crfi: stats.crfi ?? 0,
+        }
+      : variant === "aop"
+        ? {
+            rfi: stats.rfi!,
+            crfi: stats.crfi!,
+            mos: stats.mos,
+            install: stats.install,
+            rfs: stats.rfs!,
+            rfa: stats.rfa ?? 0,
+            rfc: stats.rfc,
+            fatp: stats.fatp ?? 0,
+            patp: stats.patp,
+            hotnews: stats.hotnews,
+            endorse: stats.endorse,
+            pac: stats.pac,
+          }
+        : {
+            caf: stats.caf!,
+            mos: stats.mos,
+            install: stats.install,
+            readiness: stats.readiness!,
+            activated: stats.activated!,
+            rfa: stats.rfa ?? 0,
+            rfc: stats.rfc,
+            fatp: stats.fatp ?? 0,
+            patp: stats.patp,
+            hotnews: stats.hotnews,
+            endorse: stats.endorse,
+            pac: stats.pac,
+          }
 
   return (
     <div className="rounded-2xl bg-[#0F1630]/85 border border-white/5 w-full h-full matrix-compact text-white px-3 py-2">

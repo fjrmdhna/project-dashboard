@@ -157,6 +157,11 @@ export function MultiSelect({
     }
   }
 
+  const selectedNormalizedSet = useMemo(() => {
+    if (!caseInsensitiveMatch) return new Set(selected)
+    return new Set(selected.map((s) => (s ?? "").toLowerCase()))
+  }, [selected, caseInsensitiveMatch])
+
   // Menu component
   const Menu = () => (
     <div
@@ -203,7 +208,18 @@ export function MultiSelect({
         <div className="px-2 py-1 responsive-text-sm text-gray-400">No options found</div>
       ) : (
         <div>
-          {filteredOptions.map(option => (
+          {(() => {
+            // Put selected items first every time the dropdown opens (keeps UX predictable).
+            const selectedFirst: string[] = []
+            const unselected: string[] = []
+
+            for (const option of filteredOptions) {
+              const key = caseInsensitiveMatch ? (option ?? "").toLowerCase() : option
+              if (selectedNormalizedSet.has(key)) selectedFirst.push(option)
+              else unselected.push(option)
+            }
+
+            return [...selectedFirst, ...unselected].map((option) => (
             <button 
               key={option} 
               type="button"
@@ -219,7 +235,8 @@ export function MultiSelect({
               </div>
               <span className="responsive-text-sm text-white truncate">{option}</span>
             </button>
-          ))}
+            ))
+          })()}
         </div>
       )}
     </div>

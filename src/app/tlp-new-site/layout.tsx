@@ -1,15 +1,15 @@
 import type { Metadata } from "next"
+import { FilterProvider } from "@/contexts/FilterContext"
 
 export const metadata: Metadata = {
   title: "TLP New Site Dashboard",
-  description: "TLP New Site workspace",
+  description: "TLP New Site dashboard placeholder layout",
 }
 
-export default function TLPNewSiteLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="min-h-screen bg-[#050B1B] text-white">
-      {children}
-    </div>
-  )
+export default function TlpNewSiteLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return <FilterProvider>{children}</FilterProvider>
 }
-
