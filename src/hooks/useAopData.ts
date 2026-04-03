@@ -156,6 +156,8 @@ export interface UseAopDataOptions {
   programReports?: string[]
   circles?: string[]
   siteCategories?: string[]
+  /** Distinct values from `ran_score` column; match trimmed row value */
+  ranScores?: string[]
   pmIndosat?: string[]  // Project filter (pm_indosat column)
   wbsStatus?: string[]
   years?: string[]
@@ -195,6 +197,7 @@ function filterDataClientSide(
   programReports: string[],
   circles: string[],
   siteCategories: string[],
+  ranScores: string[],
   pmIndosat: string[],
   wbsStatus: string[],
   years: string[],
@@ -206,6 +209,7 @@ function filterDataClientSide(
 
   const hasFilters = vendorNames.length > 0 || programReports.length > 0 ||
                      circles.length > 0 || siteCategories.length > 0 ||
+                     ranScores.length > 0 ||
                      pmIndosat.length > 0 || wbsStatus.length > 0 || years.length > 0 ||
                      priorityCongestUrgent.length > 0 || trialGbFactory.length > 0 || search.length > 0
 
@@ -238,6 +242,13 @@ function filterDataClientSide(
       const normalizedRowCategory = normalizeSiteCategoryForFilter(row.site_category)
       const matchesCategory = siteCategories.some(sc => normalizedRowCategory === sc.toLowerCase())
       if (!matchesCategory) return false
+    }
+
+    // RAN Score (`ran_score` column): exact match on trimmed values
+    if (ranScores.length > 0) {
+      const rowVal = (row.ran_score ?? '').trim()
+      const matchesRan = ranScores.some((r) => rowVal === (r ?? '').trim())
+      if (!matchesRan) return false
     }
     
     // Project filter (pm_indosat, exact match)
@@ -443,7 +454,7 @@ function aggregateDataSinglePass(data: AopSiteData[]): AopAggregatedData {
 }
 
 export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
-  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], pmIndosat = [], wbsStatus = [], years = [], priorityCongestUrgent = [], trialGbFactory = [], search = '' } = options
+  const { vendorNames = [], programReports = [], circles = [], siteCategories = [], ranScores = [], pmIndosat = [], wbsStatus = [], years = [], priorityCongestUrgent = [], trialGbFactory = [], search = '' } = options
 
   // OPTIMIZATION: Always fetch ALL data (no filter) and filter client-side
   // This makes filter changes instant instead of waiting 15-20s for API
@@ -497,6 +508,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       programReports.length > 0 ||
       circles.length > 0 ||
       siteCategories.length > 0 ||
+      ranScores.length > 0 ||
       pmIndosat.length > 0 ||
       wbsStatus.length > 0 ||
       years.length > 0 ||
@@ -511,6 +523,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
           programReports,
           circles,
           siteCategories,
+          ranScores,
           pmIndosat,
           wbsStatus,
           years,
@@ -533,7 +546,7 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       filteredStats: stats,
       aggregated: agg
     }
-  }, [baseData, vendorNames, programReports, circles, siteCategories, pmIndosat, wbsStatus, years, priorityCongestUrgent, trialGbFactory, search])
+  }, [baseData, vendorNames, programReports, circles, siteCategories, ranScores, pmIndosat, wbsStatus, years, priorityCongestUrgent, trialGbFactory, search])
 
   // Refetch function
   const refetch = useCallback(async () => {

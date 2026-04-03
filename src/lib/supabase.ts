@@ -648,11 +648,12 @@ export async function getAopFilterOptions(forceRefresh = false) {
   }
 
   // OPTIMIZED: Fetch semua columns secara paralel dengan pagination per column
-  const [vendors, programs, circles, siteCategories, projectsRaw, years, priorityCongestUrgent, wbsStatus, trialGbFactory] = await Promise.all([
+  const [vendors, programs, circles, siteCategories, ranScoresRaw, projectsRaw, years, priorityCongestUrgent, wbsStatus, trialGbFactory] = await Promise.all([
     fetchDistinctValuesOptimized('vendor_name'),
     fetchDistinctValuesOptimized('program_report'),
     fetchDistinctValuesOptimized('region_circle'),
     fetchDistinctValuesOptimized('site_category'),
+    fetchDistinctValuesOptimized('ran_score'),
     fetchDistinctValuesOptimized('pm_indosat'),
     fetchDistinctValuesOptimized('year'),
     fetchDistinctValuesOptimized('priority_congest_urgent'),
@@ -667,6 +668,7 @@ export async function getAopFilterOptions(forceRefresh = false) {
     programs,
     circles,
     siteCategories,
+    ranScores: ranScoresRaw,
     projects,
     years: years.sort((a, b) => b.localeCompare(a)), // Sort years descending (newest first)
     priorityCongestUrgent,

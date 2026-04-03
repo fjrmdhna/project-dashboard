@@ -325,7 +325,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
     onChange({ ...value, site_category: selected })
   }, [onChange, value])
 
-  // Handler untuk RAN score selection (default/Hermes variant)
+  // Handler untuk RAN score selection (default/Hermes + AOP)
   const handleRanScoreChange = useCallback((selected: string[]) => {
     onChange({ ...value, ran_score: selected })
   }, [onChange, value])
@@ -389,7 +389,9 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
     (value.priority_congest_urgent?.length || 0) > 0 ||
     (value.trial_gb_factory?.length || 0) > 0
 
-  const rowGridClass = "grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs flex-shrink-0 w-full items-center"
+  // 6 columns on sm+: Search + five primary filters fit one row (5 cols was one short and wrapped e.g. RAN Score alone).
+  const rowGridClass =
+    "grid grid-cols-2 sm:grid-cols-6 gap-x-2 gap-y-2.5 text-xs flex-shrink-0 w-full items-center"
   const cellClass = "min-w-0"
 
   // Single-row layout for Hermes (variant default + singleRow): one compact row, no scroll, fits viewport
@@ -484,6 +486,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
                 <div className={cellClass}><MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.circles} selected={value.circle ?? []} placeholder="Circle" onChange={handleCircleChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.siteCategories || []} selected={value.site_category ?? []} placeholder="Site Category" onChange={handleSiteCategoryChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel /></div>
               </>
             ) : (
               <>
@@ -496,8 +499,8 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
             )}
           </div>
 
-          {/* Row 2: Remaining filters + Reset — AOP: 6 columns (5 filters + reset), default: 5 columns */}
-          <div className={`${variant === "aop" ? "grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs flex-shrink-0 w-full items-center mt-2" : `${rowGridClass} mt-2`}`}>
+          {/* Row 2: Remaining filters + Reset — AOP: 6 columns (5 filters + reset); default: Year + RAN + reset */}
+          <div className={`${variant === "aop" ? "grid grid-cols-2 sm:grid-cols-6 gap-x-2 gap-y-2.5 text-xs flex-shrink-0 w-full items-center mt-2.5" : `${rowGridClass} mt-2.5`}`}>
             {variant === "aop" ? (
               <>
                 <div className={cellClass}><MultiSelect options={options.projects || []} selected={value.pm_indosat ?? []} placeholder="Project" onChange={handleProjectChange} disabled={false} width="w-full" staticLabel /></div>
@@ -522,7 +525,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
               <>
                 <div className={cellClass}><MultiSelect options={options.years || []} selected={value.year || []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel /></div>
-                <div className={`${cellClass} hidden sm:block sm:col-start-5 justify-self-end`}>
+                <div className={`${cellClass} hidden sm:flex sm:col-start-6 justify-end`}>
                   <button
                     onClick={handleReset}
                     className={`inline-flex items-center justify-center rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${

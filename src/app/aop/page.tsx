@@ -222,6 +222,7 @@ const INITIAL_FILTER: FilterValue = {
   status: [],
   circle: [],
   site_category: [],
+  ran_score: [],
   pm_indosat: [],        // Project filter (pm_indosat)
   wbs_status: ["Active"], // Default: show only "Active" WBS status
   year: [],
@@ -235,6 +236,7 @@ const AOP_TEMPLATE_FILTER_KEYS = [
   { key: "program_report" as const, label: "Program" },
   { key: "circle" as const, label: "Circle" },
   { key: "site_category" as const, label: "Site Category" },
+  { key: "ran_score" as const, label: "RAN Score" },
   { key: "pm_indosat" as const, label: "Project" },
   { key: "wbs_status" as const, label: "WBS Status" },
   { key: "year" as const, label: "Year" },
@@ -423,6 +425,7 @@ export default function AopPage() {
   const stableProgramReports = useMemo(() => debouncedFilterValue.program_report || [], [debouncedFilterValue.program_report])
   const stableCircles = useMemo(() => debouncedFilterValue.circle || [], [debouncedFilterValue.circle])
   const stableSiteCategories = useMemo(() => debouncedFilterValue.site_category || [], [debouncedFilterValue.site_category])
+  const stableRanScores = useMemo(() => debouncedFilterValue.ran_score || [], [debouncedFilterValue.ran_score])
   const stablePmIndosat = useMemo(() => debouncedFilterValue.pm_indosat || [], [debouncedFilterValue.pm_indosat])
   const stableWbsStatus = useMemo(() => debouncedFilterValue.wbs_status || [], [debouncedFilterValue.wbs_status])
   const stableYears = useMemo(() => debouncedFilterValue.year || [], [debouncedFilterValue.year])
@@ -436,6 +439,7 @@ export default function AopPage() {
     programReports: stableProgramReports,
     circles: stableCircles,
     siteCategories: stableSiteCategories,
+    ranScores: stableRanScores,
     pmIndosat: stablePmIndosat,
     wbsStatus: stableWbsStatus,
     years: stableYears,
@@ -507,6 +511,7 @@ export default function AopPage() {
     (filterValue.nano_cluster?.length || 0) +
     (filterValue.circle?.length ?? 0) +
     (filterValue.site_category?.length ?? 0) +
+    (filterValue.ran_score?.length ?? 0) +
     (filterValue.pm_indosat?.length ?? 0) +
     (filterValue.wbs_status?.length ?? 0) +
     (filterValue.year?.length ?? 0) +
@@ -693,6 +698,10 @@ export default function AopPage() {
     
     filterValue.site_category?.forEach((value) => {
       params.append('site_category', value)
+    })
+
+    filterValue.ran_score?.forEach((value) => {
+      params.append('ran_score', value)
     })
     
     filterValue.pm_indosat?.forEach((value) => {

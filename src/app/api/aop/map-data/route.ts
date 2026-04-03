@@ -81,6 +81,7 @@ const FILTER_COLUMNS = [
   'region',
   'region_circle',
   'site_category',
+  'ran_score',
   'pm_indosat',
   'year',
   'priority_congest_urgent'
@@ -126,6 +127,7 @@ async function fetchMapDataFromDatabase(
   programReports: string[],
   circles: string[],
   siteCategories: string[],
+  ranScores: string[],
   pmIndosat: string[],
   years: string[],
   priorityCongestUrgent: string[],
@@ -134,6 +136,7 @@ async function fetchMapDataFromDatabase(
   // Determine if we need filter columns
   const hasFilters = vendorNames.length > 0 || programReports.length > 0 || 
                      circles.length > 0 || siteCategories.length > 0 || 
+                     ranScores.length > 0 ||
                      pmIndosat.length > 0 || years.length > 0 || 
                      priorityCongestUrgent.length > 0 || q.length > 0
   
@@ -185,6 +188,13 @@ async function fetchMapDataFromDatabase(
         })
         .join(',')
       query = query.or(siteCategoryConditions)
+    }
+
+    if (ranScores.length > 0) {
+      const trimmed = ranScores.map((r) => r.trim()).filter(Boolean)
+      if (trimmed.length > 0) {
+        query = query.in('ran_score', trimmed)
+      }
     }
 
     if (pmIndosat.length > 0) {
@@ -355,6 +365,7 @@ export async function GET(request: NextRequest) {
     const programReports = searchParams.getAll('program_report') || []
     const circles = searchParams.getAll('region_circle') || []
     const siteCategories = searchParams.getAll('site_category') || []
+    const ranScores = searchParams.getAll('ran_score') || []
     const pmIndosat = searchParams.getAll('pm_indosat') || []
     const years = searchParams.getAll('year') || []
     const priorityCongestUrgent = searchParams.getAll('priority_congest_urgent') || []
@@ -366,6 +377,7 @@ export async function GET(request: NextRequest) {
       programReports,
       circles,
       siteCategories,
+      ranScores,
       pmIndosat,
       years,
       priorityCongestUrgent,
@@ -400,6 +412,7 @@ export async function GET(request: NextRequest) {
       programReports,
       circles,
       siteCategories,
+      ranScores,
       pmIndosat,
       years,
       priorityCongestUrgent,

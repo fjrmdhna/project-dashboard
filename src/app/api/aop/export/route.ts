@@ -16,6 +16,7 @@ function buildFilterQuery(searchParams: URLSearchParams) {
   const programReports = searchParams.getAll('program_report')
   const circles = searchParams.getAll('region_circle')
   const siteCategories = searchParams.getAll('site_category')
+  const ranScores = searchParams.getAll('ran_score')
   const pmIndosat = searchParams.getAll('pm_indosat')
   const years = searchParams.getAll('year')
   const priorityCongestUrgent = searchParams.getAll('priority_congest_urgent')
@@ -57,6 +58,13 @@ function buildFilterQuery(searchParams: URLSearchParams) {
       })
       .join(',')
     query = query.or(siteCategoryConditions)
+  }
+
+  if (ranScores.length > 0) {
+    const trimmed = ranScores.map((r) => r.trim()).filter(Boolean)
+    if (trimmed.length > 0) {
+      query = query.in('ran_score', trimmed)
+    }
   }
 
   if (pmIndosat.length > 0) {
@@ -185,6 +193,7 @@ export async function GET(request: NextRequest) {
       programReports: searchParams.getAll('program_report'),
       circles: searchParams.getAll('region_circle'),
       siteCategories: searchParams.getAll('site_category'),
+      ranScores: searchParams.getAll('ran_score'),
       pmIndosat: searchParams.getAll('pm_indosat'),
       years: searchParams.getAll('year'),
       priorityCongestUrgent: searchParams.getAll('priority_congest_urgent'),
