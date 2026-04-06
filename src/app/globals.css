@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&family=Outfit:wght@100..900&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -69,6 +70,8 @@
 }
 
 :root {
+  --font-outfit: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-fira-code: "Fira Code", ui-monospace, "Cascadia Code", monospace;
   --radius: 0.5rem;
   --background: oklch(0.9816 0.0017 247.8390);
   --foreground: oklch(0.1649 0.0352 281.8285);

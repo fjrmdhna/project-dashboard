@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSiteData5G } from '@/lib/supabase'
 import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-ran-score-filter'
 import {
-  getCache,
   setCache,
   getFilterHash,
-  isEmptyFilter,
-  CACHE_KEYS,
   CACHE_TTL,
   type FilterParams
 } from '@/lib/redis'
@@ -247,46 +244,20 @@ export async function GET(request: NextRequest) {
 
     // Generate cache key based on filters
     const filterHash = getFilterHash(filterParams)
-    const isEmpty = isEmptyFilter(filterParams)
-    
-    // Use different cache key for no-filter vs filtered
-    const cacheKey = isEmpty 
-      ? 'hermes-site-data-all'
-      : `hermes-site-data-${filterHash}`
-    
-    // Use longer TTL for no-filter data (base data)
-    const cacheTTL = isEmpty ? CACHE_TTL.FULL_DATA : CACHE_TTL.FILTERED_DATA
 
-    // Try to get STATS from Redis cache first (full data is too large to cache)
+    // Stats must be derived from the same rows returned below (avoid stale cached stats vs fresh data).
     const statsCacheKey = `hermes-stats-${filterHash}`
-    const cachedStats = await getCache<SiteDataResponse['stats']>(statsCacheKey)
-    
-    // We don't cache full data because it's too large (40k+ records = ~20MB)
-    // Instead, we only cache stats which is small
 
     // Fetch from database
     console.log(`[Hermes Site Data] Fetching from database (mode: ${mode})...`)
     const startTime = Date.now()
 
-    // If we have cached stats, we can skip stats fetch
-    let stats: SiteDataResponse['stats']
-    let dataResult: { data: any[], totalCount: number }
+    const dataResult = await fetchDataFromDatabase(vendorNames, programReports, impTtps, nanoClusters, q, mode)
+    const stats = calculateStatsFromData(dataResult.data)
 
-    if (cachedStats) {
-      console.log(`[Hermes Site Data] Using cached stats for filter: ${filterHash}`)
-      stats = cachedStats
-      // Still need to fetch data
-      dataResult = await fetchDataFromDatabase(vendorNames, programReports, impTtps, nanoClusters, q, mode)
-    } else {
-      // Fetch data (always fetch all, no filters)
-      dataResult = await fetchDataFromDatabase([], [], [], [], '', mode)
-      stats = calculateStatsFromData(dataResult.data)
-      
-      // Cache only stats (small data, ~1KB) - don't cache full data (too large ~20MB)
-      setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch(err => {
-        console.error('[Hermes Site Data] Failed to cache stats:', err)
-      })
-    }
+    setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch(err => {
+      console.error('[Hermes Site Data] Failed to cache stats:', err)
+    })
 
     const { data: filteredData, totalCount } = dataResult
 

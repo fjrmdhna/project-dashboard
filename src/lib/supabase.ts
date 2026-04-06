@@ -102,6 +102,10 @@ export interface SiteData5GOptions {
   onlyExcludedProgramReports?: boolean
 }
 
+/** PostgREST/Supabase caps rows per response; chunk fetches to match SQL totals (e.g. COUNT rfs_af). */
+const SITE_DATA_5G_CHUNK_SIZE = 1000
+const SITE_DATA_5G_FETCH_SAFETY_CAP = 500_000
+
 export async function getSiteData5G(
   filters: SiteData5GFilters = {},
   options: SiteData5GOptions = {}
@@ -163,66 +167,108 @@ export async function getSiteData5G(
     }
   }
 
-  let query = supabase
-    .from('site_data_5g')
-    .select(columns, { count: 'exact' })
+  const buildBaseQuery = () => {
+    let q = supabase.from('site_data_5g').select(columns, { count: 'exact' })
 
-  if (onlyExcludedProgramReports) {
-    query = query.in('program_report', [...EXCLUDED_PROGRAM_REPORTS])
-  } else if (!includeExcludedProgramReports) {
-    EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
-      query = query.neq('program_report', excludedProgram)
-    })
+    if (onlyExcludedProgramReports) {
+      q = q.in('program_report', [...EXCLUDED_PROGRAM_REPORTS])
+    } else if (!includeExcludedProgramReports) {
+      EXCLUDED_PROGRAM_REPORTS.forEach((excludedProgram) => {
+        q = q.neq('program_report', excludedProgram)
+      })
+    }
+
+    if (filters.vendor_name && filters.vendor_name.length > 0) {
+      q = q.in('vendor_name', filters.vendor_name)
+    }
+
+    if (!onlyExcludedProgramReports && sanitizedProgramReports.length > 0) {
+      q = q.in('program_report', sanitizedProgramReports)
+    }
+
+    if (filters.imp_ttp && filters.imp_ttp.length > 0) {
+      q = q.in('imp_ttp', filters.imp_ttp)
+    }
+
+    if (filters.nano_cluster && filters.nano_cluster.length > 0) {
+      q = q.in('nano_cluster', filters.nano_cluster)
+    }
+
+    if (filters.region && filters.region.length > 0) {
+      q = q.in('region', filters.region)
+    }
+
+    if (filters.year && filters.year.length > 0) {
+      q = q.in('year', filters.year)
+    }
+
+    q = applyRanScoreFilterByProgramReport(q, filters.ran_score)
+
+    if (filters.search) {
+      q = q.or(
+        `system_key.ilike.%${filters.search}%,site_id.ilike.%${filters.search}%,site_name.ilike.%${filters.search}%,vendor_name.ilike.%${filters.search}%`
+      )
+    }
+
+    return q.order('system_key', { ascending: true })
   }
 
-  // Apply filters
-  if (filters.vendor_name && filters.vendor_name.length > 0) {
-    query = query.in('vendor_name', filters.vendor_name)
-  }
+  let data: SiteData5G[] | null = null
 
-  if (!onlyExcludedProgramReports && sanitizedProgramReports.length > 0) {
-    query = query.in('program_report', sanitizedProgramReports)
-  }
-
-  if (filters.imp_ttp && filters.imp_ttp.length > 0) {
-    query = query.in('imp_ttp', filters.imp_ttp)
-  }
-
-  if (filters.nano_cluster && filters.nano_cluster.length > 0) {
-    query = query.in('nano_cluster', filters.nano_cluster)
-  }
-
-  if (filters.region && filters.region.length > 0) {
-    query = query.in('region', filters.region)
-  }
-
-  if (filters.year && filters.year.length > 0) {
-    query = query.in('year', filters.year)
-  }
-
-  query = applyRanScoreFilterByProgramReport(query, filters.ran_score)
-
-  if (filters.search) {
-    query = query.or(`system_key.ilike.%${filters.search}%,site_id.ilike.%${filters.search}%,site_name.ilike.%${filters.search}%,vendor_name.ilike.%${filters.search}%`)
-  }
-
-  // Apply status filter - this will be handled after data retrieval
-  // because status is calculated from boolean fields
-
-  // Apply pagination
   if (filters.offset !== undefined && filters.limit) {
-    query = query.range(filters.offset, filters.offset + filters.limit - 1)
-  } else if (filters.limit) {
-    query = query.limit(filters.limit)
-  }
-
-  // Provide a stable order to avoid inconsistent slices across environments
-  query = query.order('system_key', { ascending: true })
-
-  const { data, error, count } = await query
-
-  if (error) {
-    throw new Error(`Supabase error: ${error.message}`)
+    const rows: SiteData5G[] = []
+    let from = filters.offset
+    let remaining = filters.limit
+    while (remaining > 0) {
+      const chunk = Math.min(SITE_DATA_5G_CHUNK_SIZE, remaining)
+      const { data: batch, error } = await buildBaseQuery().range(from, from + chunk - 1)
+      if (error) {
+        throw new Error(`Supabase error: ${error.message}`)
+      }
+      if (!batch?.length) break
+      rows.push(...(batch as unknown as SiteData5G[]))
+      if (batch.length < chunk) break
+      from += batch.length
+      remaining -= batch.length
+      if (rows.length >= SITE_DATA_5G_FETCH_SAFETY_CAP) break
+    }
+    data = rows
+  } else if (filters.limit !== undefined) {
+    const rows: SiteData5G[] = []
+    let from = 0
+    let remaining = filters.limit
+    while (remaining > 0) {
+      const chunk = Math.min(SITE_DATA_5G_CHUNK_SIZE, remaining)
+      const { data: batch, error } = await buildBaseQuery().range(from, from + chunk - 1)
+      if (error) {
+        throw new Error(`Supabase error: ${error.message}`)
+      }
+      if (!batch?.length) break
+      rows.push(...(batch as unknown as SiteData5G[]))
+      if (batch.length < chunk) break
+      from += batch.length
+      remaining -= batch.length
+      if (rows.length >= SITE_DATA_5G_FETCH_SAFETY_CAP) break
+    }
+    data = rows
+  } else {
+    const rows: SiteData5G[] = []
+    for (let from = 0; ; from += SITE_DATA_5G_CHUNK_SIZE) {
+      const { data: batch, error } = await buildBaseQuery().range(from, from + SITE_DATA_5G_CHUNK_SIZE - 1)
+      if (error) {
+        throw new Error(`Supabase error: ${error.message}`)
+      }
+      if (!batch?.length) break
+      rows.push(...(batch as unknown as SiteData5G[]))
+      if (batch.length < SITE_DATA_5G_CHUNK_SIZE) break
+      if (rows.length >= SITE_DATA_5G_FETCH_SAFETY_CAP) {
+        console.warn(
+          `[getSiteData5G] Stopped at ${SITE_DATA_5G_FETCH_SAFETY_CAP} rows (safety cap). Increase cap if needed.`
+        )
+        break
+      }
+    }
+    data = rows
   }
 
   // Ensure data is of the correct type or handle error case
