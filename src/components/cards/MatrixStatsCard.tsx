@@ -5,6 +5,7 @@ import { BarChart3 } from "lucide-react"
 
 export interface Row {
   system_key: string
+  site_status?: string | null
   caf_approved?: string | null
   mos_af?: string | null
   ic_000040_af?: string | null
@@ -36,6 +37,11 @@ export interface MatrixStatsCardProps {
     // AOP variant stats
     rfi?: number
     crfi?: number
+    // TLP variant stats
+    construction?: number
+    returnCount?: number
+    searching?: number
+    sitac?: number
     // Hermes 5G variant stats
     caf?: number
     // Common stats
@@ -71,8 +77,13 @@ const DEFAULT_METRIC_CONFIG = [
 
 // TLP New Site — Total Sites is shown separately; these match site_data_tlp columns
 const TLP_METRIC_CONFIG = [
-  { key: "rfi", label: "RFI" },
   { key: "crfi", label: "CRFI" },
+  { key: "rfi", label: "RFI" },
+  { key: "construction", label: "CONSTRUCTION" },
+  { key: "rfc", label: "RFC" },
+  { key: "sitac", label: "SITAC" },
+  { key: "searching", label: "SEARCHING" },
+  { key: "returnCount", label: "RETURN" },
 ] as const
 
 // AOP metric configuration (FATP after RFC)
@@ -122,21 +133,75 @@ function hasMeaningfulField(value: unknown): boolean {
   return String(value).trim() !== ""
 }
 
+function normalizeSiteStatus(value: string | null | undefined): string {
+  if (!hasMeaningfulField(value)) return ""
+  const normalized = String(value).trim().toUpperCase()
+
+  if (normalized.includes("PROPOSED RETURN")) return "RETURN"
+  if (normalized.includes("RETURN")) return "RETURN"
+  if (normalized.includes("CONSTRUCTION")) return "CONSTRUCTION"
+  if (normalized.includes("SEARCHING")) return "SEARCHING"
+  if (normalized.includes("SITAC")) return "SITAC"
+  if (normalized.includes("CRFI")) return "CRFI"
+  if (normalized.includes("SRFI")) return "RFI"
+  if (normalized.includes("RFI")) return "RFI"
+  if (normalized.includes("RFC")) return "RFC"
+
+  return normalized
+}
+
 export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stats: providedStats }: MatrixStatsCardProps) {
   const stats = useMemo(() => {
     if (variant === "tlp" && providedStats) {
       return {
         totalSites: providedStats.totalSites ?? rows.length,
-        rfi: providedStats.rfi ?? 0,
         crfi: providedStats.crfi ?? 0,
+        rfi: providedStats.rfi ?? 0,
+        construction: providedStats.construction ?? 0,
+        rfc: providedStats.rfc ?? 0,
+        sitac: providedStats.sitac ?? 0,
+        searching: providedStats.searching ?? 0,
+        returnCount: providedStats.returnCount ?? 0,
       }
     }
 
     if (variant === "tlp") {
+      const statusCounts = rows.reduce(
+        (acc, row) => {
+          const siteStatus = normalizeSiteStatus(row.site_status)
+          switch (siteStatus) {
+            case "CRFI":
+              acc.crfi += 1
+              break
+            case "RFI":
+              acc.rfi += 1
+              break
+            case "CONSTRUCTION":
+              acc.construction += 1
+              break
+            case "RFC":
+              acc.rfc += 1
+              break
+            case "SITAC":
+              acc.sitac += 1
+              break
+            case "SEARCHING":
+              acc.searching += 1
+              break
+            case "RETURN":
+              acc.returnCount += 1
+              break
+            default:
+              break
+          }
+          return acc
+        },
+        { crfi: 0, rfi: 0, construction: 0, rfc: 0, sitac: 0, searching: 0, returnCount: 0 }
+      )
+
       return {
         totalSites: rows.length,
-        rfi: rows.filter((row) => hasMeaningfulField(row.ic_000010_af)).length,
-        crfi: rows.filter((row) => hasMeaningfulField(row.rfi_accepted)).length,
+        ...statusCounts,
       }
     }
 
@@ -250,8 +315,13 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
   const metrics: MetricMap =
     variant === "tlp"
       ? {
-          rfi: stats.rfi ?? 0,
           crfi: stats.crfi ?? 0,
+          rfi: stats.rfi ?? 0,
+          construction: stats.construction ?? 0,
+          rfc: stats.rfc ?? 0,
+          sitac: stats.sitac ?? 0,
+          searching: stats.searching ?? 0,
+          returnCount: stats.returnCount ?? 0,
         }
       : variant === "aop"
         ? {

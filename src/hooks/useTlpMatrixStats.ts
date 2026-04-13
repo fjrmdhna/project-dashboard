@@ -6,8 +6,13 @@ import { tlpFiltersToQueryString, type TlpSiteFilters } from "@/lib/tlp-new-site
 
 interface TlpMatrixStatsPayload {
   totalSites: number
-  rfi: number
   crfi: number
+  rfi: number
+  construction: number
+  rfc: number
+  sitac: number
+  searching: number
+  returnCount: number
 }
 
 interface TlpMatrixStatsResponse {
@@ -41,8 +46,13 @@ export function useTlpMatrixStats(filters: TlpSiteFilters) {
         const d = (payload as TlpMatrixStatsResponse).data
         return (
           typeof d?.totalSites === "number" &&
+          typeof d?.crfi === "number" &&
           typeof d?.rfi === "number" &&
-          typeof d?.crfi === "number"
+          typeof d?.construction === "number" &&
+          typeof d?.rfc === "number" &&
+          typeof d?.sitac === "number" &&
+          typeof d?.searching === "number" &&
+          typeof d?.returnCount === "number"
         )
       },
     }
@@ -50,8 +60,13 @@ export function useTlpMatrixStats(filters: TlpSiteFilters) {
 
   return {
     totalSites: data?.data?.totalSites ?? 0,
-    rfi: data?.data?.rfi ?? 0,
     crfi: data?.data?.crfi ?? 0,
+    rfi: data?.data?.rfi ?? 0,
+    construction: data?.data?.construction ?? 0,
+    rfc: data?.data?.rfc ?? 0,
+    sitac: data?.data?.sitac ?? 0,
+    searching: data?.data?.searching ?? 0,
+    returnCount: data?.data?.returnCount ?? 0,
     loading,
     error,
     refetch,

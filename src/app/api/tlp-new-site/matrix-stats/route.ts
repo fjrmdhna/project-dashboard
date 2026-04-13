@@ -6,6 +6,23 @@ import {
   type TlpSiteFilters,
 } from "@/lib/tlp-new-site-filters"
 
+function normalizeTlpSiteStatus(value: unknown): string {
+  if (!hasNonEmptyValue(value)) return ""
+  const normalized = String(value).trim().toUpperCase()
+
+  if (normalized.includes("PROPOSED RETURN")) return "RETURN"
+  if (normalized.includes("RETURN")) return "RETURN"
+  if (normalized.includes("CONSTRUCTION")) return "CONSTRUCTION"
+  if (normalized.includes("SEARCHING")) return "SEARCHING"
+  if (normalized.includes("SITAC")) return "SITAC"
+  if (normalized.includes("CRFI")) return "CRFI"
+  if (normalized.includes("SRFI")) return "RFI"
+  if (normalized.includes("RFI")) return "RFI"
+  if (normalized.includes("RFC")) return "RFC"
+
+  return normalized
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -16,13 +33,18 @@ export async function GET(request: Request) {
     let offset = 0
     let hasMore = true
     let totalSites = 0
+    let construction = 0
+    let rfc = 0
+    let sitac = 0
+    let searching = 0
+    let returnCount = 0
     let rfi = 0
     let crfi = 0
 
     while (hasMore) {
       const { data, error } = await supabase
         .from("site_data_tlp")
-        .select("program_name, wbs_status, year, site_category, twr_owner, ic_000010_af, rfi_accepted")
+        .select("program_name, wbs_status, year, site_category, twr_owner, site_status")
         .range(offset, offset + pageSize - 1)
 
       if (error) {
@@ -32,11 +54,32 @@ export async function GET(request: Request) {
       for (const row of data ?? []) {
         if (!rowMatchesTlpFilters(row, filters)) continue
         totalSites += 1
-        if (hasNonEmptyValue(row.ic_000010_af)) {
-          rfi += 1
-        }
-        if (hasNonEmptyValue(row.rfi_accepted)) {
-          crfi += 1
+
+        const siteStatus = normalizeTlpSiteStatus(row.site_status)
+        switch (siteStatus) {
+          case "CRFI":
+            crfi += 1
+            break
+          case "RFI":
+            rfi += 1
+            break
+          case "CONSTRUCTION":
+            construction += 1
+            break
+          case "RFC":
+            rfc += 1
+            break
+          case "SITAC":
+            sitac += 1
+            break
+          case "SEARCHING":
+            searching += 1
+            break
+          case "RETURN":
+            returnCount += 1
+            break
+          default:
+            break
         }
       }
 
@@ -46,7 +89,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       status: "success",
-      data: { totalSites, rfi, crfi },
+      data: { totalSites, crfi, rfi, construction, rfc, sitac, searching, returnCount },
       timestamp: new Date().toISOString(),
     })
   } catch (error) {

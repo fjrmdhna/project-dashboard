@@ -57,7 +57,16 @@ export default function TlpNewSitePage() {
     twr_owner: filter.vendor_name?.length ? filter.vendor_name : undefined,
   }
 
-  const { totalSites, rfi: siteRfiCount, crfi: siteCrfiCount } = useTlpMatrixStats(tlpFilters)
+  const {
+    totalSites,
+    crfi: siteCrfiCount,
+    rfi: siteRfiCount,
+    construction: siteConstructionCount,
+    rfc: siteRfcCount,
+    sitac: siteSitacCount,
+    searching: siteSearchingCount,
+    returnCount: siteReturnCount,
+  } = useTlpMatrixStats(tlpFilters)
   const { data: rfiByRegion, totalRfi, loading: rfiLoading, error: rfiError } = useTlpRfiByRegion(tlpFilters)
   const { data: topVendorRfi, loading: vendorLoading, error: vendorError } = useTlpTopVendorRfi(tlpFilters)
   const { data: accProgress, loading: accProgressLoading, error: accProgressError } = useTlpAccProgressCurve(tlpFilters)
@@ -82,7 +91,20 @@ export default function TlpNewSitePage() {
 
   const placeholderCard = <EmptyPlaceholder />
   const matrixStats = (
-    <MatrixStatsCard variant="tlp" rows={[]} stats={{ totalSites, rfi: siteRfiCount, crfi: siteCrfiCount }} />
+    <MatrixStatsCard
+      variant="tlp"
+      rows={[]}
+      stats={{
+        totalSites,
+        crfi: siteCrfiCount,
+        rfi: siteRfiCount,
+        construction: siteConstructionCount,
+        rfc: siteRfcCount,
+        sitac: siteSitacCount,
+        searching: siteSearchingCount,
+        returnCount: siteReturnCount,
+      }}
+    />
   )
   const rfiByRegionCard = (
     <TlpRfiByRegionCard rows={rfiByRegion} totalRfi={totalRfi} isLoading={rfiLoading} error={rfiError} />
