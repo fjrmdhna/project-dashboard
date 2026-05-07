@@ -485,7 +485,7 @@ export default function Hermes5GPage() {
 
   // Progress Curve component
   const progressCurveCard = (
-    <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} monthsSpan={3} />
+    <ProgressCurveLineChart rows={rows} anchorDate={new Date().toISOString()} monthsSpan={3} yAxisStartAtZero={false} />
   )
   
 

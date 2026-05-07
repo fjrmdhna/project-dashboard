@@ -24,6 +24,8 @@ export type ProgressCurveProps = {
   forecastSource?: 'rfs_ff' | 'rfs_forecast';
   /** When true, hide the baseline line (e.g. when Lebaran template is selected). */
   hideBaseline?: boolean;
+  /** When false, use auto-zoomed Y-axis domain from data range. */
+  yAxisStartAtZero?: boolean;
   className?: string;
 };
 
@@ -694,6 +696,68 @@ const valueFormatter = (value: any): string => {
   return !isNaN(numValue) && numValue > 0 ? numValue.toLocaleString() : '';
 };
 
+const axisTickFormatter = (value: number | string): string => {
+  const numValue = Number(value);
+  if (Number.isNaN(numValue)) return String(value ?? '');
+  return numValue.toLocaleString('en-US');
+};
+
+const renderStackedPointValueTags = (
+  cx: number,
+  cy: number,
+  entries: Array<{ value: number; color: string }>,
+) => {
+  if (entries.length === 0) return null;
+
+  const formattedEntries = entries.map((entry) => ({
+    ...entry,
+    text: Number(entry.value).toLocaleString('en-US'),
+  }));
+  const horizontalPadding = 5;
+  const labelHeight = 14;
+  const gap = 2;
+  const maxTextWidth = Math.max(...formattedEntries.map((entry) => Math.max(18, entry.text.length * 5)));
+  const tagWidth = maxTextWidth + horizontalPadding * 2;
+  const totalHeight = formattedEntries.length * labelHeight + (formattedEntries.length - 1) * gap;
+  const startX = cx - tagWidth - 8;
+  const startY = cy - totalHeight / 2;
+
+  return (
+    <>
+      {formattedEntries.map((entry, index) => {
+        const y = startY + index * (labelHeight + gap);
+        return (
+          <g key={`${entry.color}-${entry.text}-${index}`}>
+            <rect
+              x={startX}
+              y={y}
+              width={tagWidth}
+              height={labelHeight}
+              fill={entry.color}
+              opacity={0.95}
+              rx={4}
+              ry={4}
+              stroke="rgba(255,255,255,0.45)"
+              strokeWidth={0.8}
+            />
+            <text
+              x={startX + tagWidth / 2}
+              y={y + labelHeight / 2}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#FFFFFF"
+              fontSize={8}
+              fontWeight={600}
+            >
+              {entry.text}
+            </text>
+          </g>
+        );
+      })}
+    </>
+  );
+};
+
 const ProgressCurveTooltip = ({ active, payload, label }: ProgressCurveTooltipProps) => {
   if (!active || !payload?.length) return null;
 
@@ -768,7 +832,6 @@ const ProgressCurveTooltip = ({ active, payload, label }: ProgressCurveTooltipPr
 const BaselineDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.baseline;
-  const isLastPoint = payload?.isLastBaseline;
   
   // Don't render if value is null, 0, or empty
   if (value === null || !value || value === '0' || value === '') {
@@ -777,45 +840,7 @@ const BaselineDotWithLabel = (props: any) => {
   
   return (
     <g>
-      {/* Dot - always show */}
-      <circle cx={cx} cy={cy} r={3} fill="#2196F3" />
-      
-      {/* Label - only show at last point */}
-      {isLastPoint && (
-        <>
-          {/* Background rectangle with blue color - Above left of point */}
-          <rect
-            x={cx - 22}
-            y={cy - 16}
-            width={16}
-            height={12}
-            fill="rgba(33, 150, 243, 0.95)"
-            rx={3}
-            ry={3}
-            stroke="rgba(255, 255, 255, 0.5)"
-            strokeWidth={1}
-            style={{
-              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
-            }}
-          />
-          {/* Text label */}
-          <text
-            x={cx - 14}
-            y={cy - 10}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#FFFFFF"
-            fontSize={8}
-            fontWeight={600}
-            style={{
-              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
-              textShadow: '0px 0px 3px rgba(0,0,0,1)'
-            }}
-          >
-            {Number(value).toLocaleString()}
-          </text>
-        </>
-      )}
+      <circle cx={cx} cy={cy} r={2.5} fill="#2196F3" />
     </g>
   );
 };
@@ -824,7 +849,6 @@ const BaselineDotWithLabel = (props: any) => {
 const ForecastDotWithLabel = (props: any) => {
   const { cx, cy, payload } = props;
   const value = payload?.forecast;
-  const isLastPoint = payload?.isLastForecast;
   
   // Don't render if value is null, 0, or empty
   if (value === null || !value || value === '0' || value === '') {
@@ -833,45 +857,7 @@ const ForecastDotWithLabel = (props: any) => {
   
   return (
     <g>
-      {/* Dot - always show */}
-      <circle cx={cx} cy={cy} r={3} fill="#8A5AA3" />
-      
-      {/* Label - only show at last point */}
-      {isLastPoint && (
-        <>
-          {/* Background rectangle with purple color - Below left of point */}
-          <rect
-            x={cx - 22}
-            y={cy + 4}
-            width={16}
-            height={12}
-            fill="rgba(138, 90, 163, 0.95)"
-            rx={3}
-            ry={3}
-            stroke="rgba(255, 255, 255, 0.5)"
-            strokeWidth={1}
-            style={{
-              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
-            }}
-          />
-          {/* Text label */}
-          <text
-            x={cx - 14}
-            y={cy + 10}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#FFFFFF"
-            fontSize={8}
-            fontWeight={600}
-            style={{
-              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
-              textShadow: '0px 0px 3px rgba(0,0,0,1)'
-            }}
-          >
-            {Number(value).toLocaleString()}
-          </text>
-        </>
-      )}
+      <circle cx={cx} cy={cy} r={2.5} fill="#8A5AA3" />
     </g>
   );
 };
@@ -889,45 +875,13 @@ const ActualDotWithLabel = (props: any) => {
   
   return (
     <g>
-      {/* Dot - always show */}
-      <circle cx={cx} cy={cy} r={3} fill="#7CB342" />
-      
-      {/* Label - only show at last point */}
-      {isLastPoint && (
-        <>
-          {/* Background rectangle with green color - Below right of point */}
-          <rect
-            x={cx + 6}
-            y={cy + 4}
-            width={16}
-            height={12}
-            fill="rgba(124, 179, 66, 0.95)"
-            rx={3}
-            ry={3}
-            stroke="rgba(255, 255, 255, 0.5)"
-            strokeWidth={1}
-            style={{
-              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,0.9))'
-            }}
-          />
-          {/* Text label */}
-          <text
-            x={cx + 14}
-            y={cy + 10}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#FFFFFF"
-            fontSize={8}
-            fontWeight={600}
-            style={{
-              filter: 'drop-shadow(0px 0px 2px rgba(0,0,0,1))',
-              textShadow: '0px 0px 3px rgba(0,0,0,1)'
-            }}
-          >
-            {Number(value).toLocaleString()}
-          </text>
-        </>
-      )}
+      <circle cx={cx} cy={cy} r={2.5} fill="#7CB342" />
+      {isLastPoint &&
+        renderStackedPointValueTags(cx, cy, [
+          ...(payload?.actual ? [{ value: Number(payload.actual), color: '#7CB342' }] : []),
+          ...(payload?.forecast ? [{ value: Number(payload.forecast), color: '#8A5AA3' }] : []),
+          ...(payload?.baseline ? [{ value: Number(payload.baseline), color: '#2196F3' }] : []),
+        ])}
     </g>
   );
 };
@@ -1083,7 +1037,7 @@ const PlanReadinessDotWithLabel = (props: any) => {
 };
 
 // Main component
-export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, yearFilter, forecastSource = 'rfs_ff', hideBaseline = false, className }: ProgressCurveProps) {
+export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, yearFilter, forecastSource = 'rfs_ff', hideBaseline = false, yAxisStartAtZero = true, className }: ProgressCurveProps) {
   // Memoize buckets and data to prevent unnecessary recalculations
   const buckets = useMemo(() => {
     const builtBuckets = buildHybridBuckets(anchorDate, monthsSpan, rows ?? [], yearFilter, forecastSource);
@@ -1141,24 +1095,27 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
       {/* Chart - Flexible Height */}
       <div className="flex-1 flex flex-col min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 30, right: 30, left: 30, bottom: 5 }}>
+          <LineChart data={data} margin={{ top: 18, right: 20, left: 8, bottom: 14 }}>
             <CartesianGrid stroke="rgba(255,255,255,.06)" strokeDasharray="2 2" />
             <XAxis 
               dataKey="label" 
-              tick={{ fill:'#B0B7C3', fontSize:6 }}
+              tick={{ fill:'#B0B7C3', fontSize:9 }}
               height={40}
-              tickMargin={2}
+              tickMargin={4}
               allowDuplicatedCategory={false}
               interval="preserveStartEnd"
-              angle={-45}
+              minTickGap={12}
+              angle={-35}
               textAnchor="end"
-              dx={-5}
-              dy={10}
+              dx={-4}
+              dy={8}
             />
             <YAxis 
-              tick={{ fill:'#B0B7C3', fontSize:6 }} 
+              tick={{ fill:'#B0B7C3', fontSize:9 }} 
               allowDecimals={false}
-              width={20}
+              width={44}
+              tickFormatter={axisTickFormatter}
+              domain={yAxisStartAtZero ? [0, 'auto'] : ['dataMin - 5%', 'dataMax + 5%']}
             />
             <Tooltip 
               content={<ProgressCurveTooltip />}
@@ -1168,29 +1125,40 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
               <>
                 {!hideBaseline && (
                   <Line 
+                    type="monotone"
                     dataKey="baseline" 
                     name="Baseline" 
                     stroke="#2196F3" 
-                    strokeWidth={0.8} 
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
                     dot={<BaselineDotWithLabel />}
+                    activeDot={{ r: 4 }}
+                    connectNulls
                     isAnimationActive={false}
                   />
                 )}
                 <Line 
+                  type="monotone"
                   dataKey="forecast" 
                   name="Forecast" 
                   stroke="#8A5AA3" 
-                  strokeWidth={1} 
+                  strokeWidth={2}
+                  strokeLinecap="round"
                   dot={<ForecastDotWithLabel />}
-                  activeDot={{ r:2 }}
+                  activeDot={{ r:4 }}
+                  connectNulls
                   isAnimationActive={false}
                 />
                 <Line 
+                  type="monotone"
                   dataKey="actual" 
                   name="Actual" 
                   stroke="#7CB342" 
-                  strokeWidth={0.8} 
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
                   dot={<ActualDotWithLabel />}
+                  activeDot={{ r:4 }}
+                  connectNulls
                   isAnimationActive={false}
                 />
               </>
