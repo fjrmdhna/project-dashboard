@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSiteData5G } from '@/lib/supabase'
+import { getSiteData5G, type SiteData5GFilters } from '@/lib/supabase'
 import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-ran-score-filter'
+import {
+  parseDataScopeFromSearchParams,
+  getDataScopeCacheKey,
+  scopeToProgramReportFilters,
+} from '@/lib/hermes-dashboard-scope'
 import {
   setCache,
   getFilterHash,
@@ -206,22 +211,12 @@ function calculateStatsFromData(filteredData: any[]) {
   }
 }
 
-// Fetch data from database with pagination
+// Fetch site rows from Supabase. Scoped dashboards apply program_report at DB level;
+// user filters (vendor, city, etc.) remain client-side for instant filter changes.
 async function fetchDataFromDatabase(
-  vendorNames: string[],
-  programReports: string[],
-  impTtps: string[],
-  nanoClusters: string[],
-  q: string,
-  mode: 'full' | 'minimal' = 'full'
+  scopeFilters: Pick<SiteData5GFilters, 'program_report' | 'program_report_match'>
 ): Promise<{ data: any[], totalCount: number }> {
-  // Use Supabase to get site data (no filters - we'll filter client-side)
-  // Always fetch ALL data for client-side filtering
-  const { data, count } = await getSiteData5G(
-    {}, // No filters - fetch all
-    {}
-  )
-  
+  const { data, count } = await getSiteData5G(scopeFilters, {})
   return { data: data || [], totalCount: count || 0 }
 }
 
@@ -232,35 +227,36 @@ export async function GET(request: NextRequest) {
     // Parse query parameters
     const q = searchParams.get('q') || ''
     const vendorNames = searchParams.getAll('vendor_name') || []
-    const programReports = searchParams.getAll('program_report') || []
     const impTtps = searchParams.getAll('imp_ttp') || []
     const nanoClusters = searchParams.getAll('nano_cluster') || []
-    
+
     // Mode: 'minimal' for dashboard (smaller payload), 'full' for detailed views
     const mode = (searchParams.get('mode') || 'minimal') as 'full' | 'minimal'
 
-    // Create filter params for cache key
+    const dataScope = parseDataScopeFromSearchParams(searchParams)
+    const scopeKey = getDataScopeCacheKey(dataScope)
+    const scopeFilters = scopeToProgramReportFilters(dataScope)
+
+    // Create filter params for cache key (user filters only; scope is separate)
     const filterParams: FilterParams = {
       vendorNames,
-      programReports,
-      circles: [], // Hermes uses imp_ttp and nano_cluster, not circles
+      programReports: scopeFilters.program_report ?? [],
+      circles: [],
       siteCategories: [],
       ranScores: [],
       years: [],
       search: q
     }
 
-    // Generate cache key based on filters
     const filterHash = getFilterHash(filterParams)
+    const statsCacheKey = `hermes-stats-${scopeKey}-${filterHash}`
 
-    // Stats must be derived from the same rows returned below (avoid stale cached stats vs fresh data).
-    const statsCacheKey = `hermes-stats-${filterHash}`
-
-    // Fetch from database
-    console.log(`[Hermes Site Data] Fetching from database (mode: ${mode})...`)
+    console.log(
+      `[Hermes Site Data] Fetching from database (mode: ${mode}, scope: ${scopeKey})...`
+    )
     const startTime = Date.now()
 
-    const dataResult = await fetchDataFromDatabase(vendorNames, programReports, impTtps, nanoClusters, q, mode)
+    const dataResult = await fetchDataFromDatabase(scopeFilters)
     const stats = calculateStatsFromData(dataResult.data)
 
     setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch(err => {
@@ -292,7 +288,8 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
       cached: false,
       fetchTime,
-      mode
+      mode,
+      scope: scopeKey
     }, {
       headers: {
         'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'

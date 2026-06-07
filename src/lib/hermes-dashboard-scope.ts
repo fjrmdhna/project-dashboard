@@ -41,6 +41,24 @@ export function getDataScopeCacheKey(scope?: HermesDashboardDataScope): string {
   return `${match}:${needle}`
 }
 
+/** Convert mandatory dashboard scope into getSiteData5G filter fields */
+export function scopeToProgramReportFilters(
+  scope?: HermesDashboardDataScope
+): { program_report?: string[]; program_report_match?: "contains" | "eq" } {
+  if (!scope?.program_report) return {}
+
+  const needles = Array.isArray(scope.program_report)
+    ? scope.program_report
+    : [scope.program_report]
+
+  return {
+    program_report: needles,
+    ...(scope.program_report_match === "contains"
+      ? { program_report_match: "contains" as const }
+      : {}),
+  }
+}
+
 export function parseDataScopeFromSearchParams(
   searchParams: URLSearchParams
 ): HermesDashboardDataScope | undefined {

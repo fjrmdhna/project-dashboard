@@ -56,6 +56,27 @@ export function getHermesFilterOptionsEndpoint(config: HermesDashboardConfig): s
   return `/api/filters?${params.toString()}`
 }
 
+/** Build site-data API URL; scoped dashboards fetch only their program_report slice server-side */
+export function getHermesSiteDataEndpoint(
+  scope?: HermesDashboardDataScope,
+  mode: "minimal" | "full" = "minimal"
+): string {
+  const params = new URLSearchParams({ mode })
+
+  if (scope?.program_report) {
+    const programReport = scope.program_report
+    params.set(
+      "program_report",
+      Array.isArray(programReport) ? programReport[0] : programReport
+    )
+    if (scope.program_report_match) {
+      params.set("program_report_match", scope.program_report_match)
+    }
+  }
+
+  return `/api/hermes-5g/site-data?${params.toString()}`
+}
+
 /** Build map-data API URL with dashboard scope + milestone columns */
 export function getHermesMapDataEndpoint(config: HermesDashboardConfig): string {
   const params = new URLSearchParams()

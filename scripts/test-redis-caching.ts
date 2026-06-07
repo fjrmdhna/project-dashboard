@@ -2,28 +2,34 @@
  * Test script untuk memverifikasi Redis caching bekerja dengan baik
  * 
  * Cara menjalankan:
- * 1. Pastikan UPSTASH_REDIS_REST_URL dan UPSTASH_REDIS_REST_TOKEN sudah di-set di .env.local
- * 2. Jalankan: npx ts-node scripts/test-redis-caching.ts
- *    atau: npx tsx scripts/test-redis-caching.ts
- * 
- * Jika Redis tidak dikonfigurasi, script akan tetap berjalan tapi 
- * menampilkan warning bahwa caching disabled.
+ * 1. Pastikan KV_REST_API_* atau UPSTASH_REDIS_REST_* sudah di-set di .env.local
+ * 2. Jalankan: npm run test:redis
  */
 
-import { 
-  getRedis, 
-  getCache, 
-  setCache, 
-  getCacheOrFetch, 
-  getFilterHash,
-  deleteCache,
-  CACHE_KEYS,
-  CACHE_TTL 
-} from '../src/lib/redis'
+import { readFileSync, existsSync } from 'fs'
+import { resolve } from 'path'
 
-async function testRedisConnection() {
+function loadEnvLocal() {
+  const envPath = resolve(process.cwd(), '.env.local')
+  if (!existsSync(envPath)) return
+  for (const line of readFileSync(envPath, 'utf8').split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const idx = trimmed.indexOf('=')
+    if (idx === -1) continue
+    const key = trimmed.slice(0, idx)
+    const value = trimmed.slice(idx + 1).replace(/^["']|["']$/g, '')
+    if (!process.env[key]) process.env[key] = value
+  }
+}
+
+loadEnvLocal()
+
+type RedisModule = typeof import('../src/lib/redis')
+
+async function testRedisConnection(redisMod: RedisModule) {
   console.log('\n=== Testing Redis Connection ===')
-  const redis = getRedis()
+  const redis = redisMod.getRedis()
   if (redis) {
     console.log('✓ Redis connected successfully')
     return true
@@ -34,7 +40,8 @@ async function testRedisConnection() {
   }
 }
 
-async function testBasicCaching() {
+async function testBasicCaching(redisMod: RedisModule) {
+  const { setCache, getCache, deleteCache } = redisMod
   console.log('\n=== Testing Basic Caching ===')
   
   const testKey = 'test:basic'
@@ -61,7 +68,8 @@ async function testBasicCaching() {
   await deleteCache(testKey)
 }
 
-async function testCacheOrFetch() {
+async function testCacheOrFetch(redisMod: RedisModule) {
+  const { getCacheOrFetch, deleteCache } = redisMod
   console.log('\n=== Testing getCacheOrFetch Pattern ===')
   
   const testKey = 'test:cache-or-fetch'
@@ -93,7 +101,8 @@ async function testCacheOrFetch() {
   await deleteCache(testKey)
 }
 
-async function testFilterHash() {
+async function testFilterHash(redisMod: RedisModule) {
+  const { getFilterHash } = redisMod
   console.log('\n=== Testing Filter Hash Generation ===')
   
   const filters1 = {
@@ -141,7 +150,8 @@ async function testFilterHash() {
   }
 }
 
-async function testCacheKeys() {
+async function testCacheKeys(redisMod: RedisModule) {
+  const { CACHE_KEYS, CACHE_TTL } = redisMod
   console.log('\n=== Testing Cache Key Generation ===')
   
   const filterHash = 'abc123'
@@ -169,17 +179,18 @@ async function main() {
   console.log('======================================')
   console.log('  Redis Caching Test Suite')
   console.log('======================================')
+
+  const redisMod = await import('../src/lib/redis')
   
-  const connected = await testRedisConnection()
+  const connected = await testRedisConnection(redisMod)
   
   if (connected) {
-    await testBasicCaching()
-    await testCacheOrFetch()
+    await testBasicCaching(redisMod)
+    await testCacheOrFetch(redisMod)
   }
   
-  // These tests don't require Redis connection
-  await testFilterHash()
-  await testCacheKeys()
+  await testFilterHash(redisMod)
+  await testCacheKeys(redisMod)
   
   console.log('\n======================================')
   console.log('  Test Complete!')
