@@ -1,26 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSiteData5G, type SiteData5G } from '@/lib/supabase'
 import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-ran-score-filter'
-
-const STATUS_LABEL = {
-  sow: 'SOW',
-  rfi: 'RFI',
-  ready: 'READY',
-  active: 'ACTIVE'
-} as const
-
-type StatusLabel = typeof STATUS_LABEL[keyof typeof STATUS_LABEL]
-
-const STATUS_COLOR_MAP: Record<StatusLabel, string> = {
-  [STATUS_LABEL.active]: '#22C55E',  // Hijau untuk ACTIVE
-  [STATUS_LABEL.ready]: '#2563EB',   // Biru untuk READY
-  [STATUS_LABEL.rfi]: '#FACC15',     // Kuning untuk RFI
-  [STATUS_LABEL.sow]: '#EF4444'      // Merah untuk SOW
-}
+import {
+  HERMES_MAP_STATUS_COLORS,
+  resolveHermesMapStatus,
+  type HermesMapStatusLabel,
+} from '@/lib/hermes-map-status'
 
 interface MapPoint {
   id: string
-  status: StatusLabel
+  status: HermesMapStatusLabel
   lat: number
   long: number
   vendorName?: string | null
@@ -40,7 +29,7 @@ interface MapPoint {
 /** Filterable row for sites with invalid coordinates (client applies same filter and counts). */
 export interface InvalidCoordinateRow {
   id: string
-  status: StatusLabel
+  status: HermesMapStatusLabel
   vendorName?: string | null
   programReport?: string | null
   impTtp?: string | null
@@ -49,9 +38,7 @@ export interface InvalidCoordinateRow {
   region_circle?: string | null
   year?: string | null
   ran_score?: string | null
-  /** Raw lat value from source (invalid/missing for these rows); for export and audit. */
   lat?: string | number | null
-  /** Raw long value from source (invalid/missing for these rows); for export and audit. */
   long?: string | number | null
 }
 
@@ -68,22 +55,6 @@ function parseCoordinate(value: unknown): number | null {
   return null
 }
 
-function resolveStatus(row: SiteData5G): StatusLabel {
-  if (row.rfs_af) {
-    return STATUS_LABEL.active
-  }
-
-  if (row.imp_integ_af) {
-    return STATUS_LABEL.ready
-  }
-
-  if (row.caf_approved) {
-    return STATUS_LABEL.rfi
-  }
-
-  return STATUS_LABEL.sow
-}
-
 export async function GET(request: NextRequest) {
   try {
     const t0 = Date.now()
@@ -92,30 +63,41 @@ export async function GET(request: NextRequest) {
     const q = searchParams.get('q') || ''
     const vendorNames = searchParams.getAll('vendor_name') || []
     const programReports = searchParams.getAll('program_report') || []
+    const programReportMatch = searchParams.get('program_report_match')
     const impTtps = searchParams.getAll('imp_ttp') || []
     const nanoClusters = searchParams.getAll('nano_cluster') || []
     const regions = searchParams.getAll('region') || []
     const years = searchParams.getAll('year') || []
     const statusFilters = searchParams.getAll('status') || []
+    const readinessColumn = searchParams.get('readiness_column') ?? undefined
+    const activatedColumn = searchParams.get('activated_column') ?? undefined
 
-    // Single query: excluded-program query removed (logs showed excludedCount always 0; halves server time)
+    const milestoneFields =
+      readinessColumn && activatedColumn
+        ? { readinessColumn, activatedColumn }
+        : undefined
+
     const { data } = await getSiteData5G({
       vendor_name: vendorNames.length ? vendorNames : undefined,
       program_report: programReports.length ? programReports : undefined,
+      program_report_match:
+        programReportMatch === 'contains' ? 'contains' : undefined,
       imp_ttp: impTtps.length ? impTtps : undefined,
       nano_cluster: nanoClusters.length ? nanoClusters : undefined,
       region: regions.length ? regions : undefined,
       year: years.length ? years : undefined,
       search: q || undefined,
       status: statusFilters.length ? statusFilters : undefined,
-      limit: 20000
+      readiness_column: readinessColumn,
+      activated_column: activatedColumn,
+      limit: 20000,
     })
 
-    const counts: Record<StatusLabel, number> = {
-      [STATUS_LABEL.active]: 0,
-      [STATUS_LABEL.ready]: 0,
-      [STATUS_LABEL.rfi]: 0,
-      [STATUS_LABEL.sow]: 0
+    const counts: Record<HermesMapStatusLabel, number> = {
+      ACTIVE: 0,
+      READY: 0,
+      RFI: 0,
+      SOW: 0,
     }
 
     const points: MapPoint[] = []
@@ -124,9 +106,9 @@ export async function GET(request: NextRequest) {
     for (const row of data) {
       const lat = parseCoordinate(row.lat)
       const long = parseCoordinate(row.long)
+      const status = resolveHermesMapStatus(row as SiteData5G, milestoneFields)
 
       if (lat === null || long === null) {
-        const status = resolveStatus(row)
         invalidCoordinateRows.push({
           id: row.system_key,
           status,
@@ -134,17 +116,16 @@ export async function GET(request: NextRequest) {
           programReport: row.program_report ?? null,
           impTtp: row.imp_ttp ?? null,
           nanoCluster: row.nano_cluster ?? null,
-          region: (row as any).region ?? null,
-          region_circle: (row as any).region_circle ?? null,
-          year: (row as any).year ?? null,
+          region: row.region ?? null,
+          region_circle: row.region_circle ?? null,
+          year: row.year ?? null,
           ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null),
           lat: row.lat != null ? row.lat : null,
-          long: row.long != null ? row.long : null
+          long: row.long != null ? row.long : null,
         })
         continue
       }
 
-      const status = resolveStatus(row)
       counts[status] += 1
 
       points.push({
@@ -157,12 +138,12 @@ export async function GET(request: NextRequest) {
         siteId: row.site_id ?? null,
         programReport: row.program_report ?? null,
         impTtp: row.imp_ttp ?? null,
-        issueCategory: (row as any).issue_category ?? null,
+        issueCategory: row.issue_category ?? null,
         nanoCluster: row.nano_cluster ?? null,
-        region: (row as any).region ?? null,
-        region_circle: (row as any).region_circle ?? null,
-        year: (row as any).year ?? null,
-        ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null)
+        region: row.region ?? null,
+        region_circle: row.region_circle ?? null,
+        year: row.year ?? null,
+        ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null),
       })
     }
 
@@ -171,7 +152,9 @@ export async function GET(request: NextRequest) {
       durationMs,
       mainCount: data.length,
       points: points.length,
-      invalidCoordinateRows: invalidCoordinateRows.length
+      invalidCoordinateRows: invalidCoordinateRows.length,
+      scoped: programReports.length > 0,
+      milestoneColumns: milestoneFields ?? 'default',
     })
 
     return NextResponse.json({
@@ -180,11 +163,11 @@ export async function GET(request: NextRequest) {
         points,
         counts,
         total: points.length,
-        colors: STATUS_COLOR_MAP,
+        colors: HERMES_MAP_STATUS_COLORS,
         invalidCoordinates: invalidCoordinateRows.length,
-        invalidCoordinateRows
+        invalidCoordinateRows,
       },
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     })
   } catch (error) {
     console.error('Error fetching Hermes 5G map data:', error)
@@ -194,7 +177,7 @@ export async function GET(request: NextRequest) {
         status: 'error',
         message: 'Failed to fetch Hermes 5G map data',
         error: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       },
       { status: 500 }
     )

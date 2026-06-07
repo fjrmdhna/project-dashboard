@@ -48,6 +48,8 @@ const MINIMAL_COLUMNS = [
   'mocn_activation_forecast', // Baseline - ProgressCurve
   'rfs_bf',            // Legacy Baseline - kept for backward compatibility
   'rfs_ff',            // Forecast - ProgressCurve, VendorLeaderboard, DailyRunrate
+  'rfs_forecast',      // Commitment readiness vendor (NR 2600 progress curve)
+  'rfs_forecast_lock', // Commitment activated vendor (NR 2600 progress curve)
   'rfs_af',            // Actual - ProgressCurve, ActivatedCard, VendorLeaderboard, DailyRunrate
   'caf_approved',      // CAF stats
   'mos_af',            // MOS stats
@@ -58,6 +60,8 @@ const MINIMAL_COLUMNS = [
   'endorse_af',        // Endorse stats
   'pac_accepted_af',   // PAC stats
   'patp_accepted_af',  // PATP stats
+  'readiness_2600_af', // NR 2600 readiness milestone
+  'activation_2600_af', // NR 2600 activation milestone
   'issue_category',    // TopIssue - client-side calculation
 ]
 
@@ -117,6 +121,8 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       mocn_activation_forecast: row.mocn_activation_forecast || null,
       rfs_bf: row.rfs_bf || null,
       rfs_ff: row.rfs_ff || null,
+      rfs_forecast: row.rfs_forecast || null,
+      rfs_forecast_lock: row.rfs_forecast_lock || null,
       rfs_af: row.rfs_af || null,
       ready_for_acpt_date: row.ready_for_acpt_date || null,
       rfc_approved: row.rfc_approved || null,
@@ -125,6 +131,8 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       endorse_af: row.endorse_af || null,
       pac_accepted_af: row.pac_accepted_af || null,
       patp_accepted_af: row.patp_accepted_af || null,
+      readiness_2600_af: row.readiness_2600_af || null,
+      activation_2600_af: row.activation_2600_af || null,
       issue_category: row.issue_category || null,
     }))
   }

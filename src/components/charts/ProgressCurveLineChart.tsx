@@ -3,6 +3,11 @@
 import { useMemo } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line } from 'recharts';
+import {
+  getRowDateValue,
+  resolveProgressCurveFields,
+  type HermesProgressCurveFields,
+} from '@/lib/hermes-progress-curve-fields';
 
 export type Row = {
   mocn_activation_forecast?: string | null; // Baseline date (MOCN Activation Forecast)
@@ -13,6 +18,8 @@ export type Row = {
   rfs_bf?: string | null;                   // Legacy baseline (kept for backward compatibility)
   rfs_forecast_lock?: string | null;        // forecast date (legacy)
   imp_integ_af?: string | null;             // readiness date (legacy)
+  readiness_2600_af?: string | null;
+  activation_2600_af?: string | null;
 };
 
 export type ProgressCurveProps = {
@@ -26,6 +33,8 @@ export type ProgressCurveProps = {
   hideBaseline?: boolean;
   /** When false, use auto-zoomed Y-axis domain from data range. */
   yAxisStartAtZero?: boolean;
+  /** Custom milestone columns/labels (e.g. NR 2600 progress curve). */
+  progressCurveFields?: HermesProgressCurveFields;
   className?: string;
 };
 
@@ -132,7 +141,15 @@ type ProgressCurveTooltipProps = {
   payload?: ProgressCurveTooltipItem[];
 };
 
-function buildHybridBuckets(anchorDate?: string, span: number = 5, rows: Row[] = [], yearFilter?: number, forecastSource: 'rfs_ff' | 'rfs_forecast' = 'rfs_ff'): Bucket[] {
+function buildHybridBuckets(
+  anchorDate?: string,
+  span: number = 5,
+  rows: Row[] = [],
+  yearFilter?: number,
+  forecastSource: 'rfs_ff' | 'rfs_forecast' = 'rfs_ff',
+  progressCurveFields?: HermesProgressCurveFields,
+): Bucket[] {
+  const curveFields = resolveProgressCurveFields(progressCurveFields);
   const anchor = toStart(anchorDate ? new Date(anchorDate) : new Date());
 
   // If yearFilter is provided, use year-based range instead of span-based
@@ -153,21 +170,27 @@ function buildHybridBuckets(anchorDate?: string, span: number = 5, rows: Row[] =
     // Calculate rangeStart based on span
     rangeStart = toStart(addMonths(anchor, -monthsBefore));
 
-    // Calculate rangeEnd dynamically based on the latest date from mocn_activation_forecast or forecast column
+    // Calculate rangeEnd from latest commitment/plan dates in configured columns
     const forecastVal = (r: Row) => forecastSource === 'rfs_forecast' ? r.rfs_forecast : r.rfs_ff;
     let latestFutureDate: Date | null = null;
-    
+
     for (const row of rows) {
-      // Check mocn_activation_forecast (baseline)
-      const baselineDate = safeDate(row.mocn_activation_forecast);
-      if (baselineDate && (!latestFutureDate || baselineDate > latestFutureDate)) {
-        latestFutureDate = baselineDate;
+      const dateColumns = progressCurveFields
+        ? [curveFields.commitmentReadinessColumn, curveFields.commitmentActivatedColumn]
+        : ['mocn_activation_forecast'];
+
+      for (const column of dateColumns) {
+        const date = safeDate(getRowDateValue(row, column));
+        if (date && (!latestFutureDate || date > latestFutureDate)) {
+          latestFutureDate = date;
+        }
       }
-      
-      // Check forecast column (rfs_ff or rfs_forecast)
-      const forecastDate = safeDate(forecastVal(row));
-      if (forecastDate && (!latestFutureDate || forecastDate > latestFutureDate)) {
-        latestFutureDate = forecastDate;
+
+      if (!progressCurveFields) {
+        const forecastDate = safeDate(forecastVal(row));
+        if (forecastDate && (!latestFutureDate || forecastDate > latestFutureDate)) {
+          latestFutureDate = forecastDate;
+        }
       }
     }
 
@@ -282,15 +305,151 @@ type Point = {
   planReadiness: number | null;
 };
 
+function countDatesOnOrBefore(sortedDates: number[], endTime: number): number {
+  if (sortedDates.length === 0) return 0;
+  let left = 0;
+  let right = sortedDates.length;
+  while (left < right) {
+    const mid = (left + right) >>> 1;
+    if (sortedDates[mid] <= endTime) {
+      left = mid + 1;
+    } else {
+      right = mid;
+    }
+  }
+  return left;
+}
+
+function findPresentBucketIndex(buckets: Bucket[], anchorDate?: string): number {
+  if (buckets.length === 0) return -1;
+
+  const reference = anchorDate ? new Date(anchorDate) : new Date();
+  const presentTime = Number.isNaN(+reference) ? Date.now() : reference.getTime();
+
+  for (let i = 0; i < buckets.length; i++) {
+    if (buckets[i].end.getTime() >= presentTime && buckets[i].start.getTime() <= presentTime) {
+      return i;
+    }
+    if (buckets[i].start.getTime() > presentTime) {
+      return Math.max(0, i - 1);
+    }
+  }
+
+  return buckets.length - 1;
+}
+
+/** Plain cumulative progress curve — no Hermes cap/carry adjustment (NR 2600). */
+function aggregateSimpleProgressCurve(
+  rows: Row[],
+  buckets: Bucket[],
+  curveFields: HermesProgressCurveFields,
+  anchorDate?: string,
+): Point[] {
+  const seriesConfig = [
+    { key: 'planReadiness' as const, column: curveFields.commitmentReadinessColumn },
+    { key: 'ready' as const, column: curveFields.readinessColumn },
+    { key: 'forecast' as const, column: curveFields.commitmentActivatedColumn },
+    { key: 'active' as const, column: curveFields.activatedColumn },
+  ];
+
+  const sortedDates = seriesConfig.map(({ column }) => {
+    const timestamps: number[] = [];
+    for (const row of rows) {
+      const d = safeDate(getRowDateValue(row, column));
+      if (d) timestamps.push(d.getTime());
+    }
+    timestamps.sort((a, b) => a - b);
+    return timestamps;
+  });
+
+  const totals = sortedDates.map((dates) => dates.length);
+  const clipActual = curveFields.clipActualSeriesToPresent === true;
+  const presentBucketIndex = clipActual ? findPresentBucketIndex(buckets, anchorDate) : buckets.length - 1;
+  const presentTime = (() => {
+    const reference = anchorDate ? new Date(anchorDate) : new Date();
+    return Number.isNaN(+reference) ? Date.now() : reference.getTime();
+  })();
+
+  const cumulativeByBucket = buckets.map((bucket) => {
+    const bucketEndTime = bucket.end.getTime();
+    const actualEndTime = clipActual ? Math.min(bucketEndTime, presentTime) : bucketEndTime;
+    return {
+      planReadiness: countDatesOnOrBefore(sortedDates[0], bucketEndTime),
+      ready: countDatesOnOrBefore(sortedDates[1], actualEndTime),
+      forecast: countDatesOnOrBefore(sortedDates[2], bucketEndTime),
+      active: countDatesOnOrBefore(sortedDates[3], actualEndTime),
+    };
+  });
+
+  const lastIndices = seriesConfig.map(({ key }, seriesIdx) => {
+    if (totals[seriesIdx] === 0) return -1;
+    for (let i = cumulativeByBucket.length - 1; i >= 0; i--) {
+      if (cumulativeByBucket[i][key] > 0) return i;
+    }
+    return cumulativeByBucket.length - 1;
+  });
+
+  const getDisplayLastIndex = (seriesIdx: number): number => {
+    const lastDataIndex = lastIndices[seriesIdx];
+    if (lastDataIndex < 0) return -1;
+
+    const isActualSeries = seriesIdx === 1 || seriesIdx === 3;
+    if (clipActual && isActualSeries && presentBucketIndex >= 0) {
+      return Math.min(lastDataIndex, presentBucketIndex);
+    }
+    return lastDataIndex;
+  };
+
+  const displayLastIndices = seriesConfig.map((_, seriesIdx) => getDisplayLastIndex(seriesIdx));
+
+  return cumulativeByBucket.map((values, index) => ({
+    key: buckets[index].key,
+    label: buckets[index].label,
+    baseline: null,
+    actual: null,
+    planReadiness:
+      displayLastIndices[0] >= 0 && index <= displayLastIndices[0]
+        ? Math.min(values.planReadiness, totals[0])
+        : null,
+    ready:
+      displayLastIndices[1] >= 0 && index <= displayLastIndices[1]
+        ? Math.min(values.ready, totals[1])
+        : null,
+    forecast:
+      displayLastIndices[2] >= 0 && index <= displayLastIndices[2]
+        ? Math.min(values.forecast, totals[2])
+        : null,
+    active:
+      displayLastIndices[3] >= 0 && index <= displayLastIndices[3]
+        ? Math.min(values.active, totals[3])
+        : null,
+  }));
+}
+
 // Function to aggregate data into buckets with cumulative values
 // OPTIMIZED: Single-pass aggregation instead of O(buckets * rows) nested loops
-function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string, forecastSource: 'rfs_ff' | 'rfs_forecast' = 'rfs_ff'): Point[] {
+function aggregate(
+  rows: Row[],
+  buckets: Bucket[],
+  anchorDate?: string,
+  forecastSource: 'rfs_ff' | 'rfs_forecast' = 'rfs_ff',
+  progressCurveFields?: HermesProgressCurveFields,
+): Point[] {
   if (!buckets.length) return [];
+
+  const curveFields = resolveProgressCurveFields(progressCurveFields);
+
+  if (curveFields.capCommitmentToActual === false) {
+    return aggregateSimpleProgressCurve(rows, buckets, curveFields, anchorDate);
+  }
 
   const inRange = (val?: string | null, s?: Date, e?: Date) => {
     const d = safeDate(val);
     return !!(d && s && e && d >= s && d <= e);
   };
+
+  const inRangeColumn = (row: Row, column: string, s?: Date, e?: Date) =>
+    inRange(getRowDateValue(row, column), s, e);
 
   // Helper function to check if date is <= end date (for Hermes format cumulative calculation)
   const isOnOrBefore = (val?: string | null, endDate?: Date) => {
@@ -298,9 +457,13 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string, forecast
     return !!(d && endDate && d <= endDate);
   };
 
+  const isOnOrBeforeColumn = (row: Row, column: string, endDate?: Date) =>
+    isOnOrBefore(getRowDateValue(row, column), endDate);
+
   // Detect data format: AOP (has mocn_activation_forecast/rfs_ff/rfs_forecast) or Hermes 5G (has rfs_forecast_lock/imp_integ_af)
-  const isAopFormat = rows.some(row => row.mocn_activation_forecast || row.rfs_ff || row.rfs_forecast);
-  const isHermesFormat = rows.some(row => row.rfs_forecast_lock || row.imp_integ_af);
+  const isAopFormat =
+    !progressCurveFields &&
+    rows.some(row => row.mocn_activation_forecast || row.rfs_ff || row.rfs_forecast);
 
   // AOP Format: baseline, forecast, actual
   if (isAopFormat) {
@@ -548,11 +711,20 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string, forecast
   const rawPerBucket = buckets.map((bucket) => {
     const { start, end } = bucket;
     return {
-      forecast: rows.reduce((total, row) => total + (inRange(row.rfs_forecast_lock, start, end) ? 1 : 0), 0),
-      ready: rows.reduce((total, row) => total + (inRange(row.imp_integ_af, start, end) ? 1 : 0), 0),
-      active: rows.reduce((total, row) => total + (inRange(row.rfs_af, start, end) ? 1 : 0), 0),
+      forecast: rows.reduce(
+        (total, row) => total + (inRangeColumn(row, curveFields.commitmentActivatedColumn, start, end) ? 1 : 0),
+        0,
+      ),
+      ready: rows.reduce(
+        (total, row) => total + (inRangeColumn(row, curveFields.readinessColumn, start, end) ? 1 : 0),
+        0,
+      ),
+      active: rows.reduce(
+        (total, row) => total + (inRangeColumn(row, curveFields.activatedColumn, start, end) ? 1 : 0),
+        0,
+      ),
       planReadiness: rows.reduce(
-        (total, row) => total + (inRange(row.mocn_activation_forecast, start, end) ? 1 : 0),
+        (total, row) => total + (inRangeColumn(row, curveFields.commitmentReadinessColumn, start, end) ? 1 : 0),
         0,
       ),
     };
@@ -568,12 +740,12 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string, forecast
     const bucketHasElapsed = bucket.end.getTime() < referenceTime;
 
     const actualForecastCumulative = rows.reduce(
-      (total, row) => total + (isOnOrBefore(row.rfs_af, bucket.end) ? 1 : 0),
+      (total, row) => total + (isOnOrBeforeColumn(row, curveFields.activatedColumn, bucket.end) ? 1 : 0),
       0
     );
 
     const actualReadinessCumulative = rows.reduce(
-      (total, row) => total + (isOnOrBefore(row.imp_integ_af, bucket.end) ? 1 : 0),
+      (total, row) => total + (isOnOrBeforeColumn(row, curveFields.readinessColumn, bucket.end) ? 1 : 0),
       0
     );
 
@@ -629,10 +801,10 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string, forecast
     };
   });
 
-  const totalForecast = rows.filter(row => row.rfs_forecast_lock).length;
-  const totalReady = rows.filter(row => row.imp_integ_af).length;
-  const totalActive = rows.filter(row => row.rfs_af).length;
-  const totalPlanReadiness = rows.filter(row => row.mocn_activation_forecast).length;
+  const totalForecast = rows.filter(row => getRowDateValue(row, curveFields.commitmentActivatedColumn)).length;
+  const totalReady = rows.filter(row => getRowDateValue(row, curveFields.readinessColumn)).length;
+  const totalActive = rows.filter(row => getRowDateValue(row, curveFields.activatedColumn)).length;
+  const totalPlanReadiness = rows.filter(row => getRowDateValue(row, curveFields.commitmentReadinessColumn)).length;
 
   let lastForecastIndex = -1;
   let lastReadyIndex = -1;
@@ -662,12 +834,12 @@ function aggregate(rows: Row[], buckets: Bucket[], anchorDate?: string, forecast
     cumulativePlanReadiness += values.planReadiness;
 
     const cumulativeReady = rows.reduce(
-      (total, row) => total + (isOnOrBefore(row.imp_integ_af, bucketEnd) ? 1 : 0),
+      (total, row) => total + (isOnOrBeforeColumn(row, curveFields.readinessColumn, bucketEnd) ? 1 : 0),
       0
     );
 
     const cumulativeActive = rows.reduce(
-      (total, row) => total + (isOnOrBefore(row.rfs_af, bucketEnd) ? 1 : 0),
+      (total, row) => total + (isOnOrBeforeColumn(row, curveFields.activatedColumn, bucketEnd) ? 1 : 0),
       0
     );
 
@@ -1037,16 +1209,28 @@ const PlanReadinessDotWithLabel = (props: any) => {
 };
 
 // Main component
-export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 3, yearFilter, forecastSource = 'rfs_ff', hideBaseline = false, yAxisStartAtZero = true, className }: ProgressCurveProps) {
+export default function ProgressCurveLineChart({
+  rows,
+  anchorDate,
+  monthsSpan = 3,
+  yearFilter,
+  forecastSource = 'rfs_ff',
+  hideBaseline = false,
+  yAxisStartAtZero = true,
+  progressCurveFields,
+  className,
+}: ProgressCurveProps) {
+  const curveFields = resolveProgressCurveFields(progressCurveFields);
+
   // Memoize buckets and data to prevent unnecessary recalculations
   const buckets = useMemo(() => {
-    const builtBuckets = buildHybridBuckets(anchorDate, monthsSpan, rows ?? [], yearFilter, forecastSource);
+    const builtBuckets = buildHybridBuckets(anchorDate, monthsSpan, rows ?? [], yearFilter, forecastSource, progressCurveFields);
     // Ensure buckets are sorted by start date (should already be sorted, but double-check)
     return builtBuckets.sort((a, b) => a.start.getTime() - b.start.getTime());
-  }, [anchorDate, monthsSpan, rows, yearFilter, forecastSource]);
+  }, [anchorDate, monthsSpan, rows, yearFilter, forecastSource, progressCurveFields]);
   
   const data = useMemo(() => {
-    const aggregated = aggregate(rows ?? [], buckets, anchorDate, forecastSource);
+    const aggregated = aggregate(rows ?? [], buckets, anchorDate, forecastSource, progressCurveFields);
     // Ensure data is sorted by key (chronological order)
     // Keys: "YYYY-MM" (month) or "YYYY-MM-DD-wW" (week – sort by date so W52 before W2 in Jan)
     const result = aggregated.sort((a, b) => {
@@ -1072,13 +1256,14 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
       return result.map(p => ({ ...p, baseline: null, isLastBaseline: false }));
     }
     return result;
-  }, [rows, buckets, anchorDate, forecastSource, hideBaseline]);
+  }, [rows, buckets, anchorDate, forecastSource, hideBaseline, progressCurveFields]);
   
   // Detect format from original rows data (consistent with aggregate function)
   const isAopFormat = useMemo(() => {
+    if (progressCurveFields) return false;
     if (!rows || rows.length === 0) return false;
     return rows.some(row => row.mocn_activation_forecast || row.rfs_ff || row.rfs_forecast);
-  }, [rows]);
+  }, [rows, progressCurveFields]);
 
   return (
     <div className={`rounded-lg bg-[#0F1630]/80 border border-white/5 p-0.5 w-full h-full flex flex-col min-w-0 ${className ?? ''}`}>
@@ -1167,7 +1352,7 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
                 {/* Legacy lines for backward compatibility with other pages */}
                 <Line 
                   dataKey="planReadiness" 
-                  name="Plan 5G Readiness" 
+                  name={curveFields.commitmentReadinessLabel} 
                   stroke="#2196F3" 
                   strokeWidth={0.8} 
                   dot={<PlanReadinessDotWithLabel />}
@@ -1175,7 +1360,7 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
                 />
                 <Line 
                   dataKey="ready" 
-                  name="Readiness" 
+                  name={curveFields.readinessLabel} 
                   stroke="#E53935" 
                   strokeWidth={0.8} 
                   dot={<ReadinessDotWithLabel />}
@@ -1183,7 +1368,7 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
                 />
                 <Line 
                   dataKey="forecast" 
-                  name="Plan 5G Activated" 
+                  name={curveFields.commitmentActivatedLabel} 
                   stroke="#8A5AA3" 
                   strokeWidth={1} 
                   dot={<ForecastDotWithLabel />}
@@ -1192,7 +1377,7 @@ export default function ProgressCurveLineChart({ rows, anchorDate, monthsSpan = 
                 />
                 <Line 
                   dataKey="active" 
-                  name="Activated" 
+                  name={curveFields.activatedLabel} 
                   stroke="#7CB342" 
                   strokeWidth={0.8} 
                   dot={<ActivatedDotWithLabel />}

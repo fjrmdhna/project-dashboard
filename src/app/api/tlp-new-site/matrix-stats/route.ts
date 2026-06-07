@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getTlpSupabaseClient, hasNonEmptyValue } from "@/lib/tlp-new-site-server"
+import { applyTlpYearDbFilter, getTlpSupabaseClient, hasNonEmptyValue } from "@/lib/tlp-new-site-server"
 import {
   parseTlpFiltersFromSearchParams,
   rowMatchesTlpFilters,
@@ -42,10 +42,12 @@ export async function GET(request: Request) {
     let crfi = 0
 
     while (hasMore) {
-      const { data, error } = await supabase
-        .from("site_data_tlp")
-        .select("program_name, wbs_status, year, site_category, twr_owner, site_status")
-        .range(offset, offset + pageSize - 1)
+      const { data, error } = await applyTlpYearDbFilter(
+        supabase
+          .from("site_data_tlp")
+          .select("program_name, wbs_status, wo_number_1, year_from_wo, site_category, twr_owner, site_status"),
+        filters
+      ).range(offset, offset + pageSize - 1)
 
       if (error) {
         throw new Error(error.message)

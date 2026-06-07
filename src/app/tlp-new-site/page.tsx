@@ -2,19 +2,19 @@
 
 import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
 import { MatrixStatsCard } from "@/components/cards/MatrixStatsCard"
-import { TlpRfiByRegionCard } from "@/components/cards/TlpRfiByRegionCard"
+import { TlpRfiByCircleCard } from "@/components/cards/TlpRfiByCircleCard"
 import { TlpAccProgressCurveCard } from "@/components/cards/TlpAccProgressCurveCard"
 import { TlpTopVendorRfiCard } from "@/components/cards/TlpTopVendorRfiCard"
 import { TopIssueCard } from "@/components/cards/TopIssueCard"
-import { TlpAdminBottleneckCard } from "@/components/cards/TlpAdminBottleneckCard"
+import { TlpRfiCrfiGapCard } from "@/components/cards/TlpRfiCrfiGapCard"
 import { Wallboard1080 } from "@/layouts/Wallboard1080"
 import { useTlpAccProgressCurve } from "@/hooks/useTlpAccProgressCurve"
 import { TlpNewSiteFilterBar } from "@/components/filters/TlpNewSiteFilterBar"
 import { useTlpMatrixStats } from "@/hooks/useTlpMatrixStats"
-import { useTlpRfiByRegion } from "@/hooks/useTlpRfiByRegion"
+import { useTlpRfiByCircle } from "@/hooks/useTlpRfiByCircle"
 import { useTlpTopVendorRfi } from "@/hooks/useTlpTopVendorRfi"
 import { useTlpTopIssueData } from "@/hooks/useTlpTopIssueData"
-import { useTlpAdminBottleneck } from "@/hooks/useTlpAdminBottleneck"
+import { useTlpRfiCrfiGap } from "@/hooks/useTlpRfiCrfiGap"
 import { useState } from "react"
 import { type FilterValue } from "@/components/filters/FilterBar"
 import { type TlpSiteFilters } from "@/lib/tlp-new-site-filters"
@@ -67,11 +67,17 @@ export default function TlpNewSitePage() {
     searching: siteSearchingCount,
     returnCount: siteReturnCount,
   } = useTlpMatrixStats(tlpFilters)
-  const { data: rfiByRegion, totalRfi, loading: rfiLoading, error: rfiError } = useTlpRfiByRegion(tlpFilters)
+  const {
+    data: rfiByCircle,
+    totalPlanRfi,
+    totalActualRfi,
+    loading: rfiLoading,
+    error: rfiError,
+  } = useTlpRfiByCircle(tlpFilters)
   const { data: topVendorRfi, loading: vendorLoading, error: vendorError } = useTlpTopVendorRfi(tlpFilters)
   const { data: accProgress, loading: accProgressLoading, error: accProgressError } = useTlpAccProgressCurve(tlpFilters)
   const { issues, topIssuesTotal, totalIssues, loading: topIssueLoading } = useTlpTopIssueData(tlpFilters)
-  const { rows: adminRows, total: adminTotal, loading: adminLoading, error: adminError } = useTlpAdminBottleneck(tlpFilters)
+  const { rows: gapRows, totalGap, loading: gapLoading, error: gapError } = useTlpRfiCrfiGap(tlpFilters)
 
   const currentDate = new Date()
   const formattedDate = currentDate.toLocaleDateString("id-ID", {
@@ -106,8 +112,14 @@ export default function TlpNewSitePage() {
       }}
     />
   )
-  const rfiByRegionCard = (
-    <TlpRfiByRegionCard rows={rfiByRegion} totalRfi={totalRfi} isLoading={rfiLoading} error={rfiError} />
+  const rfiByCircleCard = (
+    <TlpRfiByCircleCard
+      rows={rfiByCircle}
+      totalPlanRfi={totalPlanRfi}
+      totalActualRfi={totalActualRfi}
+      isLoading={rfiLoading}
+      error={rfiError}
+    />
   )
   const topVendorRfiCard = (
     <TlpTopVendorRfiCard rows={topVendorRfi} isLoading={vendorLoading} error={vendorError} />
@@ -118,8 +130,8 @@ export default function TlpNewSitePage() {
   const topIssueCard = (
     <TopIssueCard issues={issues} totalIssues={totalIssues} topIssuesTotal={topIssuesTotal} isLoading={topIssueLoading} />
   )
-  const adminBottleneckCard = (
-    <TlpAdminBottleneckCard rows={adminRows} total={adminTotal} isLoading={adminLoading} error={adminError} />
+  const rfiCrfiGapCard = (
+    <TlpRfiCrfiGapCard rows={gapRows} totalGap={totalGap} isLoading={gapLoading} error={gapError} />
   )
 
   return (
@@ -127,12 +139,12 @@ export default function TlpNewSitePage() {
       header={header}
       filterBar={<TlpNewSiteFilterBar value={filter} onChange={setFilter} onReset={() => setFilter(INITIAL_TLP_FILTER)} />}
       matrixStats={matrixStats}
-      readinessCard={rfiByRegionCard}
+      readinessCard={rfiByCircleCard}
       activatedCard={topVendorRfiCard}
       progressCurve={accProgressCurveCard}
       dailyRunrate={placeholderCard}
       top5Issue={topIssueCard}
-      nanoCluster={adminBottleneckCard}
+      nanoCluster={rfiCrfiGapCard}
       newFeature={placeholderCard}
       leaderboard={placeholderCard}
     />

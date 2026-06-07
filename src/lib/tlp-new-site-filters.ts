@@ -1,9 +1,22 @@
+import { getRowWoDerivedYear } from "@/lib/tlp-wo-number-year"
+
 export type TlpSiteFilters = {
+  /** Full calendar years derived from wo_number_1 suffix (e.g. 2025). */
   year?: number[]
   program_name?: string[]
   wbs_status?: string[]
   site_category?: string[]
   twr_owner?: string[]
+}
+
+export type TlpFilterableRow = {
+  wo_number_1?: string | null
+  year_from_wo?: number | null
+  region_circle?: string | null
+  program_name?: string | null
+  wbs_status?: string | null
+  site_category?: string | null
+  twr_owner?: string | null
 }
 
 function isNonEmptyString(v: unknown): v is string {
@@ -90,20 +103,11 @@ export function parseTlpFiltersFromSearchParams(searchParams: URLSearchParams): 
   }
 }
 
-export function rowMatchesTlpFilters(
-  row: {
-    year?: number | string | null
-    program_name?: string | null
-    wbs_status?: string | null
-    site_category?: string | null
-    twr_owner?: string | null
-  },
-  filters: TlpSiteFilters
-): boolean {
+export function rowMatchesTlpFilters(row: TlpFilterableRow, filters: TlpSiteFilters): boolean {
   if (Array.isArray(filters.year) && filters.year.length > 0) {
-    const rowYear = typeof row.year === "number" ? row.year : Number(row.year)
-    if (Number.isNaN(rowYear)) return false
-    if (!filters.year.includes(rowYear)) return false
+    const yearSet = new Set(filters.year)
+    const rowYear = getRowWoDerivedYear(row)
+    if (rowYear === null || !yearSet.has(rowYear)) return false
   }
 
   if (Array.isArray(filters.program_name) && filters.program_name.length > 0) {

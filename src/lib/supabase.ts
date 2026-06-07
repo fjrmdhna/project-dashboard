@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { EXCLUDED_PROGRAM_REPORTS, filterExcludedProgramReports, shouldExcludeProgramReport } from './hermes-5g-constants'
 import { normalizeRanScoreForHermesFilter, applyRanScoreFilterByProgramReport } from './hermes-ran-score-filter'
+import { isMilestoneAchieved, resolveMilestoneColumns } from './hermes-milestone-fields'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://opecotutdvtahsccpqzr.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wZWNvdHV0ZHZ0YWhzY2NwcXpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU1NDU4OTcsImV4cCI6MjA1MTEyMTg5N30.sptjTg-0L1lCep8S_wriw3ixm_sXiTAFX-JiPOQFAEU'
@@ -21,6 +22,7 @@ export interface SiteData5G {
   ic_000040_af?: string
   imp_integ_af?: string
   rfs_af?: string
+  rfs_forecast?: string | null
   rfs_forecast_lock?: string
   ready_for_acpt_date?: string | null
   rfc_approved?: string
@@ -30,10 +32,16 @@ export interface SiteData5G {
   endorse_af?: string
   pac_accepted_af?: string
   patp_accepted_af?: string
+  readiness_2600_af?: string | null
+  activation_2600_af?: string | null
   site_id?: string
   site_name?: string
   lat?: number | null
   long?: number | null
+  year?: string | null
+  region?: string | null
+  region_circle?: string | null
+  site_category?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -52,6 +60,7 @@ export interface SiteDataTLP {
   new_site_id?: string | null
   new_site_name?: string | null
   region?: string | null
+  region_circle?: string | null
   site_category?: string | null
   twr_owner?: string | null
   vendor_code?: string | null
@@ -86,13 +95,19 @@ export interface SiteDataTLP {
 export interface SiteData5GFilters {
   vendor_name?: string[]
   program_report?: string[]
+  /** When "contains", program_report filter uses ILIKE (single needle) instead of exact IN */
+  program_report_match?: "contains" | "eq"
   imp_ttp?: string[]
   nano_cluster?: string[]
   ran_score?: string[]
   region?: string[]
   year?: string[]
   search?: string
-  status?: string[] // New status filter
+  status?: string[]
+  /** Override readiness milestone column for status filter (e.g. readiness_2600_af) */
+  readiness_column?: string
+  /** Override activation milestone column for status filter (e.g. activation_2600_af) */
+  activated_column?: string
   limit?: number
   offset?: number
 }
@@ -125,6 +140,7 @@ export async function getSiteData5G(
     'rfs_af',
     'rfs_ff',            // Forecast - ProgressCurve, VendorLeaderboard, DailyRunrate
     'rfs_bf',            // Legacy baseline - kept for backward compatibility
+    'rfs_forecast',      // Commitment readiness vendor (NR 2600 progress curve)
     'rfs_forecast_lock',
     'ready_for_acpt_date', // RFA stats
     'rfc_approved',
@@ -134,6 +150,8 @@ export async function getSiteData5G(
     'endorse_af',
     'pac_accepted_af',
     'patp_accepted_af',  // PATP stats
+    'readiness_2600_af',   // NR 2600 readiness milestone
+    'activation_2600_af',  // NR 2600 activation milestone
     'site_id',
     'site_name',
     'lat',
@@ -183,7 +201,14 @@ export async function getSiteData5G(
     }
 
     if (!onlyExcludedProgramReports && sanitizedProgramReports.length > 0) {
-      q = q.in('program_report', sanitizedProgramReports)
+      if (
+        filters.program_report_match === 'contains' &&
+        sanitizedProgramReports.length === 1
+      ) {
+        q = q.ilike('program_report', `%${sanitizedProgramReports[0]}%`)
+      } else {
+        q = q.in('program_report', sanitizedProgramReports)
+      }
     }
 
     if (filters.imp_ttp && filters.imp_ttp.length > 0) {
@@ -289,18 +314,26 @@ export async function getSiteData5G(
   }
 
   if (filters.status && filters.status.length > 0) {
+    const { readinessColumn, activatedColumn } = resolveMilestoneColumns(
+      filters.readiness_column || filters.activated_column
+        ? {
+            readinessColumn: filters.readiness_column ?? 'imp_integ_af',
+            activatedColumn: filters.activated_column ?? 'rfs_af',
+          }
+        : undefined
+    )
+
     filteredData = filteredData.filter(row => {
-      // Determine status based on boolean fields (same logic as in map-data API)
-      let status = 'SOW' // Default status
-      
-      if (row.rfs_af) {
+      let status = 'SOW'
+
+      if (isMilestoneAchieved(row, activatedColumn)) {
         status = 'ACTIVE'
-      } else if (row.imp_integ_af) {
+      } else if (isMilestoneAchieved(row, readinessColumn)) {
         status = 'READY'
       } else if (row.caf_approved) {
         status = 'RFI'
       }
-      
+
       return filters.status!.includes(status)
     })
   }

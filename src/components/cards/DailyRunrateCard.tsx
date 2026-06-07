@@ -17,11 +17,20 @@ import { AopDailyRunrateItem } from "@/hooks/useAopDailyRunrateData"
 export interface DailyRunrateCardProps {
   data: DailyRunrateItem[] | AopDailyRunrateItem[]
   isLoading?: boolean
+  /** Override legend/tooltip labels for forecast & actual series */
+  seriesLabels?: {
+    forecast?: string
+    actual?: string
+  }
 }
 
-export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardProps) {
+export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: DailyRunrateCardProps) {
+  const forecastLabel = seriesLabels?.forecast ?? 'Forecast'
+  const actualLabel = seriesLabels?.actual ?? 'Actual'
   // Detect if data is AOP format (has forecast/actual) or legacy format (has readiness/activated)
   const isAopFormat = data.length > 0 && ('forecast' in data[0] || 'actual' in data[0])
+  const legacyForecastLabel = seriesLabels?.forecast ?? 'Readiness'
+  const legacyActualLabel = seriesLabels?.actual ?? 'Activated'
   
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -33,22 +42,22 @@ export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardPr
             {isAopFormat ? (
               <>
                 <p className="text-[#8A5AA3]">
-                  <span className="text-white/80">Forecast: </span>
+                  <span className="text-white/80">{forecastLabel}: </span>
                   {payload[0].value}
                 </p>
                 <p className="text-[#7CB342]">
-                  <span className="text-white/80">Actual: </span>
+                  <span className="text-white/80">{actualLabel}: </span>
                   {payload[1].value}
                 </p>
               </>
             ) : (
               <>
                 <p className="text-[#8A5AA3]">
-                  <span className="text-white/80">Readiness: </span>
+                  <span className="text-white/80">{legacyForecastLabel}: </span>
                   {payload[0].value}
                 </p>
                 <p className="text-[#7CB342]">
-                  <span className="text-white/80">Activated: </span>
+                  <span className="text-white/80">{legacyActualLabel}: </span>
                   {payload[1].value}
                 </p>
               </>
@@ -193,7 +202,7 @@ export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardPr
                 <Line 
                   type="monotone"
                   dataKey="forecast"
-                  name="Forecast"
+                  name={forecastLabel}
                   stroke="#8A5AA3"
                   strokeWidth={1.5}
                   dot={{ r: 3, fill: '#8A5AA3', strokeWidth: 0 }}
@@ -205,7 +214,7 @@ export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardPr
                 <Line 
                   type="monotone"
                   dataKey="actual"
-                  name="Actual"
+                  name={actualLabel}
                   stroke="#7CB342"
                   strokeWidth={1.5}
                   dot={{ r: 3, fill: '#7CB342', strokeWidth: 0 }}
@@ -220,7 +229,7 @@ export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardPr
                 <Line 
                   type="monotone"
                   dataKey="readiness"
-                  name="5G Readiness"
+                  name={legacyForecastLabel}
                   stroke="#8A5AA3"
                   strokeWidth={1.5}
                   dot={{ r: 3, fill: '#8A5AA3', strokeWidth: 0 }}
@@ -232,7 +241,7 @@ export function DailyRunrateCard({ data, isLoading = false }: DailyRunrateCardPr
                 <Line 
                   type="monotone"
                   dataKey="activated"
-                  name="5G Activated"
+                  name={legacyActualLabel}
                   stroke="#7CB342"
                   strokeWidth={1.5}
                   dot={{ r: 3, fill: '#7CB342', strokeWidth: 0 }}

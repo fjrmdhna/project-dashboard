@@ -1,0 +1,561 @@
+"use client"
+
+import { useCallback, useMemo, useState, useEffect } from 'react'
+import Link from 'next/link'
+import { Download, RefreshCw } from 'lucide-react'
+import dynamic from 'next/dynamic'
+import { useApiCache } from '@/hooks/useApiCache'
+
+const Hermes5GMap = dynamic(() => import('@/components/maps/Hermes5GMap').then(mod => ({ default: mod.default })), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+        <p className="text-white/60">Loading map...</p>
+      </div>
+    </div>
+  )
+})
+
+import type { HermesMapPoint, StatusLabel } from '@/components/maps/Hermes5GMap'
+import { useFilter } from '@/contexts/FilterContext'
+import { FilterBar, FilterValue } from '@/components/filters/FilterBar'
+import { getProgramReportsForDisplayName } from '@/lib/hermes-program-mapping'
+import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-5g-utils'
+
+/** Row shape for filtering invalid-coordinate sites (same filterable fields as map points). */
+interface InvalidCoordinateRow {
+  id: string
+  status: string
+  vendorName?: string | null
+  programReport?: string | null
+  impTtp?: string | null
+  nanoCluster?: string | null
+  region?: string | null
+  region_circle?: string | null
+  year?: string | null
+  ran_score?: string | null
+  lat?: string | number | null
+  long?: string | number | null
+}
+
+interface MapApiSuccess {
+  status: 'success'
+  data: {
+    points: HermesMapPoint[]
+    counts: Record<StatusLabel, number>
+    total: number
+    colors: Record<StatusLabel, string>
+    invalidCoordinates: number
+    invalidCoordinateRows?: InvalidCoordinateRow[]
+  }
+  timestamp: string
+}
+
+interface MapApiError {
+  status: 'error'
+  message: string
+  error?: string
+}
+
+type MapApiResponse = MapApiSuccess | MapApiError
+
+const STATUS_ORDER: StatusLabel[] = ['ACTIVE', 'READY', 'RFI', 'SOW']
+
+const DEFAULT_COUNTS: Record<StatusLabel, number> = {
+  ACTIVE: 0,
+  READY: 0,
+  RFI: 0,
+  CRFI: 0,
+  MOS: 0,
+  SOW: 0,
+  INSTALL: 0,
+  ON_AIR: 0
+}
+
+const DEFAULT_COLORS: Record<StatusLabel, string> = {
+  ACTIVE: '#22C55E',  // Hijau untuk ACTIVE
+  READY: '#2563EB',   // Biru untuk READY
+  RFI: '#FACC15',     // Kuning untuk RFI
+  CRFI: '#3B82F6',    // Biru untuk CRFI
+  MOS: '#8B5CF6',     // Ungu untuk MOS
+  SOW: '#EF4444',     // Merah untuk SOW
+  INSTALL: '#8B5CF6', // Ungu untuk INSTALL
+  ON_AIR: '#06B6D4'   // Cyan untuk ON_AIR
+}
+
+function formatTimestamp(timestamp: string | null) {
+  if (!timestamp) {
+    return 'Not available'
+  }
+
+  try {
+    const date = new Date(timestamp)
+    return date.toLocaleString('en-US', {
+      dateStyle: 'full',
+      timeStyle: 'short'
+    })
+  } catch (error) {
+    console.warn('Failed to format timestamp:', error)
+    return timestamp
+  }
+}
+
+import type { HermesDashboardConfig } from "@/config/hermes-dashboards"
+import { getHermesFilterOptionsEndpoint, getHermesMapDataEndpoint } from "@/config/hermes-dashboards"
+import { matchesProgramReportScope } from "@/lib/hermes-dashboard-scope"
+import { getHermesMapStatusLabel, type HermesMapStatusLabel } from "@/lib/hermes-map-status"
+
+export function HermesDashboardMapPage({ config }: { config: HermesDashboardConfig }) {
+  const filterContext = useFilter()
+  const hiddenFilters = config.hiddenFilters ?? []
+  const filterOptionsEndpoint = getHermesFilterOptionsEndpoint(config)
+  const mapDataEndpoint = getHermesMapDataEndpoint(config)
+  const hideProgramReport = hiddenFilters.includes("program_report")
+
+  useEffect(() => {
+    if (!hideProgramReport || !filterContext.isHydrated) return
+    if (filterContext.programFilter !== "all") {
+      filterContext.setProgramFilter("all")
+    }
+  }, [hideProgramReport, filterContext.isHydrated, filterContext.programFilter, filterContext.setProgramFilter])
+
+  // Fetch scoped map data once (scope + milestone columns from config), cache and filter client-side
+  const fetchMapAll = useCallback(async () => {
+    const res = await fetch(mapDataEndpoint, { cache: 'no-store' })
+    const json: MapApiResponse = await res.json()
+    if (json.status !== 'success') {
+      throw new Error(json.message || 'Failed to load map data')
+    }
+    return json
+  }, [mapDataEndpoint])
+
+  const { data: cachedMapResponse, loading, error, refetch } = useApiCache<MapApiSuccess>(
+    config.mapCacheKey,
+    fetchMapAll,
+    {
+      staleTime: 5 * 60 * 1000,
+      cacheTime: 15 * 60 * 1000,
+      refetchOnMount: false,
+      validateFn: (d) => {
+        const res = d as MapApiSuccess
+        return !!res?.status && res.status === 'success' && Array.isArray(res.data?.points) && res.data?.colors != null && typeof res.data?.invalidCoordinates === 'number'
+      }
+    }
+  )
+
+  const hasInitialLoad = !!cachedMapResponse
+  const lastUpdated = cachedMapResponse?.timestamp ?? null
+  const colors = useMemo(
+    () => cachedMapResponse?.data?.colors ?? DEFAULT_COLORS,
+    [cachedMapResponse?.data?.colors]
+  )
+
+  // Convert debounced filter context to FilterValue format - Hermes uses ran_score (RAN Score) instead of site_category.
+  // Circle filter must use regionFilter (same as overview) so filters persist when navigating overview ↔ map.
+  // Use circle only for region_circle (circleSet); do NOT set region from circle value — "Kalisumapa" is region_circle, not region, so applying it to region would yield 0 sites.
+  const currentFilter: FilterValue = useMemo(() => {
+    const debounced = filterContext.debouncedFilters || filterContext
+    const circleValue = debounced.regionFilter !== 'all' ? debounced.regionFilter.split(',').filter(Boolean) : []
+    return {
+      q: debounced.searchTerm,
+      vendor_name: debounced.vendorFilter !== 'all' ? debounced.vendorFilter.split(',').filter(Boolean) : [],
+      program_report: hideProgramReport ? [] : (debounced.programFilter !== 'all' ? debounced.programFilter.split(',').filter(Boolean) : []),
+      imp_ttp: debounced.cityFilter !== 'all' ? debounced.cityFilter.split(',').filter(Boolean) : [],
+      nano_cluster: debounced.nanoClusterFilter !== 'all' ? debounced.nanoClusterFilter.split(',').filter(Boolean) : [],
+      region: [],
+      year: debounced.yearFilter !== 'all' ? debounced.yearFilter.split(',').filter(Boolean) : [],
+      circle: circleValue,
+      ran_score: debounced.ranScoreFilter !== 'all' ? debounced.ranScoreFilter.split(',').filter(Boolean) : [],
+      status: debounced.statusFilters || []
+    }
+  }, [filterContext.debouncedFilters, hideProgramReport])
+
+  // Client-side filter: apply currentFilter to cached points and to invalidCoordinateRows so counts match filter
+  const { points, counts, totalCounts, invalidCoordinatesFiltered, filteredInvalidRows } = useMemo(() => {
+    const raw = cachedMapResponse?.data
+    const invalidRows = raw?.invalidCoordinateRows ?? []
+    const emptyResult = {
+      points: [] as HermesMapPoint[],
+      counts: { ...DEFAULT_COUNTS },
+      totalCounts: { ...DEFAULT_COUNTS },
+      invalidCoordinatesFiltered: invalidRows.length,
+      filteredInvalidRows: [] as InvalidCoordinateRow[]
+    }
+    if (!raw?.points?.length && !invalidRows.length) {
+      return emptyResult
+    }
+
+    const scope = config.dataScope
+    const scopedPoints = scope?.program_report
+      ? (raw?.points ?? []).filter((p: HermesMapPoint) => matchesProgramReportScope(p.programReport, scope))
+      : (raw?.points ?? [])
+    const scopedInvalidRows = scope?.program_report
+      ? invalidRows.filter((r: InvalidCoordinateRow) => matchesProgramReportScope(r.programReport, scope))
+      : invalidRows
+
+    const q = (currentFilter.q ?? '').toLowerCase().trim()
+    const vendorSet = currentFilter.vendor_name?.length ? new Set(currentFilter.vendor_name) : null
+    const impTtpSet = currentFilter.imp_ttp?.length ? new Set(currentFilter.imp_ttp) : null
+    const nanoSet = currentFilter.nano_cluster?.length ? new Set(currentFilter.nano_cluster) : null
+    const regionSet = currentFilter.region?.length ? new Set(currentFilter.region) : null
+    const yearSet = currentFilter.year?.length ? new Set(currentFilter.year) : null
+    const statusSet = currentFilter.status?.length ? new Set(currentFilter.status) : null
+
+    // Program: expand display names to actual program_report values (include invalid rows for options)
+    const allProgramReports = [...new Set([
+      ...scopedPoints.map((p: HermesMapPoint) => p.programReport),
+      ...scopedInvalidRows.map((r: InvalidCoordinateRow) => r.programReport)
+    ].filter(Boolean))] as string[]
+    let programSet: Set<string> | null = null
+    if (!hideProgramReport && currentFilter.program_report?.length) {
+      const expanded = new Set<string>()
+      for (const displayOrRaw of currentFilter.program_report) {
+        const resolved = getProgramReportsForDisplayName(displayOrRaw, allProgramReports)
+        if (resolved.length) resolved.forEach((r: string) => expanded.add(r))
+        else expanded.add(displayOrRaw)
+      }
+      programSet = expanded.size ? expanded : null
+    }
+
+    // Circle: normalize to Title Case for comparison (same as filter options)
+    const normalizeCircle = (v: string) => v.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+    const circleSet =
+      currentFilter.circle?.length ?
+        new Set(currentFilter.circle.map(normalizeCircle)) : null
+
+    const ranScoreSet =
+      currentFilter.ran_score?.length
+        ? new Set(currentFilter.ran_score) : null
+
+    type FilterableRow = { id: string; status: string; vendorName?: string | null; programReport?: string | null; impTtp?: string | null; nanoCluster?: string | null; region?: string | null; region_circle?: string | null; year?: string | null; ran_score?: string | null }
+    const matchesFilter = (p: FilterableRow, includeStatus = true) => {
+      if (vendorSet && !vendorSet.has(p.vendorName ?? '')) return false
+      if (programSet && !programSet.has(p.programReport ?? '')) return false
+      if (impTtpSet && !impTtpSet.has(p.impTtp ?? '')) return false
+      if (nanoSet && !nanoSet.has(p.nanoCluster ?? '')) return false
+      if (regionSet && !regionSet.has(p.region ?? '')) return false
+      if (yearSet && !yearSet.has(p.year ?? '')) return false
+      if (circleSet) {
+        const pCircle = normalizeCircle(p.region_circle ?? '')
+        if (!pCircle || !circleSet.has(pCircle)) return false
+      }
+      if (ranScoreSet) {
+        const normalizedRanScore = normalizeRanScoreForHermesFilter(p.ran_score)
+        if (!ranScoreSet.has(normalizedRanScore)) return false
+      }
+      if (includeStatus && statusSet && !statusSet.has(p.status)) return false
+      if (q) {
+        const searchable = [p.id, p.vendorName, p.programReport].filter(Boolean).join(' ').toLowerCase()
+        if (!searchable.includes(q)) return false
+      }
+      return true
+    }
+
+    const filtered = scopedPoints.filter((p: HermesMapPoint) => matchesFilter(p))
+    const filteredInvalidRows = scopedInvalidRows.filter((r: InvalidCoordinateRow) => matchesFilter(r))
+    const filteredInvalidCount = filteredInvalidRows.length
+
+    const countsByStatus: Record<string, number> = { ...DEFAULT_COUNTS }
+    filtered.forEach((p: HermesMapPoint) => {
+      countsByStatus[p.status] = (countsByStatus[p.status] ?? 0) + 1
+    })
+
+    // Total counts for summary: same filters but without status filter
+    const totalFiltered =
+      !statusSet || statusSet.size === 0
+        ? filtered
+        : scopedPoints.filter((p: HermesMapPoint) => matchesFilter(p, false))
+    const totalCountsByStatus: Record<string, number> = { ...DEFAULT_COUNTS }
+    totalFiltered.forEach((p: HermesMapPoint) => {
+      totalCountsByStatus[p.status] = (totalCountsByStatus[p.status] ?? 0) + 1
+    })
+
+    return {
+      points: filtered as HermesMapPoint[],
+      counts: countsByStatus as Record<StatusLabel, number>,
+      totalCounts: totalCountsByStatus as Record<StatusLabel, number>,
+      invalidCoordinatesFiltered: filteredInvalidCount,
+      filteredInvalidRows
+    }
+  }, [cachedMapResponse, currentFilter, hideProgramReport, config.dataScope])
+
+  // Use filter-aware invalid count when API provides invalidCoordinateRows; otherwise fallback to API total
+  const invalidCoordinates =
+    cachedMapResponse?.data?.invalidCoordinateRows
+      ? invalidCoordinatesFiltered
+      : (cachedMapResponse?.data?.invalidCoordinates ?? 0)
+
+  const visiblePoints = useMemo(() => points, [points])
+
+  const totalSitesForSummary = useMemo(() => {
+    return Object.values(totalCounts).reduce((sum, count) => sum + count, 0)
+  }, [totalCounts])
+
+  // Handler untuk status click
+  const handleStatusClick = useCallback((status: StatusLabel) => {
+    const currentStatuses = filterContext.statusFilters || []
+    const isSelected = currentStatuses.includes(status)
+    
+    if (isSelected) {
+      const newStatuses = currentStatuses.filter(s => s !== status)
+      filterContext.setStatusFilters(newStatuses)
+    } else {
+      const newStatuses = [...currentStatuses, status]
+      filterContext.setStatusFilters(newStatuses)
+    }
+  }, [filterContext])
+
+  const [isExportingInvalid, setIsExportingInvalid] = useState(false)
+  const handleExportInvalidCoordinates = useCallback(async () => {
+    if (!filteredInvalidRows?.length || isExportingInvalid) return
+    setIsExportingInvalid(true)
+    try {
+      const XLSX = await import('xlsx')
+      const formatCoord = (v: string | number | null | undefined): string =>
+        v === null || v === undefined ? '' : String(v)
+
+      const sheetData = filteredInvalidRows.map((row) => ({
+        'System Key': row.id,
+        Status: row.status,
+        Vendor: row.vendorName ?? '',
+        'Program Report': row.programReport ?? '',
+        City: row.impTtp ?? '',
+        Cluster: row.nanoCluster ?? '',
+        Region: row.region ?? '',
+        Circle: row.region_circle ?? '',
+        Year: row.year ?? '',
+        'RAN Score': row.ran_score ?? '',
+        Lat: formatCoord(row.lat),
+        Long: formatCoord(row.long),
+        Note: 'Invalid coordinates'
+      }))
+      const worksheet = XLSX.utils.json_to_sheet(sheetData)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Invalid coordinates')
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')
+      const filename = `${config.exportPrefix}-invalid-coordinates-${timestamp}.xlsx`
+      XLSX.writeFile(workbook, filename)
+    } catch (error) {
+      console.error('Export invalid coordinates failed:', error)
+    } finally {
+      setIsExportingInvalid(false)
+    }
+  }, [filteredInvalidRows, isExportingInvalid])
+
+  const headerTitle = config.mapTitle
+
+  const getStatusDisplayLabel = useCallback(
+    (status: HermesMapStatusLabel) => getHermesMapStatusLabel(status, config.milestoneFields),
+    [config.milestoneFields]
+  )
+
+  // Show loading state until hydration is complete
+  if (!filterContext.isHydrated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#070F2B] via-[#050B1B] to-[#050B1B] text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white/60">Loading map...</p>
+        </div>
+      </div>
+    )
+  }
+
+  const handleFilterChange = (newFilters: FilterValue) => {
+    const sanitized = hideProgramReport ? { ...newFilters, program_report: [] } : newFilters
+    filterContext.setSearchTerm(sanitized.q ?? '')
+    filterContext.setVendorFilter(sanitized.vendor_name?.length ? sanitized.vendor_name.join(',') : 'all')
+    if (!hideProgramReport) {
+      filterContext.setProgramFilter(sanitized.program_report?.length ? sanitized.program_report.join(',') : 'all')
+    }
+    filterContext.setCityFilter(sanitized.imp_ttp?.length ? sanitized.imp_ttp.join(',') : 'all')
+    filterContext.setNanoClusterFilter(sanitized.nano_cluster?.length ? sanitized.nano_cluster.join(',') : 'all')
+    const circleValue = sanitized.circle?.length ? sanitized.circle.join(',') : 'all'
+    filterContext.setRegionFilter(circleValue)
+    filterContext.setYearFilter(sanitized.year?.length ? sanitized.year.join(',') : 'all')
+    filterContext.setRanScoreFilter(sanitized.ran_score?.length ? sanitized.ran_score.join(',') : 'all')
+  }
+
+  const handleFilterReset = () => {
+    filterContext.resetFilters()
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#070F2B] via-[#050B1B] to-[#050B1B] text-white relative">
+      <header className="border-b border-white/10 bg-[#0B1533]/70 backdrop-blur transition-opacity duration-300">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-3 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => window.history.back()}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 transition hover:bg-white/20"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <img src="/logo-indosat-putih.png" alt="Indosat Ooredoo" className="h-9" />
+            <div className="hidden flex-col lg:flex">
+              <span className="text-[11px] uppercase tracking-[0.32em] text-white/60">{config.label} Dashboard</span>
+              <h1 className="text-xl font-semibold tracking-wide text-white">{headerTitle}</h1>
+            </div>
+          </div>
+
+          <div className="flex flex-1 items-center justify-center gap-2 text-xs uppercase tracking-[0.32em] text-white/60 lg:justify-center">
+            <Link
+              href={config.basePath}
+              className="rounded-full border border-white/15 px-4 py-1.5 font-medium text-white/80 transition hover:bg-white/10"
+            >
+              Overview
+            </Link>
+            <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-4 py-1.5 font-semibold text-[#34D399]">
+              Map
+            </span>
+          </div>
+
+          <div className="flex flex-col items-end gap-2 text-right text-xs text-white/60">
+            <div>{formatTimestamp(lastUpdated)}</div>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-white/80 transition hover:bg-white/10"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto flex h-[calc(100vh-120px)] max-w-[1440px] flex-col gap-5 px-6 py-5 lg:h-[calc(100vh-140px)] transition-opacity duration-300">
+        {/* Filter Bar — single compact row, no scroll (Hermes map only) */}
+        <div className="rounded-2xl border border-white/10 bg-[#0B1533]/60 px-4 py-3">
+          <FilterBar
+            value={currentFilter}
+            onChange={handleFilterChange}
+            onReset={handleFilterReset}
+            variant="default"
+            singleRow
+            endpoint={filterOptionsEndpoint}
+            hiddenFilters={hiddenFilters}
+          />
+        </div>
+
+        <div className="grid flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="relative min-h-[420px] overflow-hidden rounded-2xl border border-white/10 bg-[#0B1533]/60">
+            <Hermes5GMap points={visiblePoints} colors={colors} loading={loading} error={error} />
+          </div>
+
+          <aside className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#0B1533]/60 p-5">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-[0.28em] text-white/70">Status Summary</h2>
+              {loading || !hasInitialLoad ? (
+                <div className="mt-2 flex items-center gap-2 text-xs text-white/60">
+                  <span className="inline-flex h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-transparent" />
+                  <span>Loading summary...</span>
+                </div>
+              ) : (
+                <>
+                  <p className="mt-1 text-2xl font-bold text-white">
+                    {totalSitesForSummary.toLocaleString('en-US')} Sites
+                  </p>
+                  {invalidCoordinates > 0 && (
+                    <div className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <svg className="h-4 w-4 shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+                          </svg>
+                          <span className="text-xs font-medium text-amber-200">
+                            {invalidCoordinates} sites with invalid coordinates
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleExportInvalidCoordinates}
+                          disabled={isExportingInvalid}
+                          className="shrink-0 rounded p-1.5 text-amber-200 transition hover:bg-amber-500/20 hover:text-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={isExportingInvalid ? 'Exporting...' : 'Export to Excel'}
+                          aria-label={isExportingInvalid ? 'Exporting...' : 'Export invalid coordinates to Excel'}
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="space-y-3 text-sm">
+              {STATUS_ORDER.map((status) => {
+                const color = colors[status] ?? '#94A3B8'
+                const value = totalCounts[status] ?? 0  // Use totalCounts instead of counts
+                const percentage = totalSitesForSummary > 0 ? Math.round((value / totalSitesForSummary) * 100) : 0
+                const isSelected = (filterContext.statusFilters || []).includes(status)
+                const displayLabel = getStatusDisplayLabel(status as HermesMapStatusLabel)
+
+                return (
+                  <div 
+                    key={status} 
+                    className={`flex items-center justify-between gap-3 rounded-lg p-2 transition-all duration-200 cursor-pointer hover:bg-white/5 ${
+                      isSelected ? 'bg-white/10 ring-1 ring-white/20' : ''
+                    }`}
+                    onClick={() => handleStatusClick(status)}
+                    title={`Click to ${isSelected ? 'remove' : 'add'} ${displayLabel} filter`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="inline-flex h-3.5 w-3.5 rounded-full"
+                        style={{ backgroundColor: color }}
+                        aria-hidden="true"
+                      />
+                      <span className={`text-xs font-medium tracking-[0.24em] ${
+                        isSelected ? 'text-white' : 'text-white/70'
+                      }`}>{displayLabel}</span>
+                    </div>
+                    <div className="flex items-baseline gap-2 font-semibold">
+                      <span className="text-base text-white">{value.toLocaleString('en-US')}</span>
+                      <span className="text-[11px] text-white/50">{percentage}%</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-[11px] leading-relaxed text-white/70">
+              <p className="font-semibold uppercase tracking-[0.26em] text-white/80">Status Legend</p>
+              <ul className="mt-3 space-y-2">
+                <li><span className="font-semibold text-white">{getStatusDisplayLabel('ACTIVE')}</span> - Site has reached the activation milestone.</li>
+                <li><span className="font-semibold text-white">{getStatusDisplayLabel('READY')}</span> - Site has reached the readiness milestone.</li>
+                <li><span className="font-semibold text-white">RFI</span> - CAF acceptance received.</li>
+                <li><span className="font-semibold text-white">SOW</span> - Total registered scope of work.</li>
+              </ul>
+              {invalidCoordinates > 0 && (
+                <div className="mt-3 pt-3 border-t border-white/10">
+                  <p className="text-amber-300 font-medium">
+                    {invalidCoordinates} sites are excluded from the map because of invalid coordinates.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {error && (
+              <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] font-medium text-rose-100">
+                Failed to load map data: {error}
+              </div>
+            )}
+          </aside>
+        </div>
+      </main>
+    </div>
+  )
+}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useTransition, useRef } from "react"
+import { useEffect, useState, useCallback, useTransition, useRef, type CSSProperties } from "react"
 import { Search, Tag, X } from "lucide-react"
 import { MultiSelect } from "@/components/ui/MultiSelect"
 import { useDebounce } from "@/hooks/useDebounce"
@@ -34,6 +34,8 @@ export interface FilterBarProps {
   /** When true (e.g. Hermes page), render all filters in one horizontal row with horizontal scroll on narrow viewports. Only applies to variant "default". */
   singleRow?: boolean
   endpoint?: string
+  /** Filter fields to omit from UI and active-filter chips (dashboard-specific) */
+  hiddenFilters?: ReadonlyArray<keyof FilterValue>
 }
 
 // Tipe data filter options
@@ -109,9 +111,11 @@ const truncateText = (text: string | undefined | null, maxLength: number = 20): 
   return text.substring(0, maxLength - 3) + '...';
 }
 
-export function FilterBar({ value, onChange, onReset, variant = "default", singleRow = false, endpoint = "/api/filters" }: FilterBarProps) {
+export function FilterBar({ value, onChange, onReset, variant = "default", singleRow = false, endpoint = "/api/filters", hiddenFilters = [] }: FilterBarProps) {
   const [, startTransition] = useTransition()
   const cacheKey = `${variant}:${endpoint}`
+  const hiddenFilterSet = new Set(hiddenFilters)
+  const isFilterHidden = (key: keyof FilterValue) => hiddenFilterSet.has(key)
   // State lokal untuk search input (sebelum debounce)
   const [searchInput, setSearchInput] = useState(value.q)
   
@@ -374,34 +378,51 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
   // Cek apakah ada filter aktif
   const hasActiveFilters = 
     value.q !== "" || 
-    (value.vendor_name?.length || 0) > 0 || 
-    (value.program_report?.length || 0) > 0 || 
-    (value.imp_ttp?.length || 0) > 0 ||
-    (value.nano_cluster?.length || 0) > 0 ||
-    (value.region?.length || 0) > 0 || // Deprecated: kept for backward compatibility
-    (value.year?.length || 0) > 0 ||
-    (value.circle?.length || 0) > 0 || // New: circle filter
+    (!isFilterHidden('vendor_name') && (value.vendor_name?.length || 0) > 0) || 
+    (!isFilterHidden('program_report') && (value.program_report?.length || 0) > 0) || 
+    (!isFilterHidden('imp_ttp') && (value.imp_ttp?.length || 0) > 0) ||
+    (!isFilterHidden('nano_cluster') && (value.nano_cluster?.length || 0) > 0) ||
+    (!isFilterHidden('region') && (value.region?.length || 0) > 0) ||
+    (!isFilterHidden('year') && (value.year?.length || 0) > 0) ||
+    (!isFilterHidden('circle') && (value.circle?.length || 0) > 0) ||
     (value.status?.length || 0) > 0 ||
-    (value.site_category?.length || 0) > 0 ||
-    (value.ran_score?.length || 0) > 0 ||
-    (value.pm_indosat?.length || 0) > 0 ||
-    (value.wbs_status?.length || 0) > 0 ||
-    (value.priority_congest_urgent?.length || 0) > 0 ||
-    (value.trial_gb_factory?.length || 0) > 0
+    (!isFilterHidden('site_category') && (value.site_category?.length || 0) > 0) ||
+    (!isFilterHidden('ran_score') && (value.ran_score?.length || 0) > 0) ||
+    (!isFilterHidden('pm_indosat') && (value.pm_indosat?.length || 0) > 0) ||
+    (!isFilterHidden('wbs_status') && (value.wbs_status?.length || 0) > 0) ||
+    (!isFilterHidden('priority_congest_urgent') && (value.priority_congest_urgent?.length || 0) > 0) ||
+    (!isFilterHidden('trial_gb_factory') && (value.trial_gb_factory?.length || 0) > 0)
 
-  // 6 columns on sm+: Search + five primary filters fit one row (5 cols was one short and wrapped e.g. RAN Score alone).
-  const rowGridClass =
-    "grid grid-cols-2 sm:grid-cols-6 gap-x-2 gap-y-2.5 text-xs flex-shrink-0 w-full items-center"
-  const cellClass = "min-w-0"
+  const singleRowFilterCount = [
+    'vendor_name',
+    'program_report',
+    'imp_ttp',
+    'nano_cluster',
+    'circle',
+    'year',
+    'ran_score',
+  ].filter((key) => !isFilterHidden(key as keyof FilterValue)).length
 
   // Single-row layout for Hermes (variant default + singleRow): one compact row, no scroll, fits viewport
   const isHermesSingleRow = variant === "default" && singleRow
+
+  // Use inline grid columns — dynamic Tailwind arbitrary values (repeat(N,...)) are not generated at build time
+  const singleRowGridStyle: CSSProperties = {
+    gridTemplateColumns: `minmax(0, 1.4fr) repeat(${singleRowFilterCount}, minmax(0, 1fr)) auto`,
+  }
+
+  const rowGridClass =
+    "grid grid-cols-2 sm:grid-cols-6 gap-x-2 gap-y-2.5 text-xs flex-shrink-0 w-full items-center"
+  const cellClass = "min-w-0"
 
   return (
     <div className="h-full flex flex-col min-w-0">
       {isHermesSingleRow ? (
         /* Hermes: all filters in one row — CSS Grid so everything fits without horizontal scroll */
-        <div className="grid grid-cols-[minmax(0,1.4fr)_repeat(7,minmax(0,1fr))_auto] gap-1.5 w-full items-center text-xs">
+        <div
+          className="grid gap-1.5 w-full items-center text-xs"
+          style={singleRowGridStyle}
+        >
           <div className="min-w-0 relative">
             <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
             <input
@@ -425,9 +446,11 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
           <div className="min-w-0">
             <MultiSelect options={options.vendors} selected={value.vendor_name} placeholder="Vendor" onChange={handleVendorChange} disabled={false} width="w-full" staticLabel />
           </div>
-          <div className="min-w-0">
-            <MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel />
-          </div>
+          {!isFilterHidden('program_report') && (
+            <div className="min-w-0">
+              <MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel />
+            </div>
+          )}
           <div className="min-w-0">
             <MultiSelect options={options.cities} selected={value.imp_ttp} placeholder="City" onChange={handleCityChange} disabled={false} width="w-full" staticLabel />
           </div>
@@ -483,7 +506,9 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
             {variant === "aop" ? (
               <>
                 <div className={cellClass}><MultiSelect options={options.vendors} selected={value.vendor_name} placeholder="Vendor" onChange={handleVendorChange} disabled={false} width="w-full" staticLabel /></div>
-                <div className={cellClass}><MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel /></div>
+                {!isFilterHidden('program_report') && (
+                  <div className={cellClass}><MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel /></div>
+                )}
                 <div className={cellClass}><MultiSelect options={options.circles} selected={value.circle ?? []} placeholder="Circle" onChange={handleCircleChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.siteCategories || []} selected={value.site_category ?? []} placeholder="Site Category" onChange={handleSiteCategoryChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel /></div>
@@ -491,7 +516,9 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
             ) : (
               <>
                 <div className={cellClass}><MultiSelect options={options.vendors} selected={value.vendor_name} placeholder="Vendor" onChange={handleVendorChange} disabled={false} width="w-full" staticLabel /></div>
-                <div className={cellClass}><MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel /></div>
+                {!isFilterHidden('program_report') && (
+                  <div className={cellClass}><MultiSelect options={options.programs} selected={value.program_report} placeholder="Program" onChange={handleProgramChange} disabled={false} width="w-full" staticLabel /></div>
+                )}
                 <div className={cellClass}><MultiSelect options={options.cities} selected={value.imp_ttp} placeholder="City" onChange={handleCityChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.nanoClusters} selected={value.nano_cluster} placeholder="Cluster" onChange={handleNanoClusterChange} disabled={false} width="w-full" staticLabel /></div>
                 <div className={cellClass}><MultiSelect options={options.circles} selected={value.circle || []} placeholder="Circle" onChange={handleCircleChange} disabled={false} width="w-full" staticLabel /></div>
@@ -587,7 +614,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
             </div>
           ))}
           
-          {value.program_report?.map(program => (
+          {!isFilterHidden('program_report') && value.program_report?.map(program => (
             <div 
               key={`program-${program}`} 
               className="bg-green-500/20 text-green-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"

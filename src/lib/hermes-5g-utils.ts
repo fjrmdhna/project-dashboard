@@ -5,6 +5,10 @@ import {
   normalizeRanScoreForHermesFilter,
   applyRanScoreFilterByProgramReport,
 } from './hermes-ran-score-filter';
+import {
+  getDataScopeCacheKey,
+  type HermesDashboardDataScope,
+} from './hermes-dashboard-scope';
 
 // Helper function to normalize circle values to Title Case (consistent with AOP)
 const formatCircleValue = (value: string): string =>
@@ -360,68 +364,111 @@ export async function getHermes5GStats() {
 
 // Get Available Filter Options
 const FILTER_OPTIONS_CACHE_TTL_MS = 5 * 60 * 1000
-let filterOptionsCache: { fetchedAt: number; value: FilterOptionsResponse } | null = null
+const filterOptionsCache = new Map<string, { fetchedAt: number; value: FilterOptionsResponse }>()
 
-export async function getFilterOptions(options: { forceRefresh?: boolean } = {}): Promise<FilterOptionsResponse> {
+export async function getFilterOptions(
+  options: { forceRefresh?: boolean; dataScope?: HermesDashboardDataScope } = {}
+): Promise<FilterOptionsResponse> {
   try {
     const now = Date.now()
-    if (!options.forceRefresh && filterOptionsCache && (now - filterOptionsCache.fetchedAt) < FILTER_OPTIONS_CACHE_TTL_MS) {
-      return filterOptionsCache.value
+    const cacheKey = getDataScopeCacheKey(options.dataScope)
+    const cached = filterOptionsCache.get(cacheKey)
+    if (!options.forceRefresh && cached && (now - cached.fetchedAt) < FILTER_OPTIONS_CACHE_TTL_MS) {
+      return cached.value
+    }
+
+    const scope = options.dataScope
+    const scopeNeedle = scope?.program_report
+      ? (Array.isArray(scope.program_report) ? scope.program_report[0] : scope.program_report)
+      : null
+
+    const withProgramReportScope = <T>(query: T): T => {
+      if (!scope?.program_report || !scopeNeedle) return query
+      if (scope.program_report_match === 'contains') {
+        return (query as { ilike: (column: string, pattern: string) => T }).ilike(
+          'program_report',
+          `%${scopeNeedle}%`
+        )
+      }
+      if (Array.isArray(scope.program_report)) {
+        return (query as { in: (column: string, values: string[]) => T }).in(
+          'program_report',
+          scope.program_report
+        )
+      }
+      return (query as { eq: (column: string, value: string) => T }).eq(
+        'program_report',
+        scopeNeedle
+      )
     }
 
     // Get unique vendors from vendor_name
-    const { data: vendorsData, error: vendorsError } = await supabase
-      .from('site_data_5g')
-      .select('vendor_name')
-      .not('vendor_name', 'is', null)
-      .neq('vendor_name', '');
+    const { data: vendorsData, error: vendorsError } = await withProgramReportScope(
+      supabase
+        .from('site_data_5g')
+        .select('vendor_name')
+        .not('vendor_name', 'is', null)
+        .neq('vendor_name', '')
+    );
     
     // Get unique programs from program_report (no exclusions - all programs included)
-    const { data: programsData, error: programsError } = await supabase
-      .from('site_data_5g')
-      .select('program_report')
-      .not('program_report', 'is', null)
-      .neq('program_report', '');
+    const { data: programsData, error: programsError } = await withProgramReportScope(
+      supabase
+        .from('site_data_5g')
+        .select('program_report')
+        .not('program_report', 'is', null)
+        .neq('program_report', '')
+    );
     
     // Get unique cities from imp_ttp
-    const { data: citiesData, error: citiesError } = await supabase
-      .from('site_data_5g')
-      .select('imp_ttp')
-      .not('imp_ttp', 'is', null)
-      .neq('imp_ttp', '');
+    const { data: citiesData, error: citiesError } = await withProgramReportScope(
+      supabase
+        .from('site_data_5g')
+        .select('imp_ttp')
+        .not('imp_ttp', 'is', null)
+        .neq('imp_ttp', '')
+    );
     
     // Get unique nano clusters from nano_cluster
-    const { data: nanoClustersData, error: nanoClustersError } = await supabase
-      .from('site_data_5g')
-      .select('nano_cluster')
-      .not('nano_cluster', 'is', null)
-      .neq('nano_cluster', '');
+    const { data: nanoClustersData, error: nanoClustersError } = await withProgramReportScope(
+      supabase
+        .from('site_data_5g')
+        .select('nano_cluster')
+        .not('nano_cluster', 'is', null)
+        .neq('nano_cluster', '')
+    );
     
     // Get unique circles from region_circle (replacing region filter)
-    const { data: circlesData, error: circlesError } = await supabase
-      .from('site_data_5g')
-      .select('region_circle')
-      .not('region_circle', 'is', null)
-      .neq('region_circle', '');
+    const { data: circlesData, error: circlesError } = await withProgramReportScope(
+      supabase
+        .from('site_data_5g')
+        .select('region_circle')
+        .not('region_circle', 'is', null)
+        .neq('region_circle', '')
+    );
     
     // Get unique years from year
-    const { data: yearsData, error: yearsError } = await supabase
-      .from('site_data_5g')
-      .select('year')
-      .not('year', 'is', null)
-      .neq('year', '');
+    const { data: yearsData, error: yearsError } = await withProgramReportScope(
+      supabase
+        .from('site_data_5g')
+        .select('year')
+        .not('year', 'is', null)
+        .neq('year', '')
+    );
     
     // RAN Score filter options: derived from program_report ("new site" → New Site, else → Expansion)
-    const { data: programReportsForRanScore, error: ranScoresError } = await supabase
-      .from('site_data_5g')
-      .select('program_report');
+    const { data: programReportsForRanScore, error: ranScoresError } = await withProgramReportScope(
+      supabase.from('site_data_5g').select('program_report')
+    );
     
     // Get unique site categories from site_category
-    const { data: siteCategoriesData, error: siteCategoriesError } = await supabase
-      .from('site_data_5g')
-      .select('site_category')
-      .not('site_category', 'is', null)
-      .neq('site_category', '');
+    const { data: siteCategoriesData, error: siteCategoriesError } = await withProgramReportScope(
+      supabase
+        .from('site_data_5g')
+        .select('site_category')
+        .not('site_category', 'is', null)
+        .neq('site_category', '')
+    );
     
     if (vendorsError || programsError || citiesError || nanoClustersError || circlesError || yearsError || ranScoresError || siteCategoriesError) {
       console.error('Supabase Error:', vendorsError || programsError || citiesError || nanoClustersError || circlesError || yearsError || ranScoresError || siteCategoriesError);
@@ -504,7 +551,7 @@ export async function getFilterOptions(options: { forceRefresh?: boolean } = {})
       data,
       timestamp: new Date().toISOString()
     };
-    filterOptionsCache = { fetchedAt: now, value: response }
+    filterOptionsCache.set(cacheKey, { fetchedAt: now, value: response })
     return response
   } catch (error) {
     console.error('Error getting filter options:', error);
@@ -524,7 +571,7 @@ export async function getFilterOptions(options: { forceRefresh?: boolean } = {})
       timestamp: new Date().toISOString()
     };
     // Cache error responses briefly to prevent hammering Supabase in failure loops
-    filterOptionsCache = { fetchedAt: Date.now(), value: response }
+    filterOptionsCache.set(getDataScopeCacheKey(options.dataScope), { fetchedAt: Date.now(), value: response })
     return response
   }
 }

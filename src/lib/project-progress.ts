@@ -11,6 +11,8 @@ export interface ProjectProgress {
 export interface ProjectProgressFilters {
   program_name?: string | string[]
   program_name_match?: "exact" | "contains" // exact untuk eq, contains untuk ilike
+  program_report?: string | string[]
+  program_report_match?: "exact" | "contains"
   exclude_program_reports?: string[] // Program reports to exclude
   [key: string]: string | string[] | undefined
 }
@@ -70,9 +72,12 @@ async function fetchProjectProgressFromDB(
     // Apply other filters jika ada
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
-        if (value && key !== "program_name_match" && key !== "exclude_program_reports") {
-          // Handle program_name dengan ilike untuk contains match
-          if (key === "program_name" && filters.program_name_match === "contains") {
+        if (value && key !== "program_name_match" && key !== "program_report_match" && key !== "exclude_program_reports") {
+          // Handle program_name / program_report dengan ilike untuk contains match
+          if (
+            (key === "program_name" && filters.program_name_match === "contains") ||
+            (key === "program_report" && filters.program_report_match === "contains")
+          ) {
             const searchValue = Array.isArray(value) ? value[0] : value
             if (searchValue) {
               scopeQuery = scopeQuery.ilike(key, `%${searchValue}%`)
@@ -150,9 +155,12 @@ async function getProjectProgressFallback(
     // Apply other filters jika ada
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
-        if (value && key !== "program_name_match" && key !== "exclude_program_reports") {
-          // Handle program_name dengan ilike untuk contains match
-          if (key === "program_name" && filters.program_name_match === "contains") {
+        if (value && key !== "program_name_match" && key !== "program_report_match" && key !== "exclude_program_reports") {
+          // Handle program_name / program_report dengan ilike untuk contains match
+          if (
+            (key === "program_name" && filters.program_name_match === "contains") ||
+            (key === "program_report" && filters.program_report_match === "contains")
+          ) {
             const searchValue = Array.isArray(value) ? value[0] : value
             if (searchValue) {
               query = query.ilike(key, `%${searchValue}%`)

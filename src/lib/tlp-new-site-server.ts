@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { supabase as publicSupabase } from "@/lib/supabase"
+import type { TlpSiteFilters } from "@/lib/tlp-new-site-filters"
 
 export function hasNonEmptyValue(value: unknown): boolean {
   if (value === null || value === undefined) {
@@ -22,4 +23,13 @@ export function getTlpSupabaseClient() {
       autoRefreshToken: false,
     },
   })
+}
+
+/** Push year filter to Postgres (indexed column year_from_wo). */
+export function applyTlpYearDbFilter<Q>(query: Q, filters: TlpSiteFilters): Q {
+  if (Array.isArray(filters.year) && filters.year.length > 0) {
+    const filtered = query as Q & { in: (column: string, values: number[]) => Q }
+    return filtered.in("year_from_wo", filters.year)
+  }
+  return query
 }

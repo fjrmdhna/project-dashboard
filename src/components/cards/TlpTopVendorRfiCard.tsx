@@ -2,8 +2,22 @@
 
 import { Building2 } from "lucide-react"
 import { useMemo } from "react"
-import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 import type { TlpTopVendorRfiItem } from "@/hooks/useTlpTopVendorRfi"
+import { TLP_ACTUAL_COLOR, TLP_PLAN_COLOR } from "@/lib/tlp-chart-colors"
+import { sortVendorsChartRows } from "@/lib/tlp-vendor-aggregation"
+
+const PLAN_COLOR = TLP_PLAN_COLOR
+const ACTUAL_COLOR = TLP_ACTUAL_COLOR
 
 interface TlpTopVendorRfiCardProps {
   rows: TlpTopVendorRfiItem[]
@@ -12,22 +26,40 @@ interface TlpTopVendorRfiCardProps {
 }
 
 export function TlpTopVendorRfiCard({ rows, isLoading = false, error }: TlpTopVendorRfiCardProps) {
-  const chartData = useMemo(() => {
-    return [...rows].sort((a, b) => b.rfi - a.rfi).slice(0, 5)
-  }, [rows])
+  const chartData = useMemo(() => sortVendorsChartRows(rows), [rows])
+
+  const totalPlanRfi = useMemo(
+    () => chartData.reduce((sum, row) => sum + row.plan, 0),
+    [chartData]
+  )
+  const totalActualRfi = useMemo(
+    () => chartData.reduce((sum, row) => sum + row.actual, 0),
+    [chartData]
+  )
 
   return (
     <div
       className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0"
       style={{ padding: "calc(var(--wb-card-padding) - 4px)" }}
     >
-      <div className="mb-2 flex shrink-0 items-center gap-2">
-        <div className="rounded-lg bg-emerald-500/20 p-1">
-          <Building2 className="h-3.5 w-3.5 text-emerald-300" />
+      <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <div className="rounded-lg bg-purple-500/20 p-1">
+            <Building2 className="h-3.5 w-3.5 text-purple-300" />
+          </div>
+          <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-300">
+            Top 5 Vendor · Plan vs Actual
+          </span>
         </div>
-        <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-          Top 5 Vendor by RFI
-        </span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-semibold text-white/80">
+          <span>
+            Plan: <span style={{ color: PLAN_COLOR }}>{totalPlanRfi.toLocaleString()}</span>
+          </span>
+          <span className="text-white/40">|</span>
+          <span>
+            Actual: <span style={{ color: ACTUAL_COLOR }}>{totalActualRfi.toLocaleString()}</span>
+          </span>
+        </div>
       </div>
 
       {isLoading ? (
@@ -41,25 +73,29 @@ export function TlpTopVendorRfiCard({ rows, isLoading = false, error }: TlpTopVe
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={chartData}
-              layout="vertical"
-              margin={{ top: 8, right: 14, left: 4, bottom: 8 }}
-              barCategoryGap="18%"
+              margin={{ top: 18, right: 8, left: 6, bottom: 32 }}
+              barCategoryGap="22%"
+              barGap={4}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" horizontal={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={false} />
               <XAxis
-                type="number"
-                tick={{ fill: "#A7B0C2", fontSize: 10 }}
-                tickLine={false}
+                dataKey="vendor"
+                interval={0}
+                minTickGap={0}
+                angle={-25}
+                textAnchor="end"
+                tick={{ fill: "#D1D5DB", fontSize: 9, fontWeight: 600 }}
                 axisLine={{ stroke: "rgba(255,255,255,0.18)" }}
-                tickFormatter={(value: number) => value.toLocaleString()}
+                tickLine={false}
+                tickMargin={8}
+                height={52}
               />
               <YAxis
-                type="category"
-                dataKey="vendor"
-                tick={{ fill: "#D1D5DB", fontSize: 10, fontWeight: 600 }}
-                tickLine={false}
+                tick={{ fill: "#A7B0C2", fontSize: 10 }}
                 axisLine={false}
-                width={72}
+                tickLine={false}
+                width={38}
+                tickFormatter={(value: number) => value.toLocaleString()}
               />
               <Tooltip
                 cursor={{ fill: "rgba(255,255,255,0.04)" }}
@@ -70,22 +106,30 @@ export function TlpTopVendorRfiCard({ rows, isLoading = false, error }: TlpTopVe
                   color: "#ffffff",
                   fontSize: "11px",
                 }}
-                formatter={(value: number) => [value.toLocaleString(), "RFI"]}
+                formatter={(value: number, name: string) => [value.toLocaleString(), name]}
+              />
+              <Legend
+                verticalAlign="bottom"
+                height={28}
+                wrapperStyle={{ paddingTop: 4 }}
+                formatter={(value) => <span className="text-[9px] text-white/80">{value}</span>}
               />
               <Bar
-                dataKey="rfi"
-                fill="#4CAF50"
-                radius={[0, 6, 6, 0]}
-                maxBarSize={30}
-              >
-                <LabelList
-                  dataKey="rfi"
-                  position="right"
-                  fill="#E5E7EB"
-                  fontSize={10}
-                  fontWeight={700}
-                />
-              </Bar>
+                dataKey="plan"
+                name="Plan"
+                fill={PLAN_COLOR}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={22}
+                label={{ position: "top", fill: PLAN_COLOR, fontSize: 9, fontWeight: 700 }}
+              />
+              <Bar
+                dataKey="actual"
+                name="Actual"
+                fill={ACTUAL_COLOR}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={22}
+                label={{ position: "top", fill: "#E5E7EB", fontSize: 9, fontWeight: 700 }}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>

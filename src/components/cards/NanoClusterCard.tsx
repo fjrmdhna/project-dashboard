@@ -2,6 +2,12 @@
 
 import { useMemo } from "react"
 import { Hourglass, Target, Hexagon } from "lucide-react"
+import {
+  isMilestoneAchieved,
+  resolveMilestoneColumns,
+  type HermesMilestoneFields,
+} from "@/lib/hermes-milestone-fields"
+import { getValidNanoClusterName } from "@/lib/nano-cluster"
 
 // Tipe data untuk mode input langsung counts
 type CountsProps = {
@@ -13,15 +19,22 @@ type CountsProps = {
   count_completed: number
 }
 
+type ClusterAggregate = { total: number; ready: number; activated: number }
+
 // Tipe data untuk mode input dari rows
-type Row = { 
+type Row = {
   nano_cluster?: string | null
   imp_integ_af?: string | null
   rfs_af?: string | null
+  readiness_2600_af?: string | null
+  activation_2600_af?: string | null
 }
 
 type FromRowsProps = {
   rows: Row[]
+  milestoneFields?: HermesMilestoneFields
+  /** Pre-aggregated cluster data from useHermes5GDataOptimized (preferred) */
+  aggregatedByCluster?: Map<string, ClusterAggregate>
 }
 
 // Union type untuk props komponen
@@ -30,6 +43,65 @@ type NanoClusterCardProps = CountsProps | FromRowsProps
 // Type guard untuk menentukan jenis props
 function isFromRows(props: NanoClusterCardProps): props is FromRowsProps {
   return 'rows' in props
+}
+
+function computeNanoClusterMetrics(
+  clusterMap: Map<string, ClusterAggregate>
+): CountsProps {
+  let count_lt50 = 0
+  let count_50_80 = 0
+  let count_80_99 = 0
+  let count_100 = 0
+  let count_completed = 0
+
+  clusterMap.forEach((data) => {
+    const readinessPct = data.total > 0 ? (data.ready / data.total) * 100 : 0
+    const activatedPct = data.total > 0 ? (data.activated / data.total) * 100 : 0
+
+    if (readinessPct < 50) {
+      count_lt50++
+    } else if (readinessPct < 80) {
+      count_50_80++
+    } else if (readinessPct < 100) {
+      count_80_99++
+    } else if (readinessPct === 100) {
+      count_100++
+    }
+
+    if (activatedPct === 100) {
+      count_completed++
+    }
+  })
+
+  return {
+    totalClusters: clusterMap.size,
+    count_lt50,
+    count_50_80,
+    count_80_99,
+    count_100,
+    count_completed,
+  }
+}
+
+function aggregateClustersFromRows(
+  rows: Row[],
+  milestoneFields?: HermesMilestoneFields
+): Map<string, ClusterAggregate> {
+  const { readinessColumn, activatedColumn } = resolveMilestoneColumns(milestoneFields)
+  const clusterMap = new Map<string, ClusterAggregate>()
+
+  rows.forEach((row) => {
+    const clusterName = getValidNanoClusterName(row.nano_cluster)
+    if (!clusterName) return
+
+    const clusterData = clusterMap.get(clusterName) || { total: 0, ready: 0, activated: 0 }
+    clusterData.total++
+    if (isMilestoneAchieved(row, readinessColumn)) clusterData.ready++
+    if (isMilestoneAchieved(row, activatedColumn)) clusterData.activated++
+    clusterMap.set(clusterName, clusterData)
+  })
+
+  return clusterMap
 }
 
 // Komponen metrik individual
@@ -61,95 +133,46 @@ function MetricItem({ icon, value, label, bgColor, textColor, className = "" }: 
 }
 
 export function NanoClusterCard(props: NanoClusterCardProps) {
-  // Hitung metrics dari rows jika dalam mode FromRowsProps
   const metrics = useMemo(() => {
     if (!isFromRows(props)) {
       return props
     }
 
-    const { rows } = props
-    const clusterMap = new Map<string, { total: number, ready: number, activated: number }>()
-    
-    // Iterasi setiap row untuk agregasi data per cluster
-    rows.forEach(row => {
-      const clusterName = row.nano_cluster
-      
-      // Skip rows tanpa nano_cluster
-      if (!clusterName) return
-      
-      // Ambil atau inisialisasi data cluster
-      const clusterData = clusterMap.get(clusterName) || { total: 0, ready: 0, activated: 0 }
-      
-      // Update counters
-      clusterData.total++
-      if (row.imp_integ_af !== null && row.imp_integ_af !== undefined) {
-        clusterData.ready++
-      }
-      if (row.rfs_af !== null && row.rfs_af !== undefined) {
-        clusterData.activated++
-      }
-      
-      // Simpan kembali ke map
-      clusterMap.set(clusterName, clusterData)
-    })
-    
-    // Debug logging untuk melihat data cluster
-    console.log(`NanoCluster Data: Total rows processed: ${rows.length}`)
-    console.log(`NanoCluster Data: Unique clusters found: ${clusterMap.size}`)
-    clusterMap.forEach((data, clusterName) => {
-      const readinessPct = data.total > 0 ? (data.ready / data.total) * 100 : 0
-      if (readinessPct === 100) {
-        console.log(`Cluster ${clusterName}: total=${data.total}, ready=${data.ready}, activated=${data.activated}`)
-      }
-    })
-    
-    
-    // Hitung metrics berdasarkan persentase readiness dan activation
-    let count_lt50 = 0
-    let count_50_80 = 0
-    let count_80_99 = 0
-    let count_100 = 0
-    let count_completed = 0
-    
-    clusterMap.forEach((data, clusterName) => {
-      const readinessPct = data.total > 0 ? (data.ready / data.total) * 100 : 0
-      const activatedPct = data.total > 0 ? (data.activated / data.total) * 100 : 0
-      
-      // Debug logging untuk cluster dengan readiness 100%
-      if (readinessPct === 100) {
-        console.log(`Cluster ${clusterName}: total=${data.total}, ready=${data.ready}, activated=${data.activated}, readinessPct=${readinessPct}%, activatedPct=${activatedPct}%`)
-      }
-      
-      // Binning berdasarkan persentase readiness (tanpa return)
-      if (readinessPct < 50) {
-        count_lt50++
-      } else if (readinessPct < 80) {
-        count_50_80++
-      } else if (readinessPct < 100) {
-        count_80_99++
-      } else if (readinessPct === 100) {
-        count_100++
-      }
-      
-      // Cluster yang 100% activated juga dihitung sebagai completed
-      if (activatedPct === 100) {
-        count_completed++
-      }
-    })
-    
-    // Debug logging untuk total counts
-    console.log(`NanoCluster Debug: totalClusters=${clusterMap.size}, count_100=${count_100}, count_completed=${count_completed}`)
-    
-    
-    return {
-      totalClusters: clusterMap.size,
-      count_lt50,
-      count_50_80,
-      count_80_99,
-      count_100,
-      count_completed
-    }
-  }, [isFromRows(props) ? props.rows : null])
+    const clusterMap =
+      props.aggregatedByCluster && props.aggregatedByCluster.size > 0
+        ? props.aggregatedByCluster
+        : aggregateClustersFromRows(props.rows, props.milestoneFields)
+
+    return computeNanoClusterMetrics(clusterMap)
+  }, [
+    isFromRows(props) ? props.rows : null,
+    isFromRows(props) ? props.milestoneFields : null,
+    isFromRows(props) ? props.aggregatedByCluster : null,
+  ])
+
+  const hasNoClusterData = metrics.totalClusters === 0
+
+  if (hasNoClusterData) {
+    return (
+      <div className="rounded-lg bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col text-white min-w-0 p-1 overflow-hidden">
+        <div className="flex items-center justify-between mb-1 flex-shrink-0">
+          <div className="flex items-center gap-1">
+            <div className="bg-indigo-500/20 p-0.5 rounded-sm">
+              <Hexagon className="h-2.5 w-2.5 text-indigo-400" />
+            </div>
+            <div className="text-[8px] font-semibold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded-full">
+              NANO CLUSTER
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center text-center px-2">
+          <p className="text-[10px] text-white/50 leading-snug">
+            No nano cluster data
+          </p>
+        </div>
+      </div>
+    )
+  }
   
   return (
     <div className="rounded-lg bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col text-white min-w-0 p-1 overflow-hidden">

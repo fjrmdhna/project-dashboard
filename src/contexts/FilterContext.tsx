@@ -9,10 +9,12 @@ const FilterContext = createContext<FilterContextType | undefined>(undefined)
 // Filter Provider Props
 interface FilterProviderProps {
   children: ReactNode
+  /** Unique localStorage key per dashboard to avoid filter state collisions */
+  storageKey?: string
 }
 
 // Filter Provider Component
-export function FilterProvider({ children }: FilterProviderProps) {
+export function FilterProvider({ children, storageKey = 'hermes-filter-state' }: FilterProviderProps) {
   const [isHydrated, setIsHydrated] = useState(false)
   
   // Load filters from localStorage on initialization
@@ -26,7 +28,7 @@ export function FilterProvider({ children }: FilterProviderProps) {
     setIsHydrated(true)
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('hermes-filter-state')
+        const saved = localStorage.getItem(storageKey)
         if (saved) {
           const parsed = JSON.parse(saved)
           setFiltersState(prev => ({ ...DEFAULT_FILTERS, ...prev, ...parsed }))
@@ -35,18 +37,18 @@ export function FilterProvider({ children }: FilterProviderProps) {
         console.warn('Failed to load filter state from localStorage:', error)
       }
     }
-  }, [])
+  }, [storageKey])
 
   // Save to localStorage whenever filters change
   useEffect(() => {
     if (isHydrated && typeof window !== 'undefined') {
       try {
-        localStorage.setItem('hermes-filter-state', JSON.stringify(filters))
+        localStorage.setItem(storageKey, JSON.stringify(filters))
       } catch (error) {
         console.warn('Failed to save filter state to localStorage:', error)
       }
     }
-  }, [filters, isHydrated])
+  }, [filters, isHydrated, storageKey])
 
   // Unified debouncing: update debouncedFilters 300ms after filters change
   useEffect(() => {

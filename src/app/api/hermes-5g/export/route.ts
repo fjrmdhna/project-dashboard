@@ -32,6 +32,11 @@ function buildFilterQuery(searchParams: URLSearchParams) {
     query = query.in('program_report', programReports)
   }
 
+  const programReportContains = searchParams.get('program_report_contains')
+  if (programReportContains?.trim()) {
+    query = query.ilike('program_report', `%${programReportContains.trim()}%`)
+  }
+
   if (impTtps.length > 0) {
     query = query.in('imp_ttp', impTtps)
   }

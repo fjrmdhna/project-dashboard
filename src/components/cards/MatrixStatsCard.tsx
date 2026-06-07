@@ -2,6 +2,11 @@
 
 import { useMemo } from "react"
 import { BarChart3 } from "lucide-react"
+import {
+  isMilestoneAchieved,
+  resolveMilestoneColumns,
+  type HermesMilestoneFields,
+} from "@/lib/hermes-milestone-fields"
 
 export interface Row {
   system_key: string
@@ -21,6 +26,8 @@ export interface Row {
   endorse_af?: string | null
   pac_accepted_af?: string | null
   patp_accepted_af?: string | null
+  readiness_2600_af?: string | null
+  activation_2600_af?: string | null
   vendor_name?: string | null
   program_report?: string | null
   imp_ttp?: string | null
@@ -32,6 +39,7 @@ export interface MatrixStatsCardProps {
   rows: Row[]
   patpCount?: number
   variant?: "default" | "aop" | "tlp"
+  milestoneFields?: HermesMilestoneFields
   stats?: {
     totalSites?: number
     // AOP variant stats
@@ -50,6 +58,7 @@ export interface MatrixStatsCardProps {
     rfs?: number
     rfa?: number   // RFA - Ready for Acceptance (ready_for_acpt_date)
     activated?: number
+    readiness?: number
     rfc?: number
     fatp?: number  // FATP (fatp_accepted_af)
     patp?: number  // PATP (patp_accepted_af)
@@ -150,8 +159,16 @@ function normalizeSiteStatus(value: string | null | undefined): string {
   return normalized
 }
 
-export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stats: providedStats }: MatrixStatsCardProps) {
+export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", milestoneFields, stats: providedStats }: MatrixStatsCardProps) {
+  const { readinessColumn, activatedColumn } = resolveMilestoneColumns(milestoneFields)
+
   const stats = useMemo(() => {
+    const countReadiness = (data: Row[]) =>
+      data.filter((row) => isMilestoneAchieved(row, readinessColumn)).length
+
+    const countActivated = (data: Row[]) =>
+      data.filter((row) => isMilestoneAchieved(row, activatedColumn)).length
+
     if (variant === "tlp" && providedStats) {
       return {
         totalSites: providedStats.totalSites ?? rows.length,
@@ -231,8 +248,8 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
         caf: providedStats.caf ?? rows.filter(row => row.caf_approved).length,
         mos: providedStats.mos ?? rows.filter(row => row.mos_af).length,
         install: providedStats.install ?? rows.filter(row => row.ic_000040_af).length,
-        readiness: rows.filter(row => row.imp_integ_af).length,
-        activated: providedStats.activated ?? providedStats.rfs ?? rows.filter(row => row.rfs_af).length,
+        readiness: providedStats.readiness ?? countReadiness(rows),
+        activated: providedStats.activated ?? providedStats.rfs ?? countActivated(rows),
         rfa: providedStats.rfa ?? rows.filter(row => row.ready_for_acpt_date).length,
         rfc: providedStats.rfc ?? rows.filter(row => row.rfc_approved).length,
         fatp: providedStats.fatp ?? rows.filter(row => row.fatp_accepted_af).length,
@@ -280,8 +297,8 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
     const caf = rows.filter(row => row.caf_approved).length
     const mos = rows.filter(row => row.mos_af).length
     const install = rows.filter(row => row.ic_000040_af).length
-    const readiness = rows.filter(row => row.imp_integ_af).length
-    const activated = rows.filter(row => row.rfs_af).length
+    const readiness = countReadiness(rows)
+    const activated = countActivated(rows)
     const rfa = rows.filter(row => row.ready_for_acpt_date).length
     const rfc = rows.filter(row => row.rfc_approved).length
     const fatp = rows.filter(row => row.fatp_accepted_af).length
@@ -307,10 +324,18 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", stat
       pac
     }
     }
-  }, [rows, patpCount, variant, providedStats])
+  }, [rows, patpCount, variant, providedStats, readinessColumn, activatedColumn])
 
-  const metricConfig =
-    variant === "aop" ? AOP_METRIC_CONFIG : variant === "tlp" ? TLP_METRIC_CONFIG : DEFAULT_METRIC_CONFIG
+  const metricConfig = useMemo(() => {
+    const base =
+      variant === "aop" ? AOP_METRIC_CONFIG : variant === "tlp" ? TLP_METRIC_CONFIG : DEFAULT_METRIC_CONFIG
+    if (!milestoneFields || variant !== "default") return base
+    return base.map((metric) => {
+      if (metric.key === "readiness") return { ...metric, label: milestoneFields.readinessLabel }
+      if (metric.key === "activated") return { ...metric, label: milestoneFields.activatedLabel }
+      return metric
+    })
+  }, [variant, milestoneFields])
 
   const metrics: MetricMap =
     variant === "tlp"

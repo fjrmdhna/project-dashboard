@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getTlpSupabaseClient, hasNonEmptyValue } from "@/lib/tlp-new-site-server"
+import { getRowWoDerivedYear } from "@/lib/tlp-wo-number-year"
 import { getCacheOrFetch } from "@/lib/redis"
 
 type TlpFilterOptions = {
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const forceRefresh = url.searchParams.get("refresh") === "true"
 
-    const cacheKey = "tlp-new-site:filter-options:v1"
+    const cacheKey = "tlp-new-site:filter-options:v2"
     const options = await getCacheOrFetch<TlpFilterOptions>(
       cacheKey + (forceRefresh ? ":refresh" : ""),
       async () => {
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
         while (hasMore) {
           const { data, error } = await supabase
             .from("site_data_tlp")
-            .select("twr_owner, program_name, year, site_category, wbs_status")
+            .select("twr_owner, program_name, wo_number_1, site_category, wbs_status")
             .range(offset, offset + pageSize - 1)
 
           if (error) {
@@ -52,7 +53,8 @@ export async function GET(request: Request) {
           for (const row of data ?? []) {
             if (hasNonEmptyValue(row.twr_owner)) vendors.add(String(row.twr_owner).trim().toUpperCase())
             if (hasNonEmptyValue(row.program_name)) programs.add(String(row.program_name).trim())
-            if (hasNonEmptyValue(row.year)) years.add(String(row.year).trim())
+            const woYear = getRowWoDerivedYear(row)
+            if (woYear !== null) years.add(String(woYear))
             if (hasNonEmptyValue(row.site_category)) siteCategories.add(String(row.site_category).trim())
             if (hasNonEmptyValue(row.wbs_status)) wbsStatus.add(String(row.wbs_status).trim())
           }
@@ -62,11 +64,12 @@ export async function GET(request: Request) {
         }
 
         const toSortedArray = (s: Set<string>) => Array.from(s.values()).sort((a, b) => a.localeCompare(b))
+        const yearsSorted = Array.from(years.values()).sort((a, b) => Number(b) - Number(a))
 
         return {
           vendors: toSortedArray(vendors),
           programs: toSortedArray(programs),
-          years: toSortedArray(years),
+          years: yearsSorted,
           siteCategories: toSortedArray(siteCategories),
           wbsStatus: toSortedArray(wbsStatus),
           cities: [],

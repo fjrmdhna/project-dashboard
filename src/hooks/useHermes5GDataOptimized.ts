@@ -7,6 +7,19 @@ import { fetchWithRetry } from '@/lib/api-utils'
 import { format, subDays } from 'date-fns'
 import { getProgramReportsForDisplayName, getDisplayNameForProgramReport } from '@/lib/hermes-program-mapping'
 import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-5g-utils'
+import { filterRowsByProgramReportScope, type HermesDashboardDataScope } from '@/lib/hermes-dashboard-scope'
+import {
+  isMilestoneAchieved,
+  resolveMilestoneColumns,
+  type HermesMilestoneFields,
+} from '@/lib/hermes-milestone-fields'
+import {
+  getRowDateValue,
+  incrementDailyRunrateCount,
+  resolveDailyRunrateSeries,
+  type HermesProgressCurveFields,
+} from '@/lib/hermes-progress-curve-fields'
+import { getValidNanoClusterName } from '@/lib/nano-cluster'
 
 export interface Hermes5GSiteData extends MatrixRow {
   rfc_approved?: string | null
@@ -19,10 +32,14 @@ export interface Hermes5GSiteData extends MatrixRow {
   mocn_activation_forecast?: string | null  // Baseline for ProgressCurve
   rfs_bf?: string | null                    // Legacy baseline
   rfs_ff?: string | null
+  rfs_forecast?: string | null
+  rfs_forecast_lock?: string | null
   year?: string | null
   region?: string | null // Deprecated: kept for backward compatibility
   region_circle?: string | null // New: circle from region_circle
   issue_category?: string | null
+  readiness_2600_af?: string | null
+  activation_2600_af?: string | null
 }
 
 export interface Hermes5GDataStats {
@@ -101,6 +118,12 @@ export interface UseHermes5GDataOptions {
   siteCategories?: string[] // Site category filter (New Site / Expansion)
   search?: string
   autoFetch?: boolean
+  /** Mandatory program_report scope (dashboard-level, e.g. NR 2600 → 13k only) */
+  dataScope?: HermesDashboardDataScope
+  /** Optional milestone column mapping (e.g. NR 2600 readiness/activation) */
+  milestoneFields?: HermesMilestoneFields
+  /** Optional progress curve / daily runrate column mapping (e.g. NR 2600) */
+  progressCurveFields?: HermesProgressCurveFields
 }
 
 // Default empty stats
@@ -349,13 +372,15 @@ function aggregateDataSinglePass(data: Hermes5GSiteData[]): Hermes5GAggregatedDa
     if (row.rfs_af) cityData.activated++
     byCity.set(city, cityData)
     
-    // === Nano Cluster aggregation ===
-    const cluster = (row.nano_cluster || 'Unknown').trim()
-    const clusterData = byNanoCluster.get(cluster) || { total: 0, ready: 0, activated: 0 }
-    clusterData.total++
-    if (row.imp_integ_af) clusterData.ready++
-    if (row.rfs_af) clusterData.activated++
-    byNanoCluster.set(cluster, clusterData)
+    // === Nano Cluster aggregation (skip rows without nano_cluster) ===
+    const cluster = getValidNanoClusterName(row.nano_cluster)
+    if (cluster) {
+      const clusterData = byNanoCluster.get(cluster) || { total: 0, ready: 0, activated: 0 }
+      clusterData.total++
+      if (row.imp_integ_af) clusterData.ready++
+      if (row.rfs_af) clusterData.activated++
+      byNanoCluster.set(cluster, clusterData)
+    }
     
     // === Vendor aggregation (for VendorLeaderboardCard) ===
     const vendor = row.vendor_name || 'Unknown'
@@ -464,7 +489,13 @@ type Hermes5GAggregationResult = {
 }
 
 // Aggregate + compute stats in a single pass (aligns with AOP best practice)
-function aggregateDataSinglePassWithStats(data: Hermes5GSiteData[]): Hermes5GAggregationResult {
+function aggregateDataSinglePassWithStats(
+  data: Hermes5GSiteData[],
+  milestoneFields?: HermesMilestoneFields,
+  progressCurveFields?: HermesProgressCurveFields,
+): Hermes5GAggregationResult {
+  const { readinessColumn, activatedColumn } = resolveMilestoneColumns(milestoneFields)
+  const dailyRunrateSeries = resolveDailyRunrateSeries(progressCurveFields)
   const byCity = new Map<string, { total: number; ready: number; activated: number }>()
   const byNanoCluster = new Map<string, { total: number; ready: number; activated: number }>()
   const byVendor = new Map<string, { total: number; ready: number; activated: number; forecast: number }>()
@@ -500,8 +531,8 @@ function aggregateDataSinglePassWithStats(data: Hermes5GSiteData[]): Hermes5GAgg
     if (row.caf_approved) caf++
     if (row.mos_af) mos++
     if (row.ic_000040_af) install++
-    if (row.imp_integ_af) readiness++
-    if (row.rfs_af) activated++
+    if (isMilestoneAchieved(row, readinessColumn)) readiness++
+    if (isMilestoneAchieved(row, activatedColumn)) activated++
     if (row.ready_for_acpt_date) rfa++
     if (row.rfc_approved) rfc++
     if (row.fatp_accepted_af) fatp++
@@ -515,24 +546,26 @@ function aggregateDataSinglePassWithStats(data: Hermes5GSiteData[]): Hermes5GAgg
     const city = (row.imp_ttp || 'Unknown').trim()
     const cityData = byCity.get(city) || { total: 0, ready: 0, activated: 0 }
     cityData.total++
-    if (row.imp_integ_af) cityData.ready++
-    if (row.rfs_af) cityData.activated++
+    if (isMilestoneAchieved(row, readinessColumn)) cityData.ready++
+    if (isMilestoneAchieved(row, activatedColumn)) cityData.activated++
     byCity.set(city, cityData)
 
-    // === Nano Cluster aggregation ===
-    const cluster = (row.nano_cluster || 'Unknown').trim()
-    const clusterData = byNanoCluster.get(cluster) || { total: 0, ready: 0, activated: 0 }
-    clusterData.total++
-    if (row.imp_integ_af) clusterData.ready++
-    if (row.rfs_af) clusterData.activated++
-    byNanoCluster.set(cluster, clusterData)
+    // === Nano Cluster aggregation (skip rows without nano_cluster) ===
+    const cluster = getValidNanoClusterName(row.nano_cluster)
+    if (cluster) {
+      const clusterData = byNanoCluster.get(cluster) || { total: 0, ready: 0, activated: 0 }
+      clusterData.total++
+      if (isMilestoneAchieved(row, readinessColumn)) clusterData.ready++
+      if (isMilestoneAchieved(row, activatedColumn)) clusterData.activated++
+      byNanoCluster.set(cluster, clusterData)
+    }
 
     // === Vendor aggregation (for VendorLeaderboardCard) ===
     const vendor = row.vendor_name || 'Unknown'
     const vendorData = byVendor.get(vendor) || { total: 0, ready: 0, activated: 0, forecast: 0 }
     vendorData.total++
-    if (row.imp_integ_af) vendorData.ready++
-    if (row.rfs_af) vendorData.activated++
+    if (isMilestoneAchieved(row, readinessColumn)) vendorData.ready++
+    if (isMilestoneAchieved(row, activatedColumn)) vendorData.activated++
     if (row.rfs_ff) vendorData.forecast++
     byVendor.set(vendor, vendorData)
 
@@ -554,15 +587,13 @@ function aggregateDataSinglePassWithStats(data: Hermes5GSiteData[]): Hermes5GAgg
       const monthData = byMonth.get(month) || { baseline: 0, forecast: 0, actual: 0 }
       monthData.forecast++
       byMonth.set(month, monthData)
-
-      // Daily runrate - forecast
-      try {
-        const dateKey = row.rfs_ff.substring(0, 10) // YYYY-MM-DD
-        if (dateSet.has(dateKey)) {
-          forecastByDate.set(dateKey, (forecastByDate.get(dateKey) || 0) + 1)
-        }
-      } catch { /* skip invalid dates */ }
     }
+
+    incrementDailyRunrateCount(
+      getRowDateValue(row, dailyRunrateSeries.commitmentColumn),
+      dateSet,
+      forecastByDate,
+    )
 
     if (row.rfs_af) {
       totalActual++
@@ -570,15 +601,13 @@ function aggregateDataSinglePassWithStats(data: Hermes5GSiteData[]): Hermes5GAgg
       const monthData = byMonth.get(month) || { baseline: 0, forecast: 0, actual: 0 }
       monthData.actual++
       byMonth.set(month, monthData)
-
-      // Daily runrate - actual
-      try {
-        const dateKey = row.rfs_af.substring(0, 10) // YYYY-MM-DD
-        if (dateSet.has(dateKey)) {
-          actualByDate.set(dateKey, (actualByDate.get(dateKey) || 0) + 1)
-        }
-      } catch { /* skip invalid dates */ }
     }
+
+    incrementDailyRunrateCount(
+      getRowDateValue(row, dailyRunrateSeries.actualColumn),
+      dateSet,
+      actualByDate,
+    )
 
     // === Issue category aggregation ===
     if (row.issue_category) {
@@ -690,7 +719,21 @@ function calculateStatsFromFilteredData(data: Hermes5GSiteData[]): Hermes5GDataS
 }
 
 export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): UseHermes5GDataReturn {
-  const { vendorNames = [], programReports = [], impTtps = [], nanoClusters = [], ranScores = [], years = [], regions = [], circles = [], siteCategories = [], search = '' } = options
+  const {
+    vendorNames = [],
+    programReports = [],
+    impTtps = [],
+    nanoClusters = [],
+    ranScores = [],
+    years = [],
+    regions = [],
+    circles = [],
+    siteCategories = [],
+    search = '',
+    dataScope,
+    milestoneFields,
+    progressCurveFields,
+  } = options
 
   // OPTIMIZATION: Always fetch ALL data (no filter) and filter client-side
   // This makes filter changes instant instead of waiting 15-20s for API
@@ -739,17 +782,20 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
     if (!baseData?.data || baseData.data.length === 0) {
       return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
     }
+
+    const scopedData = filterRowsByProgramReportScope(baseData.data, dataScope)
     
     const hasFilters = vendorNames.length > 0 || programReports.length > 0 ||
                        impTtps.length > 0 || nanoClusters.length > 0 ||
                        ranScores.length > 0 || years.length > 0 || regions.length > 0 || circles.length > 0 || siteCategories.length > 0 || search.length > 0
 
     const dataToUse = hasFilters
-      ? filterDataClientSide(baseData.data, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search)
-      : baseData.data
+      ? filterDataClientSide(scopedData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search)
+      : scopedData
 
-    const aggregationResult = aggregateDataSinglePassWithStats(dataToUse)
-    const stats = hasFilters ? aggregationResult.stats : baseData.stats
+    const aggregationResult = aggregateDataSinglePassWithStats(dataToUse, milestoneFields, progressCurveFields)
+    const hasScope = Boolean(dataScope?.program_report)
+    const stats = hasFilters || hasScope ? aggregationResult.stats : baseData.stats
     const agg = aggregationResult.aggregated
 
     return {
@@ -757,7 +803,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       filteredStats: stats,
       aggregated: agg
     }
-  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search])
+  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search, dataScope, milestoneFields, progressCurveFields])
 
   // Refetch function
   const refetch = useCallback(async () => {

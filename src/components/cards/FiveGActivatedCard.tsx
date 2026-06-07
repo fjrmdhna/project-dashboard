@@ -3,6 +3,11 @@
 import { useMemo, useState } from "react"
 import { BarChart3 } from "lucide-react"
 import {
+  isMilestoneAchieved,
+  resolveMilestoneColumns,
+  type HermesMilestoneFields,
+} from "@/lib/hermes-milestone-fields"
+import {
   BarChart,
   Bar,
   XAxis,
@@ -20,6 +25,7 @@ type Row = {
   nano_cluster?: string | null
   region_circle?: string | null
   rfs_af?: string | null
+  activation_2600_af?: string | null
 }
 
 // Pre-aggregated data from useAopData hook (OPTIMIZATION)
@@ -34,6 +40,7 @@ type Props = {
   dataVariant?: 'default' | 'aop' // Data variant untuk menentukan label dan title
   // OPTIMIZATION: Pre-aggregated data to avoid 41k row iteration
   aggregatedByCircle?: AggregatedByCircle
+  milestoneFields?: HermesMilestoneFields
 }
 
 // Tipe data untuk item chart
@@ -155,7 +162,8 @@ const ActivatedLabel = (props: any) => {
   )
 }
 
-export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default', aggregatedByCircle }: Props) {
+export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default', aggregatedByCircle, milestoneFields }: Props) {
+  const { activatedColumn } = resolveMilestoneColumns(milestoneFields)
   const [pageIndex, setPageIndex] = useState(0)
 
   // Agregasi data untuk chart - OPTIMIZED: Use pre-aggregated data if available
@@ -186,7 +194,7 @@ export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city', dat
       const location = variant === 'circle' 
         ? normalizeCircle(row.nano_cluster || row.region_circle)
         : normalizeCity(row.imp_ttp)
-      const isActivated = !!row.rfs_af
+      const isActivated = isMilestoneAchieved(row, activatedColumn)
       
       const locationData = locationMap.get(location) || { ny: 0, act: 0 }
       
@@ -210,7 +218,7 @@ export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city', dat
     return result.sort((a, b) => 
       (b.act || 0) + (b.ny || 0) - ((a.act || 0) + (a.ny || 0))
     )
-  }, [rows, variant, aggregatedByCircle])
+  }, [rows, variant, aggregatedByCircle, activatedColumn])
 
   const totalPages = useMemo(() => {
     if (!maxCities || maxCities <= 0) return 1
@@ -247,8 +255,8 @@ export function FiveGActivatedCard({ rows, maxCities = 10, variant = 'city', dat
     if (variant === 'circle') {
       return 'Activation by Circle'
     }
-    return '5G Activation by City'
-  }, [variant, dataVariant])
+    return milestoneFields?.activatedCardTitle ?? '5G Activation by City'
+  }, [variant, dataVariant, milestoneFields])
   
   const dataKey = variant === 'circle' ? 'circle' : 'city'
   

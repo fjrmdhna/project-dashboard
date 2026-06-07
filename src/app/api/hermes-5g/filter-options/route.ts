@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getFilterOptions } from '@/lib/hermes-5g-utils'
 import { getCache, setCache } from '@/lib/redis'
+import {
+  getDataScopeCacheKey,
+  parseDataScopeFromSearchParams,
+} from '@/lib/hermes-dashboard-scope'
 
 type CachedHermesFilterOptions = {
   data: {
@@ -17,16 +21,24 @@ type CachedHermesFilterOptions = {
   timestamp: string
 }
 
-const FILTER_OPTIONS_CACHE_KEY = 'hermes:filter-options:v1'
 const FILTER_OPTIONS_CACHE_TTL_SECONDS = 300
+
+function getFilterOptionsCacheKey(scopeKey: string): string {
+  return scopeKey === 'all'
+    ? 'hermes:filter-options:v1'
+    : `hermes:filter-options:v1:${scopeKey}`
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const forceRefresh = searchParams.get('refresh') === 'true'
+    const dataScope = parseDataScopeFromSearchParams(searchParams)
+    const scopeKey = getDataScopeCacheKey(dataScope)
+    const cacheKey = getFilterOptionsCacheKey(scopeKey)
 
     if (!forceRefresh) {
-      const cached = await getCache<CachedHermesFilterOptions>(FILTER_OPTIONS_CACHE_KEY)
+      const cached = await getCache<CachedHermesFilterOptions>(cacheKey)
       if (cached?.data) {
         return NextResponse.json({
           status: 'success',
@@ -41,7 +53,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const result = await getFilterOptions({ forceRefresh })
+    const result = await getFilterOptions({ forceRefresh, dataScope })
     
     if (result.status === 'error') {
       return NextResponse.json(
@@ -69,7 +81,7 @@ export async function GET(request: NextRequest) {
       timestamp: result.timestamp,
     }
 
-    setCache(FILTER_OPTIONS_CACHE_KEY, responsePayload, FILTER_OPTIONS_CACHE_TTL_SECONDS).catch(() => {})
+    setCache(cacheKey, responsePayload, FILTER_OPTIONS_CACHE_TTL_SECONDS).catch(() => {})
 
     return NextResponse.json({
       status: 'success',

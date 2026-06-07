@@ -3,6 +3,11 @@
 import { useMemo, useState } from "react"
 import { BarChart3 } from "lucide-react"
 import {
+  isMilestoneAchieved,
+  resolveMilestoneColumns,
+  type HermesMilestoneFields,
+} from "@/lib/hermes-milestone-fields"
+import {
   BarChart,
   Bar,
   XAxis,
@@ -20,6 +25,7 @@ type Row = {
   nano_cluster?: string | null
   region_circle?: string | null
   imp_integ_af?: string | null
+  readiness_2600_af?: string | null
   ic_000010_af?: string | null // RFI header for AOP
 }
 
@@ -35,6 +41,7 @@ type Props = {
   dataVariant?: 'default' | 'aop' // Data variant untuk menentukan field yang digunakan
   // OPTIMIZATION: Pre-aggregated data to avoid 41k row iteration
   aggregatedByCircle?: AggregatedByCircle
+  milestoneFields?: HermesMilestoneFields
 }
 
 // Tipe data untuk item chart
@@ -156,7 +163,8 @@ const ReadyLabel = (props: any) => {
   )
 }
 
-export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default', aggregatedByCircle }: Props) {
+export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default', aggregatedByCircle, milestoneFields }: Props) {
+  const { readinessColumn } = resolveMilestoneColumns(milestoneFields)
   const [pageIndex, setPageIndex] = useState(0)
 
   // Agregasi data untuk chart - OPTIMIZED: Use pre-aggregated data if available
@@ -189,9 +197,9 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
         ? normalizeCircle(row.nano_cluster || row.region_circle)
         : normalizeCity(row.imp_ttp)
       
-      const isReady = dataVariant === 'aop' 
-        ? !!row.ic_000010_af 
-        : !!row.imp_integ_af
+      const isReady = dataVariant === 'aop'
+        ? !!row.ic_000010_af
+        : isMilestoneAchieved(row, readinessColumn)
       
       const locationData = locationMap.get(location) || { ny: 0, rdy: 0 }
       
@@ -215,7 +223,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
     return result.sort((a, b) => 
       (b.rdy || 0) + (b.ny || 0) - ((a.rdy || 0) + (a.ny || 0))
     )
-  }, [rows, variant, dataVariant, aggregatedByCircle])
+  }, [rows, variant, dataVariant, aggregatedByCircle, readinessColumn])
 
   const totalPages = useMemo(() => {
     if (!maxCities || maxCities <= 0) return 1
@@ -252,8 +260,8 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
     if (variant === 'circle') {
       return 'Readiness by Circle'
     }
-    return '5G Readiness by City'
-  }, [variant, dataVariant])
+    return milestoneFields?.readinessCardTitle ?? '5G Readiness by City'
+  }, [variant, dataVariant, milestoneFields])
   
   const dataKey = variant === 'circle' ? 'circle' : 'city'
   
