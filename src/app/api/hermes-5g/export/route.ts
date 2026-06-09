@@ -37,6 +37,13 @@ function buildFilterQuery(searchParams: URLSearchParams) {
     query = query.ilike('program_report', `%${programReportContains.trim()}%`)
   }
 
+  const wbsStatuses = searchParams.getAll('wbs_status').map((value) => value.trim()).filter(Boolean)
+  if (wbsStatuses.length === 1) {
+    query = query.ilike('wbs_status', wbsStatuses[0])
+  } else if (wbsStatuses.length > 1) {
+    query = query.or(wbsStatuses.map((value) => `wbs_status.ilike.${value}`).join(','))
+  }
+
   if (impTtps.length > 0) {
     query = query.in('imp_ttp', impTtps)
   }

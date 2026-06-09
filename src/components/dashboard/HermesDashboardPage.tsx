@@ -341,6 +341,13 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
       if (needle) params.set("program_report_contains", needle)
     }
 
+    if (config.dataScope?.wbs_status) {
+      const wbsStatuses = Array.isArray(config.dataScope.wbs_status)
+        ? config.dataScope.wbs_status
+        : [config.dataScope.wbs_status]
+      wbsStatuses.forEach((value) => params.append("wbs_status", value))
+    }
+
     filter.imp_ttp.forEach((value) => {
       params.append('imp_ttp', value)
     })

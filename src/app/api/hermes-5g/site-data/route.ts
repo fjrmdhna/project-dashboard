@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSiteData5G } from '@/lib/supabase'
 import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-ran-score-filter'
 import {
+  dataScopeToSiteDataFilters,
+  parseDataScopeFromSearchParams,
+} from '@/lib/hermes-dashboard-scope'
+import {
   setCache,
   getFilterHash,
   CACHE_TTL,
@@ -37,6 +41,7 @@ const MINIMAL_COLUMNS = [
   'system_key',        // Required for key
   'vendor_name',       // VendorLeaderboard + Filter
   'program_report',    // Filter + RAN Score derived (normalize for display)
+  'wbs_status',        // Dashboard scope filter (Active only)
   'imp_ttp',           // Readiness/Activated cards + Filter
   'nano_cluster',      // Readiness/Activated cards + Filter
   'year',              // Year filter
@@ -106,6 +111,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       system_key: row.system_key,
       vendor_name: row.vendor_name || null,
       program_report: row.program_report || null,
+      wbs_status: row.wbs_status || null,
       imp_ttp: row.imp_ttp || null,
       nano_cluster: row.nano_cluster || null,
       ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null),
@@ -208,20 +214,12 @@ function calculateStatsFromData(filteredData: any[]) {
 
 // Fetch data from database with pagination
 async function fetchDataFromDatabase(
-  vendorNames: string[],
-  programReports: string[],
-  impTtps: string[],
-  nanoClusters: string[],
-  q: string,
-  mode: 'full' | 'minimal' = 'full'
+  mode: 'full' | 'minimal' = 'full',
+  dataScope?: ReturnType<typeof parseDataScopeFromSearchParams>
 ): Promise<{ data: any[], totalCount: number }> {
-  // Use Supabase to get site data (no filters - we'll filter client-side)
-  // Always fetch ALL data for client-side filtering
-  const { data, count } = await getSiteData5G(
-    {}, // No filters - fetch all
-    {}
-  )
-  
+  const scopeFilters = dataScopeToSiteDataFilters(dataScope)
+  const { data, count } = await getSiteData5G(scopeFilters, {})
+
   return { data: data || [], totalCount: count || 0 }
 }
 
@@ -235,14 +233,19 @@ export async function GET(request: NextRequest) {
     const programReports = searchParams.getAll('program_report') || []
     const impTtps = searchParams.getAll('imp_ttp') || []
     const nanoClusters = searchParams.getAll('nano_cluster') || []
+    const dataScope = parseDataScopeFromSearchParams(searchParams)
     
     // Mode: 'minimal' for dashboard (smaller payload), 'full' for detailed views
     const mode = (searchParams.get('mode') || 'minimal') as 'full' | 'minimal'
 
     // Create filter params for cache key
+    const scopedProgramReports = dataScope?.program_report
+      ? [Array.isArray(dataScope.program_report) ? dataScope.program_report[0] : dataScope.program_report]
+      : programReports
+
     const filterParams: FilterParams = {
       vendorNames,
-      programReports,
+      programReports: scopedProgramReports.filter((value): value is string => Boolean(value)),
       circles: [], // Hermes uses imp_ttp and nano_cluster, not circles
       siteCategories: [],
       ranScores: [],
@@ -260,7 +263,7 @@ export async function GET(request: NextRequest) {
     console.log(`[Hermes Site Data] Fetching from database (mode: ${mode})...`)
     const startTime = Date.now()
 
-    const dataResult = await fetchDataFromDatabase(vendorNames, programReports, impTtps, nanoClusters, q, mode)
+    const dataResult = await fetchDataFromDatabase(mode, dataScope)
     const stats = calculateStatsFromData(dataResult.data)
 
     setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch(err => {

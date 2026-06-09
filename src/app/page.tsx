@@ -9,7 +9,7 @@ import { SearchInput } from "@/components/home/SearchInput"
 import { SectionHeader } from "@/components/home/SectionHeader"
 import { HeroHighlight, NavigationAction, ProjectCardData } from "@/types/home"
 import { getProjectProgress } from "@/lib/project-progress"
-import { HERMES_DASHBOARD_NR_2600 } from "@/config/hermes-dashboards"
+import { HERMES_DASHBOARD_HERMES_5G, HERMES_DASHBOARD_NR_2600 } from "@/config/hermes-dashboards"
 
 const heroHighlight: HeroHighlight = {
   eyebrow: "Explore",
@@ -36,7 +36,7 @@ export default async function Home() {
 
   // Use Promise.allSettled to handle errors gracefully without blocking
   const [hermesResult, aopResult, nr2600Result] = await Promise.allSettled([
-    getProjectProgress("site_data_5g").catch((error) => {
+    getProjectProgress("site_data_5g", HERMES_DASHBOARD_HERMES_5G.progressFilter).catch((error) => {
       console.error("Error fetching Hermes 5G progress:", error)
       return { scope: 0, activated: 0, progress: 0 }
     }),

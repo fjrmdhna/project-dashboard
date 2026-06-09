@@ -7,7 +7,12 @@ import { fetchWithRetry } from '@/lib/api-utils'
 import { format, subDays } from 'date-fns'
 import { getProgramReportsForDisplayName, getDisplayNameForProgramReport } from '@/lib/hermes-program-mapping'
 import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-5g-utils'
-import { filterRowsByProgramReportScope, type HermesDashboardDataScope } from '@/lib/hermes-dashboard-scope'
+import {
+  filterRowsByDataScope,
+  getDataScopeCacheKey,
+  type HermesDashboardDataScope,
+} from '@/lib/hermes-dashboard-scope'
+import { getHermesSiteDataEndpoint } from '@/config/hermes-dashboards'
 import {
   isMilestoneAchieved,
   resolveMilestoneColumns,
@@ -40,6 +45,7 @@ export interface Hermes5GSiteData extends MatrixRow {
   issue_category?: string | null
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
+  wbs_status?: string | null
 }
 
 export interface Hermes5GDataStats {
@@ -735,17 +741,18 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
     progressCurveFields,
   } = options
 
-  // OPTIMIZATION: Always fetch ALL data (no filter) and filter client-side
-  // This makes filter changes instant instead of waiting 15-20s for API
-  // v2: cache key bump so client fetches fresh data including region_circle + site_category
-  const cacheKey = 'hermes-site-data-all-v2' // Fixed key - always fetch all data
-  
+  // Scoped dashboards fetch a smaller server-filtered dataset; unscoped pages keep the full cache.
+  const scopeCacheKey = getDataScopeCacheKey(dataScope)
+  const cacheKey =
+    scopeCacheKey === 'all'
+      ? 'hermes-site-data-all-v2'
+      : `hermes-site-data-${scopeCacheKey}-v2`
+
   // Track if this is initial load vs filter change
   const hasLoadedOnceRef = useRef(false)
 
-  // Fetch ALL data (no filters) - only once
   const fetchFn = useCallback(async () => {
-    const url = `/api/hermes-5g/site-data?mode=minimal`
+    const url = getHermesSiteDataEndpoint(dataScope, 'minimal')
     const response = await fetchWithRetry(url, {}, 3)
     const result = await response.json()
 
@@ -757,7 +764,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       }
     }
     throw new Error(result.message || 'Failed to fetch Hermes data')
-  }, [])
+  }, [dataScope])
 
   // Use useApiCache untuk base data (tanpa filter)
   const { data: baseData, loading: baseLoading, error, refetch: cacheRefetch } = useApiCache<{ data: Hermes5GSiteData[], stats: Hermes5GDataStats }>(
@@ -772,7 +779,14 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
         if (!data || !typedData.data || !typedData.stats) {
           return false
         }
-        return Array.isArray(typedData.data) && typeof typedData.stats === 'object'
+        if (!Array.isArray(typedData.data) || typeof typedData.stats !== 'object') {
+          return false
+        }
+        // Invalidate stale cache missing wbs_status when dashboard scope requires it
+        if (dataScope?.wbs_status && typedData.data.length > 0 && typedData.data[0].wbs_status == null) {
+          return false
+        }
+        return true
       }
     }
   )
@@ -783,8 +797,8 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
     }
 
-    const scopedData = filterRowsByProgramReportScope(baseData.data, dataScope)
-    
+    const scopedData = filterRowsByDataScope(baseData.data, dataScope)
+
     const hasFilters = vendorNames.length > 0 || programReports.length > 0 ||
                        impTtps.length > 0 || nanoClusters.length > 0 ||
                        ranScores.length > 0 || years.length > 0 || regions.length > 0 || circles.length > 0 || siteCategories.length > 0 || search.length > 0
@@ -794,7 +808,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       : scopedData
 
     const aggregationResult = aggregateDataSinglePassWithStats(dataToUse, milestoneFields, progressCurveFields)
-    const hasScope = Boolean(dataScope?.program_report)
+    const hasScope = Boolean(dataScope?.program_report || dataScope?.wbs_status)
     const stats = hasFilters || hasScope ? aggregationResult.stats : baseData.stats
     const agg = aggregationResult.aggregated
 

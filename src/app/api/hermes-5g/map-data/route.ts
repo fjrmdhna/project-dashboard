@@ -6,6 +6,7 @@ import {
   resolveHermesMapStatus,
   type HermesMapStatusLabel,
 } from '@/lib/hermes-map-status'
+import { dataScopeToSiteDataFilters, parseDataScopeFromSearchParams } from '@/lib/hermes-dashboard-scope'
 
 interface MapPoint {
   id: string
@@ -77,11 +78,20 @@ export async function GET(request: NextRequest) {
         ? { readinessColumn, activatedColumn }
         : undefined
 
+    const dataScope = parseDataScopeFromSearchParams(searchParams)
+    const scopeFilters = dataScopeToSiteDataFilters(dataScope)
+
     const { data } = await getSiteData5G({
       vendor_name: vendorNames.length ? vendorNames : undefined,
-      program_report: programReports.length ? programReports : undefined,
+      program_report:
+        programReports.length > 0
+          ? programReports
+          : scopeFilters.program_report,
       program_report_match:
-        programReportMatch === 'contains' ? 'contains' : undefined,
+        programReportMatch === 'contains'
+          ? 'contains'
+          : scopeFilters.program_report_match,
+      wbs_status: scopeFilters.wbs_status,
       imp_ttp: impTtps.length ? impTtps : undefined,
       nano_cluster: nanoClusters.length ? nanoClusters : undefined,
       region: regions.length ? regions : undefined,

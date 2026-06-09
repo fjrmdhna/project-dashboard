@@ -6,6 +6,7 @@ import {
   applyRanScoreFilterByProgramReport,
 } from './hermes-ran-score-filter';
 import {
+  applyDashboardScopeToQuery,
   getDataScopeCacheKey,
   type HermesDashboardDataScope,
 } from './hermes-dashboard-scope';
@@ -378,32 +379,10 @@ export async function getFilterOptions(
     }
 
     const scope = options.dataScope
-    const scopeNeedle = scope?.program_report
-      ? (Array.isArray(scope.program_report) ? scope.program_report[0] : scope.program_report)
-      : null
-
-    const withProgramReportScope = <T>(query: T): T => {
-      if (!scope?.program_report || !scopeNeedle) return query
-      if (scope.program_report_match === 'contains') {
-        return (query as { ilike: (column: string, pattern: string) => T }).ilike(
-          'program_report',
-          `%${scopeNeedle}%`
-        )
-      }
-      if (Array.isArray(scope.program_report)) {
-        return (query as { in: (column: string, values: string[]) => T }).in(
-          'program_report',
-          scope.program_report
-        )
-      }
-      return (query as { eq: (column: string, value: string) => T }).eq(
-        'program_report',
-        scopeNeedle
-      )
-    }
+    const withDashboardScope = <T>(query: T): T => applyDashboardScopeToQuery(query, scope)
 
     // Get unique vendors from vendor_name
-    const { data: vendorsData, error: vendorsError } = await withProgramReportScope(
+    const { data: vendorsData, error: vendorsError } = await withDashboardScope(
       supabase
         .from('site_data_5g')
         .select('vendor_name')
@@ -412,7 +391,7 @@ export async function getFilterOptions(
     );
     
     // Get unique programs from program_report (no exclusions - all programs included)
-    const { data: programsData, error: programsError } = await withProgramReportScope(
+    const { data: programsData, error: programsError } = await withDashboardScope(
       supabase
         .from('site_data_5g')
         .select('program_report')
@@ -421,7 +400,7 @@ export async function getFilterOptions(
     );
     
     // Get unique cities from imp_ttp
-    const { data: citiesData, error: citiesError } = await withProgramReportScope(
+    const { data: citiesData, error: citiesError } = await withDashboardScope(
       supabase
         .from('site_data_5g')
         .select('imp_ttp')
@@ -430,7 +409,7 @@ export async function getFilterOptions(
     );
     
     // Get unique nano clusters from nano_cluster
-    const { data: nanoClustersData, error: nanoClustersError } = await withProgramReportScope(
+    const { data: nanoClustersData, error: nanoClustersError } = await withDashboardScope(
       supabase
         .from('site_data_5g')
         .select('nano_cluster')
@@ -439,7 +418,7 @@ export async function getFilterOptions(
     );
     
     // Get unique circles from region_circle (replacing region filter)
-    const { data: circlesData, error: circlesError } = await withProgramReportScope(
+    const { data: circlesData, error: circlesError } = await withDashboardScope(
       supabase
         .from('site_data_5g')
         .select('region_circle')
@@ -448,7 +427,7 @@ export async function getFilterOptions(
     );
     
     // Get unique years from year
-    const { data: yearsData, error: yearsError } = await withProgramReportScope(
+    const { data: yearsData, error: yearsError } = await withDashboardScope(
       supabase
         .from('site_data_5g')
         .select('year')
@@ -457,12 +436,12 @@ export async function getFilterOptions(
     );
     
     // RAN Score filter options: derived from program_report ("new site" → New Site, else → Expansion)
-    const { data: programReportsForRanScore, error: ranScoresError } = await withProgramReportScope(
+    const { data: programReportsForRanScore, error: ranScoresError } = await withDashboardScope(
       supabase.from('site_data_5g').select('program_report')
     );
     
     // Get unique site categories from site_category
-    const { data: siteCategoriesData, error: siteCategoriesError } = await withProgramReportScope(
+    const { data: siteCategoriesData, error: siteCategoriesError } = await withDashboardScope(
       supabase
         .from('site_data_5g')
         .select('site_category')
