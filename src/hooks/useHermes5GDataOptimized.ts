@@ -22,6 +22,7 @@ import {
   getRowDateValue,
   incrementDailyRunrateCount,
   resolveDailyRunrateSeries,
+  type HermesDailyRunrateMilestone,
   type HermesProgressCurveFields,
 } from '@/lib/hermes-progress-curve-fields'
 import { getValidNanoClusterName } from '@/lib/nano-cluster'
@@ -130,6 +131,8 @@ export interface UseHermes5GDataOptions {
   milestoneFields?: HermesMilestoneFields
   /** Optional progress curve / daily runrate column mapping (e.g. NR 2600) */
   progressCurveFields?: HermesProgressCurveFields
+  /** Daily runrate milestone pair — readiness vs activated */
+  dailyRunrateMilestone?: HermesDailyRunrateMilestone
 }
 
 // Default empty stats
@@ -499,9 +502,10 @@ function aggregateDataSinglePassWithStats(
   data: Hermes5GSiteData[],
   milestoneFields?: HermesMilestoneFields,
   progressCurveFields?: HermesProgressCurveFields,
+  dailyRunrateMilestone: HermesDailyRunrateMilestone = "activated",
 ): Hermes5GAggregationResult {
   const { readinessColumn, activatedColumn } = resolveMilestoneColumns(milestoneFields)
-  const dailyRunrateSeries = resolveDailyRunrateSeries(progressCurveFields)
+  const dailyRunrateSeries = resolveDailyRunrateSeries(progressCurveFields, dailyRunrateMilestone)
   const byCity = new Map<string, { total: number; ready: number; activated: number }>()
   const byNanoCluster = new Map<string, { total: number; ready: number; activated: number }>()
   const byVendor = new Map<string, { total: number; ready: number; activated: number; forecast: number }>()
@@ -739,6 +743,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
     dataScope,
     milestoneFields,
     progressCurveFields,
+    dailyRunrateMilestone = "activated",
   } = options
 
   // Scoped dashboards fetch a smaller server-filtered dataset; unscoped pages keep the full cache.
@@ -807,7 +812,12 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       ? filterDataClientSide(scopedData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search)
       : scopedData
 
-    const aggregationResult = aggregateDataSinglePassWithStats(dataToUse, milestoneFields, progressCurveFields)
+    const aggregationResult = aggregateDataSinglePassWithStats(
+      dataToUse,
+      milestoneFields,
+      progressCurveFields,
+      dailyRunrateMilestone,
+    )
     const hasScope = Boolean(dataScope?.program_report || dataScope?.wbs_status)
     const stats = hasFilters || hasScope ? aggregationResult.stats : baseData.stats
     const agg = aggregationResult.aggregated
@@ -817,7 +827,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       filteredStats: stats,
       aggregated: agg
     }
-  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search, dataScope, milestoneFields, progressCurveFields])
+  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search, dataScope, milestoneFields, progressCurveFields, dailyRunrateMilestone])
 
   // Refetch function
   const refetch = useCallback(async () => {

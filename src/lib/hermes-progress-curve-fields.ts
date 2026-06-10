@@ -57,6 +57,8 @@ export function getRowDateValue(row: object, column: string): string | null | un
   return str === "" ? null : str
 }
 
+export type HermesDailyRunrateMilestone = "readiness" | "activated"
+
 export interface HermesDailyRunrateSeries {
   commitmentColumn: string
   actualColumn: string
@@ -64,11 +66,21 @@ export interface HermesDailyRunrateSeries {
   actualLabel: string
 }
 
-/** Daily runrate uses commitment-activated + actual-activated columns from progress curve config. */
+/** Daily runrate column/label pair from progress curve config (readiness or activated). */
 export function resolveDailyRunrateSeries(
-  progressCurveFields?: HermesProgressCurveFields
+  progressCurveFields?: HermesProgressCurveFields,
+  milestone: HermesDailyRunrateMilestone = "activated"
 ): HermesDailyRunrateSeries {
   if (progressCurveFields) {
+    if (milestone === "readiness") {
+      return {
+        commitmentColumn: progressCurveFields.commitmentReadinessColumn,
+        actualColumn: progressCurveFields.readinessColumn,
+        commitmentLabel: progressCurveFields.commitmentReadinessLabel,
+        actualLabel: progressCurveFields.readinessLabel,
+      }
+    }
+
     return {
       commitmentColumn: progressCurveFields.commitmentActivatedColumn,
       actualColumn: progressCurveFields.activatedColumn,

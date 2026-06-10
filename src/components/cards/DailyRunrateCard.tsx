@@ -14,9 +14,13 @@ import {
 import { DailyRunrateItem } from "@/hooks/useDailyRunrateData"
 import { AopDailyRunrateItem } from "@/hooks/useAopDailyRunrateData"
 
+const DEFAULT_DAILY_RUNRATE_TITLE = "Daily Runrate – Last 7 Days"
+
 export interface DailyRunrateCardProps {
   data: DailyRunrateItem[] | AopDailyRunrateItem[]
   isLoading?: boolean
+  /** Card header badge text */
+  title?: string
   /** Override legend/tooltip labels for forecast & actual series */
   seriesLabels?: {
     forecast?: string
@@ -24,7 +28,12 @@ export interface DailyRunrateCardProps {
   }
 }
 
-export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: DailyRunrateCardProps) {
+export function DailyRunrateCard({
+  data,
+  isLoading = false,
+  title = DEFAULT_DAILY_RUNRATE_TITLE,
+  seriesLabels,
+}: DailyRunrateCardProps) {
   const forecastLabel = seriesLabels?.forecast ?? 'Forecast'
   const actualLabel = seriesLabels?.actual ?? 'Actual'
   // Detect if data is AOP format (has forecast/actual) or legacy format (has readiness/activated)
@@ -101,7 +110,7 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
             <BarChart className="h-3 w-3 text-blue-400" />
           </div>
           <div className="text-[10px] font-medium bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">
-            Daily Runrate – Last 7 Days
+            {title}
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center text-white/50 text-xs">
@@ -132,7 +141,7 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
             <BarChart className="h-3 w-3 text-blue-400" />
           </div>
           <div className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">
-            Daily Runrate – Last 7 Days
+            {title}
           </div>
         </div>
         
@@ -152,7 +161,7 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
           <BarChart className="h-3 w-3 text-blue-400" />
         </div>
         <div className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">
-          Daily Runrate – Last 7 Days
+          {title}
         </div>
       </div>
       

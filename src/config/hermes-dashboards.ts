@@ -7,7 +7,10 @@ import {
 } from "@/lib/hermes-dashboard-scope"
 import type { HermesMilestoneFields } from "@/lib/hermes-milestone-fields"
 import { NR_2600_MILESTONE_FIELDS } from "@/lib/hermes-milestone-fields"
-import type { HermesProgressCurveFields } from "@/lib/hermes-progress-curve-fields"
+import type {
+  HermesDailyRunrateMilestone,
+  HermesProgressCurveFields,
+} from "@/lib/hermes-progress-curve-fields"
 import { NR_2600_PROGRESS_CURVE_FIELDS } from "@/lib/hermes-progress-curve-fields"
 
 /** Hermes 5G: program_report contains "10k" and wbs_status is Active */
@@ -50,6 +53,10 @@ export interface HermesDashboardConfig {
   progressCurveFields?: HermesProgressCurveFields
   /** Filter fields to hide from FilterBar (e.g. NR 2600 has no program_report filter) */
   hiddenFilters?: ReadonlyArray<keyof FilterValue>
+  /** Daily runrate milestone pair — default activated (Hermes), NR 2600 uses readiness */
+  dailyRunrateMilestone?: HermesDailyRunrateMilestone
+  /** Optional card header override for daily runrate */
+  dailyRunrateTitle?: string
 }
 
 /** Build filter-options API URL; scoped dashboards append scope query params */
@@ -111,4 +118,6 @@ export const HERMES_DASHBOARD_NR_2600: HermesDashboardConfig = {
   milestoneFields: NR_2600_MILESTONE_FIELDS,
   progressCurveFields: NR_2600_PROGRESS_CURVE_FIELDS,
   hiddenFilters: ["program_report"],
+  dailyRunrateMilestone: "readiness",
+  dailyRunrateTitle: "Daily Readiness Runrate – Last 7 Days",
 }

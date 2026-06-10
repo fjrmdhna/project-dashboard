@@ -171,6 +171,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
     dataScope: config.dataScope,
     milestoneFields: config.milestoneFields,
     progressCurveFields: config.progressCurveFields,
+    dailyRunrateMilestone: config.dailyRunrateMilestone,
   })
   
   // Use deferred value for rows only (heavy visual component)
@@ -546,8 +547,8 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
   
 
   const dailyRunrateSeries = useMemo(
-    () => resolveDailyRunrateSeries(config.progressCurveFields),
-    [config.progressCurveFields]
+    () => resolveDailyRunrateSeries(config.progressCurveFields, config.dailyRunrateMilestone),
+    [config.progressCurveFields, config.dailyRunrateMilestone]
   )
 
   // Daily Runrate component - OPTIMIZED: Use pre-aggregated data
@@ -555,6 +556,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
     <DailyRunrateCard
       data={dailyRunrateData}
       isLoading={loading}
+      title={config.dailyRunrateTitle}
       seriesLabels={{
         forecast: dailyRunrateSeries.commitmentLabel,
         actual: dailyRunrateSeries.actualLabel,
