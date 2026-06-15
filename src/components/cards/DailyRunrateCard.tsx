@@ -21,6 +21,8 @@ export interface DailyRunrateCardProps {
   isLoading?: boolean
   /** Card header badge text */
   title?: string
+  /** Optional class for the title badge (e.g. caf-subtitle on CAF dashboard) */
+  titleClassName?: string
   /** Override legend/tooltip labels for forecast & actual series */
   seriesLabels?: {
     forecast?: string
@@ -32,10 +34,14 @@ export function DailyRunrateCard({
   data,
   isLoading = false,
   title = DEFAULT_DAILY_RUNRATE_TITLE,
+  titleClassName,
   seriesLabels,
 }: DailyRunrateCardProps) {
   const forecastLabel = seriesLabels?.forecast ?? 'Forecast'
   const actualLabel = seriesLabels?.actual ?? 'Actual'
+  const titleBadgeClass =
+    titleClassName ??
+    "text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full"
   // Detect if data is AOP format (has forecast/actual) or legacy format (has readiness/activated)
   const isAopFormat = data.length > 0 && ('forecast' in data[0] || 'actual' in data[0])
   const legacyForecastLabel = seriesLabels?.forecast ?? 'Readiness'
@@ -109,7 +115,7 @@ export function DailyRunrateCard({
           <div className="bg-blue-500/20 p-1 rounded-md">
             <BarChart className="h-3 w-3 text-blue-400" />
           </div>
-          <div className="text-[10px] font-medium bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">
+          <div className={titleBadgeClass}>
             {title}
           </div>
         </div>
@@ -140,7 +146,7 @@ export function DailyRunrateCard({
           <div className="bg-blue-500/20 p-1 rounded-md">
             <BarChart className="h-3 w-3 text-blue-400" />
           </div>
-          <div className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">
+          <div className={titleBadgeClass}>
             {title}
           </div>
         </div>
@@ -160,7 +166,7 @@ export function DailyRunrateCard({
         <div className="bg-blue-500/20 p-1 rounded-md">
           <BarChart className="h-3 w-3 text-blue-400" />
         </div>
-        <div className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">
+        <div className={titleBadgeClass}>
           {title}
         </div>
       </div>
@@ -171,10 +177,10 @@ export function DailyRunrateCard({
           <LineChart
             data={data}
             margin={{
-              top: 15,
-              right: 5,
+              top: 12,
+              right: 8,
               left: 0,
-              bottom: -5
+              bottom: 12
             }}
           >
             <CartesianGrid strokeDasharray="2 2" stroke="rgba(255,255,255,0.08)" vertical={false} />

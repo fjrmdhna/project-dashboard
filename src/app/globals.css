@@ -622,6 +622,10 @@ html, body {
 .readiness-card .recharts-cartesian-axis-tick-value { font-size: 11px !important; fill: #B0B7C3; }
 .readiness-card .recharts-default-legend { font-size: 12px; }
 
+/* MOS by city card chart typography */
+.mos-city-card .recharts-cartesian-axis-tick-value { font-size: 11px !important; fill: #B0B7C3; }
+.mos-city-card .recharts-default-legend { font-size: 12px; }
+
 /* Activated card chart typography */
 .activated-card .recharts-cartesian-axis-tick-value { font-size: 11px !important; fill: #B0B7C3; }
 .activated-card .recharts-default-legend { font-size: 12px; }
@@ -849,5 +853,154 @@ html, body {
 @keyframes hermes-pill-shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+/* CAF Monitoring — dedicated layout (no empty Hermes slots) */
+.caf-wallboard-grid {
+  display: grid;
+  grid-template-rows: var(--wb-header-height) minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.caf-wallboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2rem;
+  min-height: 0;
+}
+
+.caf-wallboard-body {
+  display: grid;
+  grid-template-columns: 1.08fr 0.92fr;
+  grid-template-rows: auto auto minmax(0, 0.92fr) minmax(0, 0.92fr);
+  gap: 5px;
+  padding: 5px 6px 6px;
+  box-sizing: border-box;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.caf-wallboard-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.caf-wallboard-panel > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.caf-wallboard-filters {
+  grid-column: 1 / -1;
+}
+
+.caf-wallboard-filters .caf-wallboard-panel > *,
+.caf-wallboard-filters > * {
+  flex: 0 0 auto;
+  height: auto;
+}
+
+.caf-wallboard-matrix {
+  grid-column: 1 / -1;
+}
+
+.caf-wallboard-matrix > * {
+  flex: 0 0 auto;
+  height: auto;
+}
+
+.caf-wallboard-funnel {
+  grid-column: 1;
+  min-height: 0;
+}
+
+.caf-wallboard-aging {
+  grid-column: 2;
+  min-height: 0;
+}
+
+.caf-wallboard-runrate {
+  grid-column: 1 / -1;
+  min-height: 0;
+}
+
+.caf-panel-card {
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(15, 22, 48, 0.82);
+  padding: 8px 10px;
+}
+
+.caf-panel-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 6px;
+}
+
+/* Unified subtitle typography for CAF Monitoring dashboard */
+.caf-subtitle {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.caf-matrix-card {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+
+.caf-matrix-card .caf-matrix-metrics {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  width: 100%;
+  padding: 0 0.5rem;
+}
+
+.caf-matrix-card .caf-matrix-total {
+  flex-shrink: 0;
+  padding-right: 1rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.caf-wallboard-runrate .rounded-xl {
+  border-radius: 1rem !important;
+  padding: 8px 10px 4px !important;
+}
+
+.caf-wallboard-runrate .recharts-wrapper {
+  margin-bottom: 2px;
+}
+
+@media (max-width: 1200px) {
+  .caf-wallboard-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(180px, 1fr) minmax(160px, 1fr) minmax(180px, 0.9fr);
+  }
+
+  .caf-wallboard-funnel,
+  .caf-wallboard-aging,
+  .caf-wallboard-runrate {
+    grid-column: 1;
+  }
+
+  .caf-matrix-card .caf-matrix-metrics {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 }

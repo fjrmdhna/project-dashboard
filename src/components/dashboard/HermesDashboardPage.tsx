@@ -525,6 +525,24 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
     />
   )
 
+  const cityMilestoneTopCard = config.cityMilestoneCard ? (
+    <FiveGReadinessCard
+      rows={rows}
+      maxCities={10}
+      variant="city"
+      aggregatedByCircle={deferredAggregated?.byCity}
+      milestoneColumn={config.cityMilestoneCard.milestoneColumn}
+      achievedMetricKey={config.cityMilestoneCard.achievedMetricKey}
+      cardTitle={config.cityMilestoneCard.cardTitle}
+      achievedLegendLabel={config.cityMilestoneCard.achievedLabel}
+      pendingLegendLabel={config.cityMilestoneCard.pendingLabel}
+      chartTheme={config.cityMilestoneCard.chartTheme}
+    />
+  ) : null
+
+  const wallboardTopCityCard = cityMilestoneTopCard ?? readinessCard
+  const wallboardBottomCityCard = config.hideActivatedCityCard ? readinessCard : activatedCard
+
   // Nano Cluster component
   const nanoClusterCard = (
     <NanoClusterCard
@@ -694,8 +712,9 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
           {renderMobileCard(matrixStats)}
 
           <div className="grid gap-4 sm:grid-cols-2">
+            {cityMilestoneTopCard && renderMobileCard(cityMilestoneTopCard, 260)}
             {renderMobileCard(readinessCard, 260)}
-            {renderMobileCard(activatedCard, 260)}
+            {!config.hideActivatedCityCard && renderMobileCard(activatedCard, 260)}
           </div>
 
           {renderMobileCard(progressCurveCard, 280)}
@@ -739,8 +758,8 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
       header={header}
       filterBar={filterBar}
       matrixStats={matrixStats}
-      readinessCard={readinessCard}
-      activatedCard={activatedCard}
+      readinessCard={wallboardTopCityCard}
+      activatedCard={wallboardBottomCityCard}
       progressCurve={progressCurveCard}
       dailyRunrate={dailyRunrateCard}
       top5Issue={topIssueCard}

@@ -38,10 +38,17 @@ export interface Row {
 export interface MatrixStatsCardProps {
   rows: Row[]
   patpCount?: number
-  variant?: "default" | "aop" | "tlp"
+  variant?: "default" | "aop" | "tlp" | "caf"
   milestoneFields?: HermesMilestoneFields
   stats?: {
     totalSites?: number
+    // CAF variant stats
+    inReview?: number
+    approved?: number
+    implemented?: number
+    rejected?: number
+    notConfirmed?: number
+    resubmit?: number
     // AOP variant stats
     rfi?: number
     crfi?: number
@@ -84,6 +91,16 @@ const DEFAULT_METRIC_CONFIG = [
   { key: "pac", label: "PAC" }
 ] as const
 
+// CAF Monitoring — pipeline lifecycle metrics
+const CAF_METRIC_CONFIG = [
+  { key: "inReview", label: "IN REVIEW", color: "#F59E0B" },
+  { key: "approved", label: "APPROVED", color: "#3B82F6" },
+  { key: "implemented", label: "IMPLEMENTED", color: "#22C55E" },
+  { key: "rejected", label: "REJECTED", color: "#EF4444" },
+  { key: "notConfirmed", label: "NOT CONF.", color: "#A855F7" },
+  { key: "resubmit", label: "RESUBMIT", color: "#94A3B8" },
+] as const
+
 // TLP New Site — Total Sites is shown separately; these match site_data_tlp columns
 const TLP_METRIC_CONFIG = [
   { key: "crfi", label: "CRFI" },
@@ -115,22 +132,47 @@ type MetricKey =
   | (typeof DEFAULT_METRIC_CONFIG)[number]["key"]
   | (typeof AOP_METRIC_CONFIG)[number]["key"]
   | (typeof TLP_METRIC_CONFIG)[number]["key"]
+  | (typeof CAF_METRIC_CONFIG)[number]["key"]
 
 type MetricMap = Partial<Record<MetricKey, number>>
 
 function MetricItem({
   label,
-  value
+  value,
+  accentColor,
+  variant = "default",
 }: {
   label: string
   value: number
+  accentColor?: string
+  variant?: MatrixStatsCardProps["variant"]
 }) {
+  const isCaf = variant === "caf"
+
   return (
-    <div className="flex flex-col items-center text-center min-w-[56px] justify-center">
-      <span className="text-lg font-bold leading-none text-white">
+    <div
+      className={`flex flex-col items-center justify-center text-center ${
+        isCaf ? "min-w-[58px]" : "min-w-[56px]"
+      }`}
+    >
+      <span
+        className={
+          isCaf
+            ? "text-base font-bold leading-none tabular-nums"
+            : "text-lg font-bold leading-none text-white"
+        }
+        style={isCaf && accentColor ? { color: accentColor } : undefined}
+      >
         {value.toLocaleString()}
       </span>
-      <span className="text-[8px] uppercase tracking-[0.18em] text-[#90A0C4] leading-tight">
+      <span
+        className={
+          isCaf
+            ? "mt-0.5 caf-subtitle font-medium"
+            : "text-[8px] uppercase tracking-[0.18em] text-[#90A0C4] leading-tight"
+        }
+        style={isCaf && accentColor ? { color: `${accentColor}CC` } : undefined}
+      >
         {label}
       </span>
     </div>
@@ -168,6 +210,18 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", mile
 
     const countActivated = (data: Row[]) =>
       data.filter((row) => isMilestoneAchieved(row, activatedColumn)).length
+
+    if (variant === "caf" && providedStats) {
+      return {
+        totalSites: providedStats.totalSites ?? rows.length,
+        inReview: providedStats.inReview ?? 0,
+        approved: providedStats.approved ?? 0,
+        implemented: providedStats.implemented ?? 0,
+        rejected: providedStats.rejected ?? 0,
+        notConfirmed: providedStats.notConfirmed ?? 0,
+        resubmit: providedStats.resubmit ?? 0,
+      }
+    }
 
     if (variant === "tlp" && providedStats) {
       return {
@@ -328,7 +382,13 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", mile
 
   const metricConfig = useMemo(() => {
     const base =
-      variant === "aop" ? AOP_METRIC_CONFIG : variant === "tlp" ? TLP_METRIC_CONFIG : DEFAULT_METRIC_CONFIG
+      variant === "aop"
+        ? AOP_METRIC_CONFIG
+        : variant === "tlp"
+          ? TLP_METRIC_CONFIG
+          : variant === "caf"
+            ? CAF_METRIC_CONFIG
+            : DEFAULT_METRIC_CONFIG
     if (!milestoneFields || variant !== "default") return base
     return base.map((metric) => {
       if (metric.key === "readiness") return { ...metric, label: milestoneFields.readinessLabel }
@@ -338,7 +398,16 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", mile
   }, [variant, milestoneFields])
 
   const metrics: MetricMap =
-    variant === "tlp"
+    variant === "caf"
+      ? {
+          inReview: stats.inReview ?? 0,
+          approved: stats.approved ?? 0,
+          implemented: stats.implemented ?? 0,
+          rejected: stats.rejected ?? 0,
+          notConfirmed: stats.notConfirmed ?? 0,
+          resubmit: stats.resubmit ?? 0,
+        }
+      : variant === "tlp"
       ? {
           crfi: stats.crfi ?? 0,
           rfi: stats.rfi ?? 0,
@@ -379,30 +448,66 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", mile
           }
 
   return (
-    <div className="rounded-2xl bg-[#0F1630]/85 border border-white/5 w-full h-full matrix-compact text-white px-3 py-2">
+    <div className={`rounded-2xl bg-[#0F1630]/85 border border-white/5 w-full h-full matrix-compact text-white px-3 py-2 ${variant === "caf" ? "caf-matrix-card" : ""}`}>
       <div className="flex h-full flex-col gap-1.5">
         <div className="flex items-center gap-1.5">
           <div className="bg-blue-500/15 p-0.5 rounded-sm">
             <BarChart3 className="h-2.5 w-2.5 text-blue-300" />
           </div>
-          <div className="text-[8px] font-semibold uppercase tracking-[0.18em] bg-blue-500/15 text-blue-200 px-1.5 py-0.5 rounded-full whitespace-nowrap leading-tight">
-            Matrix Statistics
+          <div
+            className={
+              variant === "caf"
+                ? "caf-subtitle rounded-full bg-blue-500/15 px-1.5 py-0.5 text-blue-200 whitespace-nowrap leading-tight"
+                : "text-[8px] font-semibold uppercase tracking-[0.18em] bg-blue-500/15 text-blue-200 px-1.5 py-0.5 rounded-full whitespace-nowrap leading-tight"
+            }
+          >
+            {variant === "caf" ? "CAF Pipeline" : "Matrix Statistics"}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-3 gap-y-1">
-          <div className="flex flex-col items-center text-center min-w-[64px] justify-center">
-            <span className="text-lg font-bold leading-none">
+        <div
+          className={`flex w-full flex-wrap items-center gap-3 gap-y-1 ${
+            variant === "caf" ? "caf-matrix-metrics" : "justify-center"
+          }`}
+        >
+          <div className={`flex flex-col items-center text-center justify-center ${variant === "caf" ? "caf-matrix-total" : "min-w-[72px]"}`}>
+            <span className={`font-bold leading-none text-white ${variant === "caf" ? "text-2xl" : "text-lg"}`}>
               {stats.totalSites.toLocaleString()}
             </span>
-            <span className="text-[8px] uppercase tracking-[0.18em] text-[#90A0C4]">
-              Total Sites
+            <span
+              className={
+                variant === "caf"
+                  ? "mt-0.5 caf-subtitle text-[#90A0C4]"
+                  : "text-[8px] uppercase tracking-[0.16em] text-[#90A0C4]"
+              }
+            >
+              {variant === "caf" ? "Total CAF" : "Total Sites"}
             </span>
           </div>
 
-          {metricConfig.map(({ key, label }) => (
-            <MetricItem key={key} label={label} value={metrics[key] ?? 0} />
-          ))}
+          {variant === "caf" ? (
+            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              {metricConfig.map((metric) => (
+                <MetricItem
+                  key={metric.key}
+                  label={metric.label}
+                  value={metrics[metric.key] ?? 0}
+                  accentColor={"color" in metric ? metric.color : undefined}
+                  variant="caf"
+                />
+              ))}
+            </div>
+          ) : (
+            metricConfig.map((metric) => (
+              <MetricItem
+                key={metric.key}
+                label={metric.label}
+                value={metrics[metric.key] ?? 0}
+                accentColor={"color" in metric ? metric.color : undefined}
+                variant={variant}
+              />
+            ))
+          )}
         </div>
       </div>
     </div>

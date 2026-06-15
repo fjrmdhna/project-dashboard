@@ -736,29 +736,6 @@ export default function AopPage() {
 
       const params = buildExportParams()
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/1be55c0d-1a66-492c-a67d-c31e2ed19dd1', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '65284a'
-        },
-        body: JSON.stringify({
-          sessionId: '65284a',
-          runId: 'initial',
-          hypothesisId: 'H1',
-          location: 'src/app/aop/page.tsx:handleExport',
-          message: 'AOP export clicked',
-          data: {
-            rowsLength: rows.length,
-            filterValue,
-            exportQuery: params.toString()
-          },
-          timestamp: Date.now()
-        })
-      }).catch(() => {})
-      // #endregion agent log
-
       const response = await fetch(`/api/aop/export?${params.toString()}`)
 
       if (!response.ok) {

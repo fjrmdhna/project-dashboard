@@ -5,8 +5,8 @@ import {
   type HermesDashboardDataScope,
   appendDataScopeToSearchParams,
 } from "@/lib/hermes-dashboard-scope"
-import type { HermesMilestoneFields } from "@/lib/hermes-milestone-fields"
-import { NR_2600_MILESTONE_FIELDS } from "@/lib/hermes-milestone-fields"
+import type { HermesCityMilestoneCardConfig, HermesMilestoneFields } from "@/lib/hermes-milestone-fields"
+import { NR_2600_MILESTONE_FIELDS, NR_2600_MOS_BY_CITY_CARD } from "@/lib/hermes-milestone-fields"
 import type {
   HermesDailyRunrateMilestone,
   HermesProgressCurveFields,
@@ -57,6 +57,10 @@ export interface HermesDashboardConfig {
   dailyRunrateMilestone?: HermesDailyRunrateMilestone
   /** Optional card header override for daily runrate */
   dailyRunrateTitle?: string
+  /** Top-left city bar chart (e.g. NR 2600 MOS by City) */
+  cityMilestoneCard?: HermesCityMilestoneCardConfig
+  /** When true, hide activation-by-city and show readiness in the lower left slot */
+  hideActivatedCityCard?: boolean
 }
 
 /** Build filter-options API URL; scoped dashboards append scope query params */
@@ -120,4 +124,6 @@ export const HERMES_DASHBOARD_NR_2600: HermesDashboardConfig = {
   hiddenFilters: ["program_report"],
   dailyRunrateMilestone: "readiness",
   dailyRunrateTitle: "Daily Readiness Runrate – Last 7 Days",
+  cityMilestoneCard: NR_2600_MOS_BY_CITY_CARD,
+  hideActivatedCityCard: true,
 }

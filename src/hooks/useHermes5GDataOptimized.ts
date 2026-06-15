@@ -83,7 +83,7 @@ export interface TopIssueItem {
 // Pre-aggregated data for charts (prevents multiple iterations in each component)
 export interface Hermes5GAggregatedData {
   // For FiveGReadinessCard & FiveGActivatedCard
-  byCity: Map<string, { total: number; ready: number; activated: number }>
+  byCity: Map<string, { total: number; ready: number; activated: number; mos: number }>
   byNanoCluster: Map<string, { total: number; ready: number; activated: number }>
   // For VendorLeaderboardCard
   byVendor: Map<string, { total: number; ready: number; activated: number; forecast: number }>
@@ -347,7 +347,7 @@ const EXCLUDED_ISSUES = [
 // OPTIMIZATION: Single-pass aggregation for ALL chart components
 // This prevents multiple O(n) iterations in each component
 function aggregateDataSinglePass(data: Hermes5GSiteData[]): Hermes5GAggregatedData {
-  const byCity = new Map<string, { total: number; ready: number; activated: number }>()
+  const byCity = new Map<string, { total: number; ready: number; activated: number; mos: number }>()
   const byNanoCluster = new Map<string, { total: number; ready: number; activated: number }>()
   const byVendor = new Map<string, { total: number; ready: number; activated: number; forecast: number }>()
   const byMonth = new Map<string, { baseline: number; forecast: number; actual: number }>()
@@ -375,10 +375,11 @@ function aggregateDataSinglePass(data: Hermes5GSiteData[]): Hermes5GAggregatedDa
   for (const row of data) {
     // === City aggregation (for FiveGReadinessCard & FiveGActivatedCard) ===
     const city = (row.imp_ttp || 'Unknown').trim()
-    const cityData = byCity.get(city) || { total: 0, ready: 0, activated: 0 }
+    const cityData = byCity.get(city) || { total: 0, ready: 0, activated: 0, mos: 0 }
     cityData.total++
     if (row.imp_integ_af) cityData.ready++
     if (row.rfs_af) cityData.activated++
+    if (row.mos_af) cityData.mos++
     byCity.set(city, cityData)
     
     // === Nano Cluster aggregation (skip rows without nano_cluster) ===
@@ -506,7 +507,7 @@ function aggregateDataSinglePassWithStats(
 ): Hermes5GAggregationResult {
   const { readinessColumn, activatedColumn } = resolveMilestoneColumns(milestoneFields)
   const dailyRunrateSeries = resolveDailyRunrateSeries(progressCurveFields, dailyRunrateMilestone)
-  const byCity = new Map<string, { total: number; ready: number; activated: number }>()
+  const byCity = new Map<string, { total: number; ready: number; activated: number; mos: number }>()
   const byNanoCluster = new Map<string, { total: number; ready: number; activated: number }>()
   const byVendor = new Map<string, { total: number; ready: number; activated: number; forecast: number }>()
   const byMonth = new Map<string, { baseline: number; forecast: number; actual: number }>()
@@ -554,10 +555,11 @@ function aggregateDataSinglePassWithStats(
 
     // === City aggregation (for FiveGReadinessCard & FiveGActivatedCard) ===
     const city = (row.imp_ttp || 'Unknown').trim()
-    const cityData = byCity.get(city) || { total: 0, ready: 0, activated: 0 }
+    const cityData = byCity.get(city) || { total: 0, ready: 0, activated: 0, mos: 0 }
     cityData.total++
     if (isMilestoneAchieved(row, readinessColumn)) cityData.ready++
     if (isMilestoneAchieved(row, activatedColumn)) cityData.activated++
+    if (row.mos_af) cityData.mos++
     byCity.set(city, cityData)
 
     // === Nano Cluster aggregation (skip rows without nano_cluster) ===

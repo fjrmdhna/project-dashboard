@@ -1,0 +1,10 @@
+---
+alwaysApply: true
+---
+
+## Testing policy
+
+- Do **not** run Vitest unit tests (`npm run test`, `vitest`, `*.test.ts`) unless the user explicitly asks.
+- Do **not** add new unit test files unless the user explicitly asks.
+- For CAF and dashboard verification, use **Playwright E2E** only when testing is needed: `npm run test:e2e` or `npm run test:caf`.
+- Existing unit test files may remain in the repo; they are optional and not part of the default workflow.
