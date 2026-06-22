@@ -134,6 +134,10 @@ type ProgressCurveTooltipItem = {
   name?: string | number;
   color?: string;
   value?: number | string;
+  payload?: {
+    periodLabel?: string;
+    label?: string;
+  };
 };
 
 type ProgressCurveTooltipProps = {
@@ -886,7 +890,7 @@ const renderStackedPointValueTags = (
 const ProgressCurveTooltip = ({ active, payload, label }: ProgressCurveTooltipProps) => {
   if (!active || !payload?.length) return null;
 
-  const periodLabel = payload[0]?.payload?.periodLabel as string | undefined;
+  const periodLabel = payload[0]?.payload?.periodLabel;
 
   // Detect format from payload data
   const isAopFormat = payload.some(item => item.dataKey === 'baseline' || item.dataKey === 'actual');
