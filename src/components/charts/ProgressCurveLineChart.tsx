@@ -8,6 +8,10 @@ import {
   resolveProgressCurveFields,
   type HermesProgressCurveFields,
 } from '@/lib/hermes-progress-curve-fields';
+import {
+  buildProgressCurveWeekBuckets,
+  type ProgressCurveBucket,
+} from '@/lib/progress-curve-buckets';
 
 export type Row = {
   mocn_activation_forecast?: string | null; // Baseline date (MOCN Activation Forecast)
@@ -99,17 +103,8 @@ const safeDate = (v?: string | null) => {
   return d;
 };
 
-// Function to get the actual week number in the year
-const getWeekNumber = (date: Date): number => {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return weekNo;
-};
-
 // Type for date buckets
-type Bucket = { key: string; label: string; start: Date; end: Date; kind: 'month' | 'week' };
+type Bucket = ProgressCurveBucket;
 
 const WEEK_PLAN_PADDING_PATTERN = [1, 2, 1, 3];
 const MONTH_PLAN_PADDING_PATTERN = [2, 1, 3];
@@ -121,6 +116,12 @@ const getPlanPaddingValue = (bucket: Bucket, index: number) => {
 
 const TOOLTIP_ORDER_AOP: Array<string> = ['baseline', 'forecast', 'actual'];
 const TOOLTIP_ORDER_HERMES: Array<string> = ['planReadiness', 'ready', 'forecast', 'active'];
+
+const bucketChartMeta = (bucket: Bucket) => ({
+  key: bucket.key,
+  label: bucket.label,
+  ...(bucket.periodLabel ? { periodLabel: bucket.periodLabel } : {}),
+});
 const getTooltipOrderIndex = (key?: string | number | null, isAop?: boolean) => {
   if (key === undefined || key === null) return 999;
   const order = isAop ? TOOLTIP_ORDER_AOP : TOOLTIP_ORDER_HERMES;
@@ -223,7 +224,7 @@ function buildHybridBuckets(
       monthStart.getFullYear() === anchor.getFullYear() && monthStart.getMonth() === anchor.getMonth();
 
     if (isAnchorMonth) {
-      const weekBuckets = buildWeekBuckets(start, end, rangeStart, rangeEnd);
+      const weekBuckets = buildProgressCurveWeekBuckets(start, end, rangeStart, rangeEnd);
       buckets.push(...weekBuckets);
     } else {
       const monthLabel = fmtMonth(monthStart);
@@ -246,56 +247,11 @@ function buildHybridBuckets(
   return buckets.sort((a, b) => a.start.getTime() - b.start.getTime());
 }
 
-function buildWeekBuckets(monthStart: Date, monthEnd: Date, rangeStart: Date, rangeEnd: Date): Bucket[] {
-  const weeks: Bucket[] = [];
-
-  // Start from the first day of the month; weeks are labeled by week-of-year (from start of year)
-  let cursor = new Date(monthStart);
-  let weekCount = 0;
-  const maxWeeksPerMonth = 5;
-
-  while (cursor <= monthEnd && weekCount < maxWeeksPerMonth) {
-    const weekStart = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate(), 0, 0, 0, 0);
-    // End of week: Sunday (same as before for period boundaries)
-    const dayOfWeek = cursor.getDay();
-    const daysUntilSunday = dayOfWeek === 0 ? 0 : (7 - dayOfWeek);
-    const weekEndDate = new Date(weekStart);
-    weekEndDate.setDate(weekEndDate.getDate() + daysUntilSunday);
-    weekEndDate.setHours(23, 59, 59, 999);
-
-    const monthLimitedEnd = weekEndDate.getTime() > monthEnd.getTime() ? monthEnd : weekEndDate;
-    const { start, end } = clampRange(weekStart, monthLimitedEnd, rangeStart, rangeEnd);
-
-    if (start <= end) {
-      const weekNo = getWeekNumber(weekStart);
-      const weekLabel = `W${weekNo}`;
-      // Key includes start date so sort is chronological (e.g. W52 in early Jan before W2 in mid Jan)
-      const y = start.getFullYear();
-      const m = String(start.getMonth() + 1).padStart(2, '0');
-      const d = String(start.getDate()).padStart(2, '0');
-      weeks.push({
-        key: `${y}-${m}-${d}-w${weekNo}`,
-        label: weekLabel,
-        start,
-        end,
-        kind: 'week',
-      });
-    }
-
-    const nextStart = new Date(monthLimitedEnd);
-    nextStart.setDate(nextStart.getDate() + 1);
-    nextStart.setHours(0, 0, 0, 0);
-    cursor = nextStart;
-    weekCount++;
-  }
-
-  return weeks;
-}
-
 // Type for aggregated data points
 type Point = {
   key: string;
   label: string;
+  periodLabel?: string;
   baseline: number | null;  // mocn_activation_forecast
   forecast: number | null;  // rfs_ff
   actual: number | null;    // rfs_af
@@ -403,8 +359,7 @@ function aggregateSimpleProgressCurve(
   const displayLastIndices = seriesConfig.map((_, seriesIdx) => getDisplayLastIndex(seriesIdx));
 
   return cumulativeByBucket.map((values, index) => ({
-    key: buckets[index].key,
-    label: buckets[index].label,
+    ...bucketChartMeta(buckets[index]),
     baseline: null,
     actual: null,
     planReadiness:
@@ -649,8 +604,7 @@ function aggregate(
     // Map data points with flags for label display
     // All labels (Baseline, Forecast, Actual) should only show at the last Actual point
     const mappedData = cumulativeData.map((values, index) => ({
-      key: buckets[index].key,
-      label: buckets[index].label,
+      ...bucketChartMeta(buckets[index]),
       // Baseline: show up to lastBaselineIndex
       baseline: index <= lastBaselineIndex ? Math.min(values.baseline, totalBaseline) : null,
       // Forecast: show up to lastForecastIndex  
@@ -849,8 +803,7 @@ function aggregate(
     const finalPlanReadiness = index === lastPlanReadinessIndex ? totalPlanReadiness : Math.min(cumulativePlanReadiness, totalPlanReadiness);
 
     return {
-      key: buckets[index].key,
-      label: buckets[index].label,
+      ...bucketChartMeta(buckets[index]),
       baseline: null,
       forecast: index <= lastForecastIndex ? finalForecast : null,
       actual: null,
@@ -933,6 +886,8 @@ const renderStackedPointValueTags = (
 const ProgressCurveTooltip = ({ active, payload, label }: ProgressCurveTooltipProps) => {
   if (!active || !payload?.length) return null;
 
+  const periodLabel = payload[0]?.payload?.periodLabel as string | undefined;
+
   // Detect format from payload data
   const isAopFormat = payload.some(item => item.dataKey === 'baseline' || item.dataKey === 'actual');
   
@@ -975,11 +930,23 @@ const ProgressCurveTooltip = ({ active, payload, label }: ProgressCurveTooltipPr
           color: '#B0B7C3',
           fontSize: '11px',
           fontWeight: 600,
-          marginBottom: '2px',
+          marginBottom: periodLabel ? '1px' : '2px',
         }}
       >
         {label}
       </div>
+      {periodLabel && (
+        <div
+          style={{
+            color: '#8892A8',
+            fontSize: '9px',
+            fontWeight: 500,
+            marginBottom: '4px',
+          }}
+        >
+          {periodLabel}
+        </div>
+      )}
       {values.map((item) => (
         <div
           key={item.key}
@@ -997,6 +964,34 @@ const ProgressCurveTooltip = ({ active, payload, label }: ProgressCurveTooltipPr
         </div>
       ))}
     </div>
+  );
+};
+
+type ProgressCurveXAxisTickProps = {
+  x?: number;
+  y?: number;
+  payload?: { value?: string };
+  index?: number;
+  chartData: Point[];
+};
+
+const ProgressCurveXAxisTick = ({
+  x = 0,
+  y = 0,
+  payload,
+  index,
+  chartData,
+}: ProgressCurveXAxisTickProps) => {
+  const point = index !== undefined ? chartData[index] : undefined;
+  const hasPeriod = Boolean(point?.periodLabel);
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={4} textAnchor="middle" fill="#B0B7C3" fontSize={9}>
+        {payload?.value ?? ''}
+      </text>
+      {hasPeriod && <circle cx={0} cy={13} r={1.5} fill="#64748B" />}
+    </g>
   );
 };
 
@@ -1280,20 +1275,16 @@ export default function ProgressCurveLineChart({
       {/* Chart - Flexible Height */}
       <div className="flex-1 flex flex-col min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 18, right: 20, left: 8, bottom: 14 }}>
+          <LineChart data={data} margin={{ top: 18, right: 20, left: 8, bottom: 8 }}>
             <CartesianGrid stroke="rgba(255,255,255,.06)" strokeDasharray="2 2" />
-            <XAxis 
-              dataKey="label" 
-              tick={{ fill:'#B0B7C3', fontSize:9 }}
-              height={40}
-              tickMargin={4}
+            <XAxis
+              dataKey="label"
+              tick={(props) => <ProgressCurveXAxisTick {...props} chartData={data} />}
+              height={32}
+              tickMargin={6}
               allowDuplicatedCategory={false}
               interval="preserveStartEnd"
-              minTickGap={12}
-              angle={-35}
-              textAnchor="end"
-              dx={-4}
-              dy={8}
+              minTickGap={10}
             />
             <YAxis 
               tick={{ fill:'#B0B7C3', fontSize:9 }} 

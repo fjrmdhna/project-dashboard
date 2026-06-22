@@ -28,28 +28,26 @@ function FunnelRow({
   maxCount: number
   totalCaf: number
 }) {
-  const widthPct = Math.max((row.count / maxCount) * 100, row.count > 0 ? 5 : 0)
+  const widthPct = Math.max((row.count / maxCount) * 100, row.count > 0 ? 6 : 0)
   const sharePct = totalCaf > 0 ? Math.round((row.count / totalCaf) * 100) : 0
   const fill = statusColor(row.status)
   const shortLabel = getCafStatusShortLabel(row.status)
 
   return (
-    <li className="flex min-h-0 flex-col justify-center gap-0.5 px-0.5 py-px">
-      <div className="flex min-w-0 items-center gap-1">
-        <span className="w-3 shrink-0 text-center text-[9px] font-bold tabular-nums text-sky-400/75">
-          {rank}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[10px] font-medium text-white/88" title={row.status}>
-          {shortLabel}
-        </span>
-        <span className="shrink-0 text-[10px] font-bold tabular-nums text-white">{row.count.toLocaleString()}</span>
-        <span className="w-7 shrink-0 text-right text-[8px] tabular-nums text-white/40">{sharePct}%</span>
-      </div>
-      <div className="pl-4">
-        <div className="h-[5px] overflow-hidden rounded-full bg-white/[0.07]">
-          <div className="h-full rounded-full" style={{ width: `${widthPct}%`, backgroundColor: fill }} />
-        </div>
-      </div>
+    <li
+      className="caf-funnel-row"
+      style={{
+        ["--bar-width" as string]: `${widthPct}%`,
+        ["--bar-color" as string]: fill,
+      }}
+    >
+      <span className="caf-funnel-row__bar" aria-hidden="true" />
+      <span className="caf-funnel-row__rank tabular-nums">{rank}</span>
+      <span className="caf-funnel-row__name truncate" title={row.status}>
+        {shortLabel}
+      </span>
+      <span className="caf-funnel-row__count tabular-nums">{row.count.toLocaleString()}</span>
+      <span className="caf-funnel-row__pct tabular-nums">{sharePct}%</span>
     </li>
   )
 }
@@ -73,17 +71,15 @@ export function CafStatusFunnelCard({
   const rowCount = Math.max(Math.ceil(sorted.length / 2), 1)
 
   return (
-    <div className="caf-panel-card flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <div className="caf-panel-header">
+    <div className="caf-panel-card caf-panel-card-compact flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <div className="caf-panel-header caf-panel-header-compact">
         <div className="flex min-w-0 items-center gap-1.5">
           <div className="rounded-md bg-sky-500/20 p-0.5">
             <Filter className="h-3 w-3 text-sky-300" />
           </div>
-          <span className="caf-subtitle text-sky-200">
-            CAF Status Funnel
-          </span>
+          <span className="caf-subtitle text-sky-200">CAF Status Funnel</span>
         </div>
-        <div className="flex items-baseline gap-1 rounded-md bg-sky-500/10 px-1.5 py-px">
+        <div className="flex shrink-0 items-baseline gap-1 rounded-md bg-sky-500/10 px-1.5 py-px">
           <span className="text-[8px] text-sky-200/70">Total</span>
           <span className="text-[11px] font-bold tabular-nums text-sky-300">
             {totalCaf.toLocaleString()}
@@ -101,7 +97,7 @@ export function CafStatusFunnelCard({
         <div className="flex flex-1 items-center justify-center text-[10px] text-white/50">No CAF data</div>
       ) : (
         <ul
-          className="grid min-h-0 flex-1 grid-cols-2 gap-x-2 overflow-hidden"
+          className="caf-funnel-list min-h-0 flex-1"
           style={{ gridTemplateRows: `repeat(${rowCount}, minmax(0, 1fr))` }}
         >
           {sorted.map((row, index) => (

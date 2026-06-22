@@ -1,11 +1,13 @@
 "use client"
 
 import { useState } from "react"
+import { Building2, Users } from "lucide-react"
 import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
 import { DashboardLoadingScreen } from "@/components/dashboard/DashboardLoadingScreen"
 import { MatrixStatsCard } from "@/components/cards/MatrixStatsCard"
 import { CafStatusFunnelCard } from "@/components/cards/CafStatusFunnelCard"
 import { CafAgingCard } from "@/components/cards/CafAgingCard"
+import { CafVendorTopCard } from "@/components/cards/CafVendorTopCard"
 import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
 import { CafFilterBar, getInitialCafFilters } from "@/components/filters/CafFilterBar"
 import { CafWallboard } from "@/layouts/CafWallboard"
@@ -31,6 +33,8 @@ export default function CafMonitoringPage() {
     pendingAging,
     totalOpen,
     runrateData,
+    topVendorRequestor,
+    topVendorTlp,
     loading,
     error,
   } = useCafDashboard(filters)
@@ -47,7 +51,7 @@ export default function CafMonitoringPage() {
       <DashboardLoadingScreen
         label="CAF Monitoring"
         message="Retrieving latest CAF pipeline data..."
-        placeholders={["CAF Pipeline", "Status Funnel", "CAF Aging"]}
+        placeholders={["CAF Pipeline", "Status Funnel", "Vendor Leaderboard"]}
       />
     )
   }
@@ -88,6 +92,7 @@ export default function CafMonitoringPage() {
       title="Daily CAF Runrate – Last 7 Days"
       titleClassName="caf-subtitle rounded-full bg-blue-500/20 text-blue-300 px-1.5 py-0.5"
       seriesLabels={{ forecast: "Created", actual: "Approved" }}
+      hidePointLabels
     />
   )
 
@@ -98,6 +103,34 @@ export default function CafMonitoringPage() {
       pendingAging={pendingAging}
       totalOpen={totalOpen}
       isLoading={false}
+      error={error}
+    />
+  )
+
+  const vendorRanCard = (
+    <CafVendorTopCard
+      title="Top 5 RAN Vendor"
+      items={topVendorRequestor}
+      totalCaf={funnelTotal}
+      icon={Users}
+      iconClassName="bg-violet-500/20 text-violet-300"
+      titleClassName="text-violet-200"
+      badgeClassName="bg-violet-500/10 text-violet-200"
+      barColor="#A78BFA"
+      error={error}
+    />
+  )
+
+  const vendorTlpCard = (
+    <CafVendorTopCard
+      title="Top 5 TLP Vendor"
+      items={topVendorTlp}
+      totalCaf={funnelTotal}
+      icon={Building2}
+      iconClassName="bg-teal-500/20 text-teal-300"
+      titleClassName="text-teal-200"
+      badgeClassName="bg-teal-500/10 text-teal-200"
+      barColor="#2DD4BF"
       error={error}
     />
   )
@@ -116,6 +149,8 @@ export default function CafMonitoringPage() {
       statusFunnel={statusFunnelCard}
       aging={agingCard}
       dailyRunrate={dailyRunrateCard}
+      vendorRan={vendorRanCard}
+      vendorTlp={vendorTlpCard}
     />
   )
 }

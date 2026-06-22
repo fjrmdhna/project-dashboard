@@ -8,6 +8,19 @@ import {
 } from "@/lib/caf-status-duration"
 
 const MAX_FUNNEL_STATUSES = 10
+const MAX_VENDOR_LEADERBOARD = 5
+
+function bumpVendorCount(map: Map<string, number>, value: string | null | undefined) {
+  const name = (value ?? "").trim() || "Unassigned"
+  map.set(name, (map.get(name) ?? 0) + 1)
+}
+
+function toTopVendorList(map: Map<string, number>, limit: number): CafVendorLeaderboardItem[] {
+  return Array.from(map.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, limit)
+}
 
 export type CafStatusFunnelItem = {
   status: string
@@ -18,6 +31,11 @@ export type CafDailyRunrateItem = {
   date: string
   forecast: number
   actual: number
+}
+
+export type CafVendorLeaderboardItem = {
+  name: string
+  count: number
 }
 
 export type CafAgingData = {
@@ -35,6 +53,8 @@ export type CafDashboardData = {
   }
   aging: CafAgingData
   dailyRunrate: CafDailyRunrateItem[]
+  topVendorRequestor: CafVendorLeaderboardItem[]
+  topVendorTlp: CafVendorLeaderboardItem[]
 }
 
 function hasDate(value: string | null | undefined): boolean {
@@ -82,10 +102,15 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
   const dateSet = new Set(runrateWindow.map((d) => d.sqlDate))
   const createdMap: Record<string, number> = {}
   const approvedMap: Record<string, number> = {}
+  const vendorRequestorCounts = new Map<string, number>()
+  const vendorTlpCounts = new Map<string, number>()
 
   for (const row of rows) {
     const status = (row.caf_status ?? "Unknown").trim() || "Unknown"
     statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1)
+
+    bumpVendorCount(vendorRequestorCounts, row.vendor_requestor_name)
+    bumpVendorCount(vendorTlpCounts, row.vendor_tlp_name)
 
     const createdKey = toSqlDateKey(row.created_date, dateSet)
     if (createdKey) createdMap[createdKey] = (createdMap[createdKey] ?? 0) + 1
@@ -133,6 +158,8 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
       totalOpen,
     },
     dailyRunrate,
+    topVendorRequestor: toTopVendorList(vendorRequestorCounts, MAX_VENDOR_LEADERBOARD),
+    topVendorTlp: toTopVendorList(vendorTlpCounts, MAX_VENDOR_LEADERBOARD),
   }
 }
 

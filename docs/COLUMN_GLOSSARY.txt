@@ -1,0 +1,360 @@
+================================================================================
+PMIS PROJECT DASHBOARD - COLUMN GLOSSARY
+================================================================================
+Reference for site data export headers (AOP, Hermes 5G, TLP, Opticalization)
+
+--------------------------------------------------------------------------------
+NAMING CONVENTION FOR MILESTONE DATES
+--------------------------------------------------------------------------------
+
+Suffix   Meaning      Description
+------   -------      -----------
+_bf      Baseline     Original planned date (baseline plan)
+_ff      Forecast     Latest estimated date (forecast)
+_af      Actual       Actual achieved date; if filled = milestone is done
+
+Internal milestone codes (SAP):
+  ic_000010  ->  RFI (Ready For Installation)
+  ic_000040  ->  INSTALL (equipment installation)
+
+
+================================================================================
+1. IDENTITY & MASTER DATA
+================================================================================
+
+system_key
+  Unique primary key for each site row in PMIS.
+
+SBOQ.project_type
+  Project type from Site Bill of Quantity (SBOQ), e.g. New Site, Expansion,
+  Relocation.
+
+vendor_code
+  Vendor/contractor code in SAP.
+
+vendor_name
+  Vendor/contractor name.
+
+wbs_status
+  Work Breakdown Structure status; typically "Active" = site is in monitoring
+  scope.
+
+site_id
+  Existing site ID (parent/original site).
+
+site_name
+  Existing site name.
+
+new_site_id
+  New site ID (for relocation or new site projects).
+
+new_site_name
+  New site name.
+
+unique_id
+  Combined unique ID for cross-system tracking.
+
+relo_id
+  Relocation site ID.
+
+relo_name
+  Relocation site name.
+
+site_category
+  Site category: New Site, Expansion, Upgrade, etc.
+
+po_number
+  Purchase Order number.
+
+po_subline
+  PO sub-line item.
+
+network_header
+  Network program header (project grouping at network level).
+
+year
+  Program/project year.
+
+project_name
+  Project name.
+
+program_report
+  Program grouping used for dashboard reporting.
+
+
+================================================================================
+2. PRIORITY, SCORE & GEOGRAPHY
+================================================================================
+
+ran_score
+  RAN (Radio Access Network) priority score.
+
+region
+  Geographic region (national level).
+
+region_wise
+  Region grouping (variant label).
+
+region_circle
+  Operational circle (e.g. JABOTABEK, CENTRAL JAVA).
+
+nano_cluster
+  Small operational cluster (nano cluster).
+
+dati_ii
+  Administrative area level II (regency/city).
+
+province
+  Province.
+
+kecamatan
+  Sub-district (kecamatan).
+
+sales_area
+  Sales/commercial area.
+
+mc_cluster
+  MC (Macro Cluster) - macro operational cluster.
+
+twr_owner
+  Tower owner (e.g. Indosat, tower vendor).
+
+long
+  Site longitude coordinate.
+
+lat
+  Site latitude coordinate.
+
+
+================================================================================
+3. SCOPE, STATUS & ISSUES
+================================================================================
+
+scope_of_work
+  Scope of work (SOW) description.
+
+issue_category
+  Site issue/blocker category (used for Top Issue chart).
+
+site_status
+  General site status in the pipeline.
+
+highlevel_issue
+  High-level issue summary.
+
+ran_scope
+  RAN scope of work.
+
+scope_category
+  Scope category (e.g. Full Scope, Partial).
+
+imp_ttp
+  Implementation location/city (used as City filter in Hermes 5G dashboard).
+
+priority_congest_urgent
+  Priority flag (e.g. Congestion, Urgent, Prio Lebaran).
+
+prio_type
+  Priority type classification.
+
+
+================================================================================
+4. CONSTRUCTION & INTEGRATION MILESTONES (MAIN PIPELINE)
+================================================================================
+
+po_date
+  Purchase Order issue date.
+
+ic_000010_af          [Dashboard: RFI]
+  Actual Ready For Installation date.
+
+rfi_accepted          [Dashboard: CRFI]
+  Customer/Contract RFI accepted date.
+
+caf_submitted
+  CAF (Change Authorization Form) submission date.
+
+caf_approved          [Dashboard: CAF]
+  CAF approval date.
+
+permit_af
+  Actual permit/license achieved date.
+
+mos_af                [Dashboard: MOS]
+  Actual Material On Site date.
+
+ic_000040_af          [Dashboard: INSTALL]
+  Actual equipment installation completion date.
+
+imp_integ_ff
+  Forecast Implementation & Integration (readiness) date.
+
+imp_integ_af          [Dashboard: READINESS]
+  Actual site readiness for integration date.
+
+rfs_bf                [Dashboard: Baseline]
+  Baseline Ready For Service / activation date.
+
+mocn_activation_forecast  [Dashboard: Baseline (new)]
+  MOCN (Multi-Operator Core Network) activation forecast.
+
+rfs_ff                [Dashboard: Forecast]
+  RFS / activation forecast date.
+
+rfs_actual
+  Actual RFS date (alias of rfs_af).
+
+rfs_af                [Dashboard: ACTIVATED]
+  Actual site activation / on-air date.
+
+rfc_approved          [Dashboard: RFC]
+  Request For Change approval date.
+
+hotnews_af            [Dashboard: HN]
+  Hotnews milestone achieved date.
+
+endorse_af            [Dashboard: ENDORSE]
+  Endorsement milestone date.
+
+pac_accepted_af       [Dashboard: PAC]
+  Provisional Acceptance Certificate accepted date.
+
+ready_for_acpt_date   [Dashboard: RFA]
+  Ready For Acceptance date.
+
+fatp_accepted_af      [Dashboard: FATP]
+  First Acceptance Test Plan accepted date.
+
+patp_accepted_af      [Dashboard: PATP]
+  Partial Acceptance Test Plan accepted date.
+
+rfs_forecast
+  Alternate RFS forecast (e.g. Lebaran template).
+
+rfs_forecast_lock
+  Locked RFS forecast (no further changes allowed).
+
+
+================================================================================
+5. MOCN, DONOR & PIC
+================================================================================
+
+donor_id
+  Donor site ID (for MOCN sharing - site providing infrastructure).
+
+donor_name
+  Donor site name.
+
+pic_indosat
+  Person In Charge from Indosat; used as Trial GB Factory filter in AOP
+  dashboard (blank value = "Other").
+
+
+================================================================================
+6. CHANGE REQUEST (CR)
+================================================================================
+
+CR.cr_number
+  Related Change Request number.
+
+CR.cr_status
+  Change Request status (Open, Approved, Closed, etc.).
+
+
+================================================================================
+7. TLP (TOWER LEASE PROJECT) - PREFIX "TLP."
+================================================================================
+Data from TLP New Site module (tower lease / new site).
+
+TLP.SBOQ.system_key
+  System key in TLP module.
+
+TLP.site_id
+  Site ID in TLP module.
+
+TLP.site_status
+  Site status in TLP pipeline (Construction, SITAC, Searching, Return, etc.).
+
+TLP.issue_category
+  Issue category in TLP module.
+
+TLP.ic_000010_ff
+  RFI forecast date in TLP module.
+
+TLP.ic_000010_af
+  RFI actual date in TLP module.
+
+TLP.fe_readiness_plan
+  Front End (FE) readiness plan date.
+
+TLP.rfi_accepted
+  CRFI date in TLP module.
+
+
+================================================================================
+8. OPTICALIZATION - PREFIX "Opticalization."
+================================================================================
+Data from fiber/opticalization module.
+
+Opticalization.SBOQ.system_key
+  System key in Opticalization module.
+
+Opticalization.site_id
+  Site ID in Opticalization module.
+
+Opticalization.site_status
+  Site status in optical pipeline.
+
+Opticalization.rfs_ff
+  RFS forecast date for optical.
+
+short_extention
+  Short extension - short fiber route extension (source spelling: extention).
+
+
+================================================================================
+9. NR FREQUENCY MILESTONES (5G)
+================================================================================
+
+readiness_2600_af
+  Actual readiness date for NR 2600 MHz band.
+
+activation_2600_af
+  Actual activation date for NR 2600 MHz band.
+
+readiness_700_af
+  Actual readiness date for 700 MHz band.
+
+activation_700_af
+  Actual activation date for 700 MHz band.
+
+
+================================================================================
+10. PIPELINE ORDER (SUMMARY)
+================================================================================
+
+PO
+  -> CAF Submit -> CAF Approve -> Permit -> MOS -> RFI -> CRFI -> INSTALL
+  -> READINESS -> ACTIVATED (RFS) -> RFA -> RFC -> FATP -> PATP -> HN
+  -> ENDORSE -> PAC
+
+
+================================================================================
+NOTES
+================================================================================
+
+1. Date columns (*_af): A row is counted as "achieved" when the value is not
+   null or empty. This logic is used for Matrix Stats on the dashboard.
+
+2. AOP vs Hermes 5G: In AOP, rfi_accepted maps to CRFI label. In Hermes 5G,
+   caf_approved is a separate CAF milestone.
+
+3. Prefix columns (TLP., Opticalization., CR.): Joined data from other modules
+   for the same site, not native columns of the main table.
+
+4. All milestone date values are typically stored as timestamps (YYYY-MM-DD or
+   full ISO datetime).
+
+================================================================================
+End of glossary
+================================================================================

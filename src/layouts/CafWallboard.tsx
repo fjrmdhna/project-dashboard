@@ -9,6 +9,8 @@ interface CafWallboardProps {
   statusFunnel?: ReactNode
   aging?: ReactNode
   dailyRunrate?: ReactNode
+  vendorRan?: ReactNode
+  vendorTlp?: ReactNode
 }
 
 function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -22,6 +24,8 @@ export function CafWallboard({
   statusFunnel,
   aging,
   dailyRunrate,
+  vendorRan,
+  vendorTlp,
 }: CafWallboardProps) {
   useEffect(() => {
     document.documentElement.classList.add("viewport-active")
@@ -44,6 +48,8 @@ export function CafWallboard({
             <Panel className="caf-wallboard-funnel">{statusFunnel}</Panel>
             <Panel className="caf-wallboard-aging">{aging}</Panel>
             <Panel className="caf-wallboard-runrate">{dailyRunrate}</Panel>
+            <Panel className="caf-wallboard-vendor-ran">{vendorRan}</Panel>
+            <Panel className="caf-wallboard-vendor-tlp">{vendorTlp}</Panel>
           </div>
         </div>
       </div>

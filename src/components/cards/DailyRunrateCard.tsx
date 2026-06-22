@@ -28,6 +28,8 @@ export interface DailyRunrateCardProps {
     forecast?: string
     actual?: string
   }
+  /** Hide value labels above chart points (cleaner on dense dashboards) */
+  hidePointLabels?: boolean
 }
 
 export function DailyRunrateCard({
@@ -36,6 +38,7 @@ export function DailyRunrateCard({
   title = DEFAULT_DAILY_RUNRATE_TITLE,
   titleClassName,
   seriesLabels,
+  hidePointLabels = false,
 }: DailyRunrateCardProps) {
   const forecastLabel = seriesLabels?.forecast ?? 'Forecast'
   const actualLabel = seriesLabels?.actual ?? 'Actual'
@@ -84,12 +87,10 @@ export function DailyRunrateCard({
     return null;
   };
 
-  // Custom label for data points
   const renderLabel = (props: any) => {
-    const { x, y, value, index } = props;
-    // Only render label if value is not 0
-    if (value === 0) return null;
-    
+    const { x, y, value } = props
+    if (value === 0) return null
+
     return (
       <text
         x={x}
@@ -97,15 +98,17 @@ export function DailyRunrateCard({
         fill="#FFFFFF"
         fontSize={9}
         textAnchor="middle"
-        style={{ 
-          filter: 'drop-shadow(0px 0px 1px rgba(0,0,0,0.7))',
-          textShadow: '0px 0px 2px rgba(0,0,0,0.7)'
+        style={{
+          filter: "drop-shadow(0px 0px 1px rgba(0,0,0,0.7))",
+          textShadow: "0px 0px 2px rgba(0,0,0,0.7)",
         }}
       >
         {value}
       </text>
-    );
-  };
+    )
+  }
+
+  const pointLabel = hidePointLabels ? false : renderLabel
 
   // Loading state
   if (isLoading) {
@@ -224,7 +227,7 @@ export function DailyRunrateCard({
                   activeDot={{ r: 4, fill: '#8A5AA3', stroke: '#fff', strokeWidth: 1 }}
                   isAnimationActive={true}
                   animationDuration={800}
-                  label={renderLabel}
+                  label={pointLabel}
                 />
                 <Line 
                   type="monotone"
@@ -236,7 +239,7 @@ export function DailyRunrateCard({
                   activeDot={{ r: 4, fill: '#7CB342', stroke: '#fff', strokeWidth: 1 }}
                   isAnimationActive={true}
                   animationDuration={1000}
-                  label={renderLabel}
+                  label={pointLabel}
                 />
               </>
             ) : (
@@ -251,7 +254,7 @@ export function DailyRunrateCard({
                   activeDot={{ r: 4, fill: '#8A5AA3', stroke: '#fff', strokeWidth: 1 }}
                   isAnimationActive={true}
                   animationDuration={800}
-                  label={renderLabel}
+                  label={pointLabel}
                 />
                 <Line 
                   type="monotone"
@@ -263,7 +266,7 @@ export function DailyRunrateCard({
                   activeDot={{ r: 4, fill: '#7CB342', stroke: '#fff', strokeWidth: 1 }}
                   isAnimationActive={true}
                   animationDuration={1000}
-                  label={renderLabel}
+                  label={pointLabel}
                 />
               </>
             )}

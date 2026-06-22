@@ -77,6 +77,8 @@ export function useCafDashboard(filters: CafSiteFilters) {
     pendingAging: aging?.pendingAging ?? 0,
     totalOpen: aging?.totalOpen ?? 0,
     runrateData: dashboard?.dailyRunrate ?? [],
+    topVendorRequestor: dashboard?.topVendorRequestor ?? [],
+    topVendorTlp: dashboard?.topVendorTlp ?? [],
     loading,
     error,
     refetch,
