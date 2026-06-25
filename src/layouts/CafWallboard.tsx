@@ -6,6 +6,7 @@ interface CafWallboardProps {
   header?: ReactNode
   filterBar?: ReactNode
   matrixStats?: ReactNode
+  milestoneAlignment?: ReactNode
   statusFunnel?: ReactNode
   aging?: ReactNode
   dailyRunrate?: ReactNode
@@ -21,6 +22,7 @@ export function CafWallboard({
   header,
   filterBar,
   matrixStats,
+  milestoneAlignment,
   statusFunnel,
   aging,
   dailyRunrate,
@@ -45,6 +47,7 @@ export function CafWallboard({
           <div className="caf-wallboard-body">
             <Panel className="caf-wallboard-filters">{filterBar}</Panel>
             <Panel className="caf-wallboard-matrix">{matrixStats}</Panel>
+            <Panel className="caf-wallboard-milestone">{milestoneAlignment}</Panel>
             <Panel className="caf-wallboard-funnel">{statusFunnel}</Panel>
             <Panel className="caf-wallboard-aging">{aging}</Panel>
             <Panel className="caf-wallboard-runrate">{dailyRunrate}</Panel>

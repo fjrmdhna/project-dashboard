@@ -22,6 +22,9 @@ export type CafFilterableRow = {
   approved_date?: string | null
   implemented_date?: string | null
   status_duration?: string | null
+  rfs_af?: string | null
+  endorse_af?: string | null
+  patp_accepted_af?: string | null
 }
 
 function isNonEmptyString(v: unknown): v is string {

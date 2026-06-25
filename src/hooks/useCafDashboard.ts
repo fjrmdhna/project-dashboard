@@ -28,7 +28,7 @@ export function useCafDashboard(filters: CafSiteFilters) {
   }, [])
 
   const { data: baseRows, loading: baseLoading, error, refetch } = useApiCache<CafFilterableRow[]>(
-    "caf-site-data-all-v1",
+    "caf-site-data-all-v2",
     fetchFn,
     {
       staleTime: 3 * 60 * 1000,
@@ -76,6 +76,13 @@ export function useCafDashboard(filters: CafSiteFilters) {
     waitingImplementation: aging?.waitingImplementation ?? 0,
     pendingAging: aging?.pendingAging ?? 0,
     totalOpen: aging?.totalOpen ?? 0,
+    milestoneAlignment: dashboard?.milestoneAlignment ?? {
+      missingRfs: 0,
+      missingEndorse: 0,
+      missingPatp: 0,
+      allComplete: 0,
+      totalCaf: 0,
+    },
     runrateData: dashboard?.dailyRunrate ?? [],
     topVendorRequestor: dashboard?.topVendorRequestor ?? [],
     topVendorTlp: dashboard?.topVendorTlp ?? [],

@@ -16,6 +16,7 @@ test.describe("CAF Monitoring Dashboard", () => {
 
     await expect(page.getByRole("heading", { name: /CAF Monitoring Dashboard/i })).toBeVisible()
     await expect(page.getByText("CAF Pipeline")).toBeVisible()
+    await expect(page.getByText("AF Milestone Coverage")).toBeVisible()
     await expect(page.getByText("CAF Status Funnel")).toBeVisible()
     await expect(page.getByText("CAF Aging")).toBeVisible()
     await expect(page.getByText("Daily CAF Runrate")).toBeVisible()

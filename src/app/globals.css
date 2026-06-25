@@ -877,7 +877,7 @@ html, body {
 .caf-wallboard-body {
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
-  grid-template-rows: auto auto minmax(0, 0.72fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 0.68fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 6px;
   padding: 5px 6px 6px;
   box-sizing: border-box;
@@ -918,33 +918,42 @@ html, body {
   height: auto;
 }
 
+.caf-wallboard-milestone {
+  grid-column: 1 / -1;
+}
+
+.caf-wallboard-milestone > * {
+  flex: 0 0 auto;
+  height: auto;
+}
+
 .caf-wallboard-funnel {
   grid-column: 1;
-  grid-row: 3;
+  grid-row: 4;
   min-height: 0;
 }
 
 .caf-wallboard-aging {
   grid-column: 2;
-  grid-row: 3;
+  grid-row: 4;
   min-height: 0;
 }
 
 .caf-wallboard-runrate {
   grid-column: 1;
-  grid-row: 4 / 6;
+  grid-row: 5 / 7;
   min-height: 0;
 }
 
 .caf-wallboard-vendor-ran {
   grid-column: 2;
-  grid-row: 4;
+  grid-row: 5;
   min-height: 0;
 }
 
 .caf-wallboard-vendor-tlp {
   grid-column: 2;
-  grid-row: 5;
+  grid-row: 6;
   min-height: 0;
 }
 
@@ -1039,6 +1048,84 @@ html, body {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   padding-top: 6px;
   padding-bottom: 2px;
+}
+
+.caf-milestone-card {
+  padding-bottom: 6px;
+}
+
+.caf-milestone-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  padding: 2px 0;
+}
+
+.caf-milestone-tile {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px 5px;
+}
+
+.caf-milestone-tile__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
+}
+
+.caf-milestone-tile__icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.caf-milestone-tile__label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+}
+
+.caf-milestone-tile__pct {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.caf-milestone-tile__value {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.caf-milestone-tile__bar-track {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.caf-milestone-tile__bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
 }
 
 .caf-funnel-list {
@@ -1250,9 +1337,10 @@ html, body {
 @media (max-width: 1200px) {
   .caf-wallboard-body {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto minmax(180px, 1fr) minmax(160px, 1fr) minmax(180px, 0.9fr) minmax(140px, 0.75fr) minmax(140px, 0.75fr);
+    grid-template-rows: auto auto auto minmax(180px, 1fr) minmax(160px, 1fr) minmax(180px, 0.9fr) minmax(140px, 0.75fr) minmax(140px, 0.75fr);
   }
 
+  .caf-wallboard-milestone,
   .caf-wallboard-funnel,
   .caf-wallboard-aging,
   .caf-wallboard-runrate,

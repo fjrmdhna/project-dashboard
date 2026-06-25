@@ -1,4 +1,4 @@
-import { format, subDays } from "date-fns"
+import { differenceInCalendarDays, format, startOfDay, subDays } from "date-fns"
 import type { CafFilterableRow } from "@/lib/caf-filters"
 import { computeCafMatrixStats, type CafMatrixStats } from "@/lib/caf-matrix-stats"
 import {
@@ -6,6 +6,10 @@ import {
   parseStatusDurationDays,
   type CafAgingBucket,
 } from "@/lib/caf-status-duration"
+import {
+  computeCafMilestoneAlignment,
+  type CafMilestoneAlignmentData,
+} from "@/lib/caf-milestone-fields"
 
 const MAX_FUNNEL_STATUSES = 10
 const MAX_VENDOR_LEADERBOARD = 5
@@ -45,6 +49,8 @@ export type CafAgingData = {
   totalOpen: number
 }
 
+export type { CafMilestoneAlignmentData } from "@/lib/caf-milestone-fields"
+
 export type CafDashboardData = {
   matrix: CafMatrixStats
   statusFunnel: {
@@ -52,6 +58,7 @@ export type CafDashboardData = {
     totalCaf: number
   }
   aging: CafAgingData
+  milestoneAlignment: CafMilestoneAlignmentData
   dailyRunrate: CafDailyRunrateItem[]
   topVendorRequestor: CafVendorLeaderboardItem[]
   topVendorTlp: CafVendorLeaderboardItem[]
@@ -61,10 +68,23 @@ function hasDate(value: string | null | undefined): boolean {
   return value !== null && value !== undefined && String(value).trim() !== ""
 }
 
-function buildRunrateWindow(): Array<{ formatted: string; sqlDate: string }> {
-  const today = new Date()
+function parseRunrateDate(value: string | null | undefined): Date | null {
+  if (!value || !String(value).trim()) return null
+
+  const raw = String(value).trim()
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw)
+  if (dateOnly) {
+    return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+  }
+
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function buildRunrateWindow(endDate: Date = new Date()): Array<{ formatted: string; sqlDate: string }> {
+  const end = startOfDay(endDate)
   return Array.from({ length: 7 }, (_, i) => {
-    const date = subDays(today, 6 - i)
+    const date = subDays(end, 6 - i)
     return {
       formatted: format(date, "dd-MMM-yy"),
       sqlDate: format(date, "yyyy-MM-dd"),
@@ -72,14 +92,36 @@ function buildRunrateWindow(): Array<{ formatted: string; sqlDate: string }> {
   })
 }
 
-function toSqlDateKey(value: string | null | undefined, dateSet: Set<string>): string | null {
-  if (!value) return null
-  try {
-    const dateKey = format(new Date(value), "yyyy-MM-dd")
-    return dateSet.has(dateKey) ? dateKey : null
-  } catch {
-    return null
+/** Anchor runrate to latest CAF activity when the dataset lags behind calendar today. */
+export function resolveCafRunrateAnchorDate(rows: CafFilterableRow[]): Date {
+  const today = startOfDay(new Date())
+  let latestMs = 0
+
+  for (const row of rows) {
+    for (const raw of [row.created_date, row.approved_date]) {
+      const parsed = parseRunrateDate(raw)
+      if (!parsed) continue
+      const ms = parsed.getTime()
+      if (ms > latestMs) latestMs = ms
+    }
   }
+
+  if (latestMs === 0) return today
+
+  const latest = startOfDay(new Date(latestMs))
+  const gapDays = differenceInCalendarDays(today, latest)
+
+  if (gapDays <= 6) return today
+
+  return latest
+}
+
+function toSqlDateKey(value: string | null | undefined, dateSet: Set<string>): string | null {
+  const parsed = parseRunrateDate(value)
+  if (!parsed) return null
+
+  const dateKey = format(parsed, "yyyy-MM-dd")
+  return dateSet.has(dateKey) ? dateKey : null
 }
 
 /** Single-pass aggregation — one scan of rows for all CAF dashboard cards. */
@@ -98,7 +140,8 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
   let pendingAging = 0
   let totalOpen = 0
 
-  const runrateWindow = buildRunrateWindow()
+  const runrateAnchor = resolveCafRunrateAnchorDate(rows)
+  const runrateWindow = buildRunrateWindow(runrateAnchor)
   const dateSet = new Set(runrateWindow.map((d) => d.sqlDate))
   const createdMap: Record<string, number> = {}
   const approvedMap: Record<string, number> = {}
@@ -157,6 +200,7 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
       pendingAging,
       totalOpen,
     },
+    milestoneAlignment: computeCafMilestoneAlignment(rows),
     dailyRunrate,
     topVendorRequestor: toTopVendorList(vendorRequestorCounts, MAX_VENDOR_LEADERBOARD),
     topVendorTlp: toTopVendorList(vendorTlpCounts, MAX_VENDOR_LEADERBOARD),

@@ -7,6 +7,7 @@ import { DashboardLoadingScreen } from "@/components/dashboard/DashboardLoadingS
 import { MatrixStatsCard } from "@/components/cards/MatrixStatsCard"
 import { CafStatusFunnelCard } from "@/components/cards/CafStatusFunnelCard"
 import { CafAgingCard } from "@/components/cards/CafAgingCard"
+import { CafMilestoneAlignmentCard } from "@/components/cards/CafMilestoneAlignmentCard"
 import { CafVendorTopCard } from "@/components/cards/CafVendorTopCard"
 import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
 import { CafFilterBar, getInitialCafFilters } from "@/components/filters/CafFilterBar"
@@ -35,6 +36,7 @@ export default function CafMonitoringPage() {
     runrateData,
     topVendorRequestor,
     topVendorTlp,
+    milestoneAlignment,
     loading,
     error,
   } = useCafDashboard(filters)
@@ -73,6 +75,14 @@ export default function CafMonitoringPage() {
         notConfirmed,
         resubmit,
       }}
+    />
+  )
+
+  const milestoneAlignmentCard = (
+    <CafMilestoneAlignmentCard
+      data={milestoneAlignment}
+      isLoading={false}
+      error={error}
     />
   )
 
@@ -146,6 +156,7 @@ export default function CafMonitoringPage() {
         />
       }
       matrixStats={matrixStats}
+      milestoneAlignment={milestoneAlignmentCard}
       statusFunnel={statusFunnelCard}
       aging={agingCard}
       dailyRunrate={dailyRunrateCard}

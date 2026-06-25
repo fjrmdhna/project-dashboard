@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   aggregateCafDashboard,
+  resolveCafRunrateAnchorDate,
   sumFunnelCounts,
 } from "@/lib/caf-dashboard-aggregate"
 import { sumMatrixPipelineBuckets } from "@/lib/caf-matrix-stats"
@@ -66,6 +67,44 @@ describe("caf-dashboard-aggregate", () => {
     expect(dashboard.dailyRunrate.every((d) => typeof d.forecast === "number")).toBe(true)
     expect(dashboard.dailyRunrate.every((d) => typeof d.actual === "number")).toBe(true)
     expect(dashboard.dailyRunrate.some((d) => d.forecast > 0)).toBe(true)
+  })
+
+  it("produces milestone alignment counts from AF fields", () => {
+    const rows: CafFilterableRow[] = [
+      { rfs_af: "2025-01-01", endorse_af: "2025-01-02", patp_accepted_af: "2025-01-03" },
+      { rfs_af: null, endorse_af: "2025-01-02", patp_accepted_af: null },
+      { rfs_af: "2025-01-01", endorse_af: null, patp_accepted_af: null },
+    ]
+
+    const dashboard = aggregateCafDashboard(rows)
+
+    expect(dashboard.milestoneAlignment.totalCaf).toBe(3)
+    expect(dashboard.milestoneAlignment.missingRfs).toBe(1)
+    expect(dashboard.milestoneAlignment.missingEndorse).toBe(2)
+    expect(dashboard.milestoneAlignment.missingPatp).toBe(2)
+    expect(dashboard.milestoneAlignment.allComplete).toBe(1)
+  })
+
+  it("anchors runrate to latest CAF activity when data is older than 7 days", () => {
+    const staleDate = format(subDays(new Date(), 12), "yyyy-MM-dd")
+    const rows: CafFilterableRow[] = [
+      {
+        caf_status: "Waiting for Review – TLP",
+        created_date: staleDate,
+        approved_date: staleDate,
+      },
+      {
+        caf_status: "CAF Rejected",
+        created_date: staleDate,
+      },
+    ]
+
+    const anchor = resolveCafRunrateAnchorDate(rows)
+    expect(format(anchor, "yyyy-MM-dd")).toBe(staleDate)
+
+    const dashboard = aggregateCafDashboard(rows)
+    expect(dashboard.dailyRunrate.some((d) => d.forecast > 0)).toBe(true)
+    expect(dashboard.dailyRunrate.some((d) => d.actual > 0)).toBe(true)
   })
 
   it("classifies aging buckets without overlap", () => {
