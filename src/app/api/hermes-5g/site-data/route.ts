@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSiteData5G, type SiteData5GFilters } from '@/lib/supabase'
+import { getSiteData5G } from '@/lib/supabase'
 import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-ran-score-filter'
 import {
-  parseDataScopeFromSearchParams,
+  dataScopeToSiteDataFilters,
   getDataScopeCacheKey,
-  scopeToProgramReportFilters,
+  parseDataScopeFromSearchParams,
 } from '@/lib/hermes-dashboard-scope'
 import {
   setCache,
@@ -42,6 +42,7 @@ const MINIMAL_COLUMNS = [
   'system_key',        // Required for key
   'vendor_name',       // VendorLeaderboard + Filter
   'program_report',    // Filter + RAN Score derived (normalize for display)
+  'wbs_status',        // Dashboard scope filter (Active only)
   'imp_ttp',           // Readiness/Activated cards + Filter
   'nano_cluster',      // Readiness/Activated cards + Filter
   'year',              // Year filter
@@ -111,6 +112,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       system_key: row.system_key,
       vendor_name: row.vendor_name || null,
       program_report: row.program_report || null,
+      wbs_status: row.wbs_status || null,
       imp_ttp: row.imp_ttp || null,
       nano_cluster: row.nano_cluster || null,
       ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null),
@@ -214,8 +216,9 @@ function calculateStatsFromData(filteredData: any[]) {
 // Fetch site rows from Supabase. Scoped dashboards apply program_report at DB level;
 // user filters (vendor, city, etc.) remain client-side for instant filter changes.
 async function fetchDataFromDatabase(
-  scopeFilters: Pick<SiteData5GFilters, 'program_report' | 'program_report_match'>
+  dataScope?: ReturnType<typeof parseDataScopeFromSearchParams>
 ): Promise<{ data: any[], totalCount: number }> {
+  const scopeFilters = dataScopeToSiteDataFilters(dataScope)
   const { data, count } = await getSiteData5G(scopeFilters, {})
   return { data: data || [], totalCount: count || 0 }
 }
@@ -229,13 +232,13 @@ export async function GET(request: NextRequest) {
     const vendorNames = searchParams.getAll('vendor_name') || []
     const impTtps = searchParams.getAll('imp_ttp') || []
     const nanoClusters = searchParams.getAll('nano_cluster') || []
+    const dataScope = parseDataScopeFromSearchParams(searchParams)
+    const scopeKey = getDataScopeCacheKey(dataScope)
 
     // Mode: 'minimal' for dashboard (smaller payload), 'full' for detailed views
     const mode = (searchParams.get('mode') || 'minimal') as 'full' | 'minimal'
 
-    const dataScope = parseDataScopeFromSearchParams(searchParams)
-    const scopeKey = getDataScopeCacheKey(dataScope)
-    const scopeFilters = scopeToProgramReportFilters(dataScope)
+    const scopeFilters = dataScopeToSiteDataFilters(dataScope)
 
     // Create filter params for cache key (user filters only; scope is separate)
     const filterParams: FilterParams = {
@@ -256,7 +259,7 @@ export async function GET(request: NextRequest) {
     )
     const startTime = Date.now()
 
-    const dataResult = await fetchDataFromDatabase(scopeFilters)
+    const dataResult = await fetchDataFromDatabase(dataScope)
     const stats = calculateStatsFromData(dataResult.data)
 
     setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch(err => {

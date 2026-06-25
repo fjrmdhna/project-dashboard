@@ -5,6 +5,9 @@ import { BarChart3 } from "lucide-react"
 import {
   isMilestoneAchieved,
   resolveMilestoneColumns,
+  HERMES_READINESS_CITY_CHART_THEME,
+  type HermesCityBarChartTheme,
+  type HermesCityMetricKey,
   type HermesMilestoneFields,
 } from "@/lib/hermes-milestone-fields"
 import {
@@ -26,12 +29,13 @@ type Row = {
   region_circle?: string | null
   imp_integ_af?: string | null
   readiness_2600_af?: string | null
+  mos_af?: string | null
   ic_000010_af?: string | null // RFI header for AOP
 }
 
 // Pre-aggregated data from useAopData hook (OPTIMIZATION)
 // rfi is optional because Hermes 5G doesn't use it
-type AggregatedByCircle = Map<string, { total: number; ready: number; activated: number; rfi?: number }>
+type AggregatedByCircle = Map<string, { total: number; ready: number; activated: number; mos?: number; rfi?: number }>
 
 // Tipe data untuk props komponen
 type Props = {
@@ -42,6 +46,15 @@ type Props = {
   // OPTIMIZATION: Pre-aggregated data to avoid 41k row iteration
   aggregatedByCircle?: AggregatedByCircle
   milestoneFields?: HermesMilestoneFields
+  /** Override milestone column (e.g. mos_af for MOS by City) */
+  milestoneColumn?: string
+  /** Pre-aggregated metric to plot (default: ready) */
+  achievedMetricKey?: HermesCityMetricKey
+  /** Override card header badge */
+  cardTitle?: string
+  achievedLegendLabel?: string
+  pendingLegendLabel?: string
+  chartTheme?: HermesCityBarChartTheme
 }
 
 // Tipe data untuk item chart
@@ -163,8 +176,22 @@ const ReadyLabel = (props: any) => {
   )
 }
 
-export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dataVariant = 'default', aggregatedByCircle, milestoneFields }: Props) {
+export function FiveGReadinessCard({
+  rows,
+  maxCities = 10,
+  variant = 'city',
+  dataVariant = 'default',
+  aggregatedByCircle,
+  milestoneFields,
+  milestoneColumn,
+  achievedMetricKey = 'ready',
+  cardTitle,
+  achievedLegendLabel,
+  pendingLegendLabel,
+  chartTheme = HERMES_READINESS_CITY_CHART_THEME,
+}: Props) {
   const { readinessColumn } = resolveMilestoneColumns(milestoneFields)
+  const achievedColumn = milestoneColumn ?? readinessColumn
   const [pageIndex, setPageIndex] = useState(0)
 
   // Agregasi data untuk chart - OPTIMIZED: Use pre-aggregated data if available
@@ -173,7 +200,9 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
     if (aggregatedByCircle && (variant === 'circle' || variant === 'city')) {
       const result: ChartItem[] = Array.from(aggregatedByCircle.entries()).map(([location, data]) => {
         // For AOP, use rfi field; for default, use ready field
-        const rdyCount = dataVariant === 'aop' ? (data as any).rfi : data.ready
+        const rdyCount = dataVariant === 'aop'
+          ? ((data as { rfi?: number }).rfi ?? 0)
+          : (data[achievedMetricKey] ?? data.ready ?? 0)
         const nyCount = data.total - rdyCount
         return {
           city: variant === 'circle' ? '' : location,
@@ -199,7 +228,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
       
       const isReady = dataVariant === 'aop'
         ? !!row.ic_000010_af
-        : isMilestoneAchieved(row, readinessColumn)
+        : isMilestoneAchieved(row, achievedColumn)
       
       const locationData = locationMap.get(location) || { ny: 0, rdy: 0 }
       
@@ -223,7 +252,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
     return result.sort((a, b) => 
       (b.rdy || 0) + (b.ny || 0) - ((a.rdy || 0) + (a.ny || 0))
     )
-  }, [rows, variant, dataVariant, aggregatedByCircle, readinessColumn])
+  }, [rows, variant, dataVariant, aggregatedByCircle, achievedColumn, achievedMetricKey])
 
   const totalPages = useMemo(() => {
     if (!maxCities || maxCities <= 0) return 1
@@ -260,24 +289,24 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
     if (variant === 'circle') {
       return 'Readiness by Circle'
     }
+    if (cardTitle) return cardTitle
     return milestoneFields?.readinessCardTitle ?? '5G Readiness by City'
-  }, [variant, dataVariant, milestoneFields])
+  }, [variant, dataVariant, milestoneFields, cardTitle])
   
   const dataKey = variant === 'circle' ? 'circle' : 'city'
   
-  // Determine legend labels based on dataVariant
-  const nyLegendLabel = dataVariant === 'aop' ? 'NY RFI' : 'NY Readiness'
-  const rdyLegendLabel = dataVariant === 'aop' ? 'RFI' : 'Readiness'
+  const nyLegendLabel = pendingLegendLabel ?? (dataVariant === 'aop' ? 'NY RFI' : 'NY Readiness')
+  const rdyLegendLabel = achievedLegendLabel ?? (dataVariant === 'aop' ? 'RFI' : 'Readiness')
 
   return (
-    <div className="readiness-card rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0" style={{ padding: 'calc(var(--wb-card-padding) - 4px)' }}>
+    <div className={`${chartTheme.cardClassName} rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0`} style={{ padding: 'calc(var(--wb-card-padding) - 4px)' }}>
       {/* Header */}
       <div className="flex items-center justify-between gap-2 mb-1.5 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <div className="bg-purple-500/20 p-1 rounded-lg">
-            <BarChart3 className="h-3.5 w-3.5 text-purple-400" />
+          <div className={`${chartTheme.iconBgClass} p-1 rounded-lg`}>
+            <BarChart3 className={`h-3.5 w-3.5 ${chartTheme.iconTextClass}`} />
           </div>
-          <div className="text-[10px] font-semibold bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">
+          <div className={`text-[10px] font-semibold ${chartTheme.badgeBgClass} ${chartTheme.badgeTextClass} px-2 py-0.5 rounded-full`}>
             {displayLabel}
           </div>
         </div>
@@ -357,7 +386,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
             <Bar 
               dataKey="ny" 
               name={nyLegendLabel} 
-              fill="#8A5AA3" 
+              fill={chartTheme.pendingColor} 
               barSize={12}
               minPointSize={2}
             >
@@ -368,7 +397,7 @@ export function FiveGReadinessCard({ rows, maxCities = 10, variant = 'city', dat
             <Bar 
               dataKey="rdy" 
               name={rdyLegendLabel} 
-              fill="#7CB342" 
+              fill={chartTheme.achievedColor} 
               barSize={12}
             >
               <LabelList

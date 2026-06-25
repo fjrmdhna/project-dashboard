@@ -622,6 +622,10 @@ html, body {
 .readiness-card .recharts-cartesian-axis-tick-value { font-size: 11px !important; fill: #B0B7C3; }
 .readiness-card .recharts-default-legend { font-size: 12px; }
 
+/* MOS by city card chart typography */
+.mos-city-card .recharts-cartesian-axis-tick-value { font-size: 11px !important; fill: #B0B7C3; }
+.mos-city-card .recharts-default-legend { font-size: 12px; }
+
 /* Activated card chart typography */
 .activated-card .recharts-cartesian-axis-tick-value { font-size: 11px !important; fill: #B0B7C3; }
 .activated-card .recharts-default-legend { font-size: 12px; }
@@ -849,5 +853,505 @@ html, body {
 @keyframes hermes-pill-shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+/* CAF Monitoring — dedicated layout (no empty Hermes slots) */
+.caf-wallboard-grid {
+  display: grid;
+  grid-template-rows: var(--wb-header-height) minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.caf-wallboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2rem;
+  min-height: 0;
+}
+
+.caf-wallboard-body {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  grid-template-rows: auto auto auto minmax(0, 0.68fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  padding: 5px 6px 6px;
+  box-sizing: border-box;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.caf-wallboard-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  contain: layout style;
+}
+
+.caf-wallboard-panel > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.caf-wallboard-filters {
+  grid-column: 1 / -1;
+}
+
+.caf-wallboard-filters .caf-wallboard-panel > *,
+.caf-wallboard-filters > * {
+  flex: 0 0 auto;
+  height: auto;
+}
+
+.caf-wallboard-matrix {
+  grid-column: 1 / -1;
+}
+
+.caf-wallboard-matrix > * {
+  flex: 0 0 auto;
+  height: auto;
+}
+
+.caf-wallboard-milestone {
+  grid-column: 1 / -1;
+}
+
+.caf-wallboard-milestone > * {
+  flex: 0 0 auto;
+  height: auto;
+}
+
+.caf-wallboard-funnel {
+  grid-column: 1;
+  grid-row: 4;
+  min-height: 0;
+}
+
+.caf-wallboard-aging {
+  grid-column: 2;
+  grid-row: 4;
+  min-height: 0;
+}
+
+.caf-wallboard-runrate {
+  grid-column: 1;
+  grid-row: 5 / 7;
+  min-height: 0;
+}
+
+.caf-wallboard-vendor-ran {
+  grid-column: 2;
+  grid-row: 5;
+  min-height: 0;
+}
+
+.caf-wallboard-vendor-tlp {
+  grid-column: 2;
+  grid-row: 6;
+  min-height: 0;
+}
+
+.caf-panel-card {
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(15, 22, 48, 0.82);
+  padding: 8px 10px;
+}
+
+.caf-panel-card-compact {
+  padding: 5px 7px;
+}
+
+.caf-aging-card {
+  padding-bottom: 8px;
+}
+
+.caf-panel-header-compact {
+  margin-bottom: 3px;
+}
+
+.caf-aging-chip {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px 2px;
+}
+
+.caf-aging-chip__value {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.caf-aging-chip__label {
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+}
+
+.caf-aging-footer-stat {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 3px 5px;
+}
+
+.caf-aging-footer-stat__value {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.caf-aging-footer-stat__label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.caf-aging-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-height: 0;
+  padding: 2px 0 4px;
+}
+
+.caf-aging-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 6px;
+  padding-bottom: 2px;
+}
+
+.caf-milestone-card {
+  padding-bottom: 6px;
+}
+
+.caf-milestone-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  padding: 2px 0;
+}
+
+.caf-milestone-tile {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px 5px;
+}
+
+.caf-milestone-tile__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
+}
+
+.caf-milestone-tile__icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.caf-milestone-tile__label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+}
+
+.caf-milestone-tile__pct {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.caf-milestone-tile__value {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.caf-milestone-tile__bar-track {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.caf-milestone-tile__bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.caf-funnel-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 2px;
+  overflow: hidden;
+}
+
+.caf-funnel-row {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 12px minmax(0, 1fr) auto 24px;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 4px 2px 7px;
+  isolation: isolate;
+}
+
+.caf-funnel-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+  background-color: var(--bar-color, #60a5fa);
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.caf-funnel-row__bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 0;
+  width: var(--bar-width, 0%);
+  border-radius: 3px;
+  background-color: var(--bar-color, #60a5fa);
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.caf-funnel-row__rank,
+.caf-funnel-row__name,
+.caf-funnel-row__count,
+.caf-funnel-row__pct {
+  position: relative;
+  z-index: 2;
+}
+
+.caf-funnel-row__rank {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  color: rgba(125, 211, 252, 0.75);
+  text-align: center;
+}
+
+.caf-funnel-row__name {
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.caf-funnel-row__count {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
+
+.caf-funnel-row__pct {
+  font-size: 8px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: right;
+}
+
+.caf-vendor-list {
+  display: grid;
+  grid-template-rows: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.caf-vendor-row {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  border-radius: 4px;
+  padding: 0 4px;
+  isolation: isolate;
+}
+
+.caf-vendor-row__bar {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  left: 0;
+  z-index: 0;
+  width: var(--bar-width, 0%);
+  border-radius: 3px;
+  opacity: 0.14;
+  pointer-events: none;
+}
+
+.caf-vendor-row__rank,
+.caf-vendor-row__name,
+.caf-vendor-row__count,
+.caf-vendor-row__pct {
+  position: relative;
+  z-index: 1;
+}
+
+.caf-vendor-row__rank {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.caf-vendor-row__name {
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.caf-vendor-row__count {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
+
+.caf-vendor-row__pct {
+  width: 22px;
+  text-align: right;
+  font-size: 8px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.caf-panel-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 6px;
+}
+
+/* Unified subtitle typography for CAF Monitoring dashboard */
+.caf-subtitle {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.caf-matrix-card {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+
+.caf-matrix-card .caf-matrix-metrics {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  width: 100%;
+  padding: 0 0.5rem;
+}
+
+.caf-matrix-card .caf-matrix-total {
+  flex-shrink: 0;
+  padding-right: 1rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.caf-wallboard-runrate .rounded-xl {
+  border-radius: 1rem !important;
+  padding: 8px 10px 4px !important;
+}
+
+.caf-wallboard-runrate .recharts-wrapper {
+  margin-bottom: 2px;
+}
+
+@media (max-width: 1200px) {
+  .caf-wallboard-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto minmax(180px, 1fr) minmax(160px, 1fr) minmax(180px, 0.9fr) minmax(140px, 0.75fr) minmax(140px, 0.75fr);
+  }
+
+  .caf-wallboard-milestone,
+  .caf-wallboard-funnel,
+  .caf-wallboard-aging,
+  .caf-wallboard-runrate,
+  .caf-wallboard-vendor-ran,
+  .caf-wallboard-vendor-tlp {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .caf-matrix-card .caf-matrix-metrics {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 }

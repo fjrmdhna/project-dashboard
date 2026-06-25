@@ -67,11 +67,7 @@ export function ProgramHeader({
             >
               {mapLabel}
             </Link>
-          ) : (
-            <span className="rounded-full border border-white/10 px-3 py-1 font-medium text-white/40">
-              {mapLabel}
-            </span>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

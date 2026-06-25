@@ -1,15 +1,30 @@
 import type { ProjectProgressFilters } from "@/lib/project-progress"
 import type { FilterValue } from "@/components/filters/FilterBar"
-import type { HermesDashboardDataScope } from "@/lib/hermes-dashboard-scope"
-import type { HermesMilestoneFields } from "@/lib/hermes-milestone-fields"
-import { NR_2600_MILESTONE_FIELDS } from "@/lib/hermes-milestone-fields"
-import type { HermesProgressCurveFields } from "@/lib/hermes-progress-curve-fields"
+import {
+  HERMES_DASHBOARD_ACTIVE_WBS_STATUS,
+  type HermesDashboardDataScope,
+  appendDataScopeToSearchParams,
+} from "@/lib/hermes-dashboard-scope"
+import type { HermesCityMilestoneCardConfig, HermesMilestoneFields } from "@/lib/hermes-milestone-fields"
+import { NR_2600_MILESTONE_FIELDS, NR_2600_MOS_BY_CITY_CARD } from "@/lib/hermes-milestone-fields"
+import type {
+  HermesDailyRunrateMilestone,
+  HermesProgressCurveFields,
+} from "@/lib/hermes-progress-curve-fields"
 import { NR_2600_PROGRESS_CURVE_FIELDS } from "@/lib/hermes-progress-curve-fields"
 
-/** NR 2600: only sites whose program_report contains "13k" (e.g. "5G 13K - Cov") */
+/** Hermes 5G: program_report contains "10k" and wbs_status is Active */
+export const HERMES_5G_PROGRAM_REPORT_SCOPE: HermesDashboardDataScope = {
+  program_report: "10k",
+  program_report_match: "contains",
+  wbs_status: HERMES_DASHBOARD_ACTIVE_WBS_STATUS,
+}
+
+/** NR 2600: program_report contains "13k" and wbs_status is Active */
 export const NR_2600_PROGRAM_REPORT_SCOPE: HermesDashboardDataScope = {
   program_report: "13k",
   program_report_match: "contains",
+  wbs_status: HERMES_DASHBOARD_ACTIVE_WBS_STATUS,
 }
 
 export interface HermesDashboardConfig {
@@ -38,22 +53,23 @@ export interface HermesDashboardConfig {
   progressCurveFields?: HermesProgressCurveFields
   /** Filter fields to hide from FilterBar (e.g. NR 2600 has no program_report filter) */
   hiddenFilters?: ReadonlyArray<keyof FilterValue>
+  /** Daily runrate milestone pair — default activated (Hermes), NR 2600 uses readiness */
+  dailyRunrateMilestone?: HermesDailyRunrateMilestone
+  /** Optional card header override for daily runrate */
+  dailyRunrateTitle?: string
+  /** Top-left city bar chart (e.g. NR 2600 MOS by City) */
+  cityMilestoneCard?: HermesCityMilestoneCardConfig
+  /** When true, hide activation-by-city and show readiness in the lower left slot */
+  hideActivatedCityCard?: boolean
 }
 
-/** Build filter-options API URL; scoped dashboards append program_report query params */
+/** Build filter-options API URL; scoped dashboards append scope query params */
 export function getHermesFilterOptionsEndpoint(config: HermesDashboardConfig): string {
-  if (!config.dataScope?.program_report) return "/api/filters"
+  if (!config.dataScope) return "/api/filters"
 
-  const params = new URLSearchParams()
-  const programReport = config.dataScope.program_report
-  params.set(
-    "program_report",
-    Array.isArray(programReport) ? programReport[0] : programReport
-  )
-  if (config.dataScope.program_report_match) {
-    params.set("program_report_match", config.dataScope.program_report_match)
-  }
-  return `/api/filters?${params.toString()}`
+  const params = appendDataScopeToSearchParams(new URLSearchParams(), config.dataScope)
+  const qs = params.toString()
+  return qs ? `/api/filters?${qs}` : "/api/filters"
 }
 
 /** Build site-data API URL; scoped dashboards fetch only their program_report slice server-side */
@@ -79,18 +95,7 @@ export function getHermesSiteDataEndpoint(
 
 /** Build map-data API URL with dashboard scope + milestone columns */
 export function getHermesMapDataEndpoint(config: HermesDashboardConfig): string {
-  const params = new URLSearchParams()
-
-  if (config.dataScope?.program_report) {
-    const programReport = config.dataScope.program_report
-    params.set(
-      "program_report",
-      Array.isArray(programReport) ? programReport[0] : programReport
-    )
-    if (config.dataScope.program_report_match) {
-      params.set("program_report_match", config.dataScope.program_report_match)
-    }
-  }
+  const params = appendDataScopeToSearchParams(new URLSearchParams(), config.dataScope)
 
   if (config.milestoneFields) {
     params.set("readiness_column", config.milestoneFields.readinessColumn)
@@ -101,6 +106,15 @@ export function getHermesMapDataEndpoint(config: HermesDashboardConfig): string 
   return qs ? `/api/hermes-5g/map-data?${qs}` : "/api/hermes-5g/map-data"
 }
 
+/** Build site-data API URL with optional dashboard scope (smaller payload for scoped dashboards) */
+export function getHermesSiteDataEndpoint(
+  dataScope?: HermesDashboardDataScope,
+  mode: "minimal" | "full" = "minimal"
+): string {
+  const params = appendDataScopeToSearchParams(new URLSearchParams({ mode }), dataScope)
+  return `/api/hermes-5g/site-data?${params.toString()}`
+}
+
 export const HERMES_DASHBOARD_HERMES_5G: HermesDashboardConfig = {
   id: "hermes-5g",
   label: "Hermes 5G",
@@ -109,7 +123,10 @@ export const HERMES_DASHBOARD_HERMES_5G: HermesDashboardConfig = {
   basePath: "/hermes-5g",
   filterStorageKey: "hermes-filter-state",
   exportPrefix: "hermes-5g",
-  mapCacheKey: "hermes-map-all-v2",
+  mapCacheKey: "hermes-map-10k-active-v1",
+  dataScope: HERMES_5G_PROGRAM_REPORT_SCOPE,
+  progressFilter: HERMES_5G_PROGRAM_REPORT_SCOPE,
+  hiddenFilters: ["program_report"],
 }
 
 export const HERMES_DASHBOARD_NR_2600: HermesDashboardConfig = {
@@ -120,10 +137,14 @@ export const HERMES_DASHBOARD_NR_2600: HermesDashboardConfig = {
   basePath: "/nr-2600",
   filterStorageKey: "nr-2600-filter-state",
   exportPrefix: "nr-2600",
-  mapCacheKey: "nr-2600-map-all-v2",
+  mapCacheKey: "nr-2600-map-13k-active-v1",
   dataScope: NR_2600_PROGRAM_REPORT_SCOPE,
   progressFilter: NR_2600_PROGRAM_REPORT_SCOPE,
   milestoneFields: NR_2600_MILESTONE_FIELDS,
   progressCurveFields: NR_2600_PROGRESS_CURVE_FIELDS,
   hiddenFilters: ["program_report"],
+  dailyRunrateMilestone: "readiness",
+  dailyRunrateTitle: "Daily Readiness Runrate – Last 7 Days",
+  cityMilestoneCard: NR_2600_MOS_BY_CITY_CARD,
+  hideActivatedCityCard: true,
 }

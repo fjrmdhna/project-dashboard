@@ -250,9 +250,8 @@ PGSSLMODE=disable  # enable on prod if needed
 ---
 
 ## 14) Testing
-- Unit test util (dates, counts, bins, issues)
-- Snapshot komponen chart
-- Test cache hit/miss (mock redis)
+- **Unit tests (Vitest)**: tidak dijalankan secara default; hanya jika user minta eksplisit.
+- Verifikasi fitur: gunakan **Playwright E2E** (`npm run test:e2e`, `npm run test:caf`).
 
 ---
 

@@ -83,6 +83,12 @@ async function fetchProjectProgressFromDB(
               scopeQuery = scopeQuery.ilike(key, `%${searchValue}%`)
               activatedQuery = activatedQuery.ilike(key, `%${searchValue}%`)
             }
+          } else if (key === "wbs_status") {
+            const searchValue = Array.isArray(value) ? value[0] : value
+            if (searchValue) {
+              scopeQuery = scopeQuery.ilike(key, searchValue)
+              activatedQuery = activatedQuery.ilike(key, searchValue)
+            }
           } else if (Array.isArray(value) && value.length > 0) {
             // Handle array dengan in()
             scopeQuery = scopeQuery.in(key, value)
@@ -164,6 +170,11 @@ async function getProjectProgressFallback(
             const searchValue = Array.isArray(value) ? value[0] : value
             if (searchValue) {
               query = query.ilike(key, `%${searchValue}%`)
+            }
+          } else if (key === "wbs_status") {
+            const searchValue = Array.isArray(value) ? value[0] : value
+            if (searchValue) {
+              query = query.ilike(key, searchValue)
             }
           } else if (Array.isArray(value) && value.length > 0) {
             // Handle array dengan in()

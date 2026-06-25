@@ -9,7 +9,8 @@ import { SearchInput } from "@/components/home/SearchInput"
 import { SectionHeader } from "@/components/home/SectionHeader"
 import { HeroHighlight, NavigationAction, ProjectCardData } from "@/types/home"
 import { getProjectProgress } from "@/lib/project-progress"
-import { HERMES_DASHBOARD_NR_2600 } from "@/config/hermes-dashboards"
+import { getCafProgress } from "@/lib/caf-progress"
+import { HERMES_DASHBOARD_HERMES_5G, HERMES_DASHBOARD_NR_2600 } from "@/config/hermes-dashboards"
 
 const heroHighlight: HeroHighlight = {
   eyebrow: "Explore",
@@ -33,10 +34,11 @@ export default async function Home() {
   let hermesProgress = 0
   let aopProgress = 0
   let nr2600Progress = 0
+  let cafProgress = 0
 
   // Use Promise.allSettled to handle errors gracefully without blocking
-  const [hermesResult, aopResult, nr2600Result] = await Promise.allSettled([
-    getProjectProgress("site_data_5g").catch((error) => {
+  const [hermesResult, aopResult, nr2600Result, cafResult] = await Promise.allSettled([
+    getProjectProgress("site_data_5g", HERMES_DASHBOARD_HERMES_5G.progressFilter).catch((error) => {
       console.error("Error fetching Hermes 5G progress:", error)
       return { scope: 0, activated: 0, progress: 0 }
     }),
@@ -46,6 +48,10 @@ export default async function Home() {
     }),
     getProjectProgress("site_data_5g", HERMES_DASHBOARD_NR_2600.progressFilter).catch((error) => {
       console.error("Error fetching NR 2600 progress:", error)
+      return { scope: 0, activated: 0, progress: 0 }
+    }),
+    getCafProgress().catch((error) => {
+      console.error("Error fetching CAF progress:", error)
       return { scope: 0, activated: 0, progress: 0 }
     }),
   ])
@@ -63,6 +69,10 @@ export default async function Home() {
     nr2600Progress = nr2600Result.value.progress
   }
 
+  if (cafResult.status === "fulfilled") {
+    cafProgress = cafResult.value.progress
+  }
+
   // Optimize: Calculate date once instead of 4 times
   const currentDate = new Date().toLocaleDateString("en-US", {
     month: "short",
@@ -74,6 +84,7 @@ export default async function Home() {
   const validatedHermesProgress = Math.max(0, Math.min(100, Number.isNaN(hermesProgress) || hermesProgress === undefined ? 0 : hermesProgress))
   const validatedAopProgress = Math.max(0, Math.min(100, Number.isNaN(aopProgress) || aopProgress === undefined ? 0 : aopProgress))
   const validatedNr2600Progress = Math.max(0, Math.min(100, Number.isNaN(nr2600Progress) || nr2600Progress === undefined ? 0 : nr2600Progress))
+  const validatedCafProgress = Math.max(0, Math.min(100, Number.isNaN(cafProgress) || cafProgress === undefined ? 0 : cafProgress))
 
   // Build projects array dengan data real untuk Hermes 5G dan AOP
   const projects: ProjectCardData[] = [
@@ -131,6 +142,15 @@ export default async function Home() {
       progress: 0,
       mood: "primary",
       href: "/commercial-atp",
+    },
+    {
+      id: "caf-monitoring",
+      title: "CAF Monitoring",
+      category: "Operations",
+      date: currentDate,
+      progress: validatedCafProgress,
+      mood: "primary",
+      href: "/caf-monitoring",
     },
   ]
 

@@ -8,7 +8,7 @@ import { format, subDays } from 'date-fns'
 import { getProgramReportsForDisplayName, getDisplayNameForProgramReport } from '@/lib/hermes-program-mapping'
 import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-5g-utils'
 import {
-  filterRowsByProgramReportScope,
+  filterRowsByDataScope,
   getDataScopeCacheKey,
   type HermesDashboardDataScope,
 } from '@/lib/hermes-dashboard-scope'
@@ -22,6 +22,7 @@ import {
   getRowDateValue,
   incrementDailyRunrateCount,
   resolveDailyRunrateSeries,
+  type HermesDailyRunrateMilestone,
   type HermesProgressCurveFields,
 } from '@/lib/hermes-progress-curve-fields'
 import { getValidNanoClusterName } from '@/lib/nano-cluster'
@@ -45,6 +46,7 @@ export interface Hermes5GSiteData extends MatrixRow {
   issue_category?: string | null
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
+  wbs_status?: string | null
 }
 
 export interface Hermes5GDataStats {
@@ -81,7 +83,7 @@ export interface TopIssueItem {
 // Pre-aggregated data for charts (prevents multiple iterations in each component)
 export interface Hermes5GAggregatedData {
   // For FiveGReadinessCard & FiveGActivatedCard
-  byCity: Map<string, { total: number; ready: number; activated: number }>
+  byCity: Map<string, { total: number; ready: number; activated: number; mos: number }>
   byNanoCluster: Map<string, { total: number; ready: number; activated: number }>
   // For VendorLeaderboardCard
   byVendor: Map<string, { total: number; ready: number; activated: number; forecast: number }>
@@ -129,6 +131,8 @@ export interface UseHermes5GDataOptions {
   milestoneFields?: HermesMilestoneFields
   /** Optional progress curve / daily runrate column mapping (e.g. NR 2600) */
   progressCurveFields?: HermesProgressCurveFields
+  /** Daily runrate milestone pair — readiness vs activated */
+  dailyRunrateMilestone?: HermesDailyRunrateMilestone
 }
 
 // Default empty stats
@@ -343,7 +347,7 @@ const EXCLUDED_ISSUES = [
 // OPTIMIZATION: Single-pass aggregation for ALL chart components
 // This prevents multiple O(n) iterations in each component
 function aggregateDataSinglePass(data: Hermes5GSiteData[]): Hermes5GAggregatedData {
-  const byCity = new Map<string, { total: number; ready: number; activated: number }>()
+  const byCity = new Map<string, { total: number; ready: number; activated: number; mos: number }>()
   const byNanoCluster = new Map<string, { total: number; ready: number; activated: number }>()
   const byVendor = new Map<string, { total: number; ready: number; activated: number; forecast: number }>()
   const byMonth = new Map<string, { baseline: number; forecast: number; actual: number }>()
@@ -371,10 +375,11 @@ function aggregateDataSinglePass(data: Hermes5GSiteData[]): Hermes5GAggregatedDa
   for (const row of data) {
     // === City aggregation (for FiveGReadinessCard & FiveGActivatedCard) ===
     const city = (row.imp_ttp || 'Unknown').trim()
-    const cityData = byCity.get(city) || { total: 0, ready: 0, activated: 0 }
+    const cityData = byCity.get(city) || { total: 0, ready: 0, activated: 0, mos: 0 }
     cityData.total++
     if (row.imp_integ_af) cityData.ready++
     if (row.rfs_af) cityData.activated++
+    if (row.mos_af) cityData.mos++
     byCity.set(city, cityData)
     
     // === Nano Cluster aggregation (skip rows without nano_cluster) ===
@@ -498,10 +503,11 @@ function aggregateDataSinglePassWithStats(
   data: Hermes5GSiteData[],
   milestoneFields?: HermesMilestoneFields,
   progressCurveFields?: HermesProgressCurveFields,
+  dailyRunrateMilestone: HermesDailyRunrateMilestone = "activated",
 ): Hermes5GAggregationResult {
   const { readinessColumn, activatedColumn } = resolveMilestoneColumns(milestoneFields)
-  const dailyRunrateSeries = resolveDailyRunrateSeries(progressCurveFields)
-  const byCity = new Map<string, { total: number; ready: number; activated: number }>()
+  const dailyRunrateSeries = resolveDailyRunrateSeries(progressCurveFields, dailyRunrateMilestone)
+  const byCity = new Map<string, { total: number; ready: number; activated: number; mos: number }>()
   const byNanoCluster = new Map<string, { total: number; ready: number; activated: number }>()
   const byVendor = new Map<string, { total: number; ready: number; activated: number; forecast: number }>()
   const byMonth = new Map<string, { baseline: number; forecast: number; actual: number }>()
@@ -549,10 +555,11 @@ function aggregateDataSinglePassWithStats(
 
     // === City aggregation (for FiveGReadinessCard & FiveGActivatedCard) ===
     const city = (row.imp_ttp || 'Unknown').trim()
-    const cityData = byCity.get(city) || { total: 0, ready: 0, activated: 0 }
+    const cityData = byCity.get(city) || { total: 0, ready: 0, activated: 0, mos: 0 }
     cityData.total++
     if (isMilestoneAchieved(row, readinessColumn)) cityData.ready++
     if (isMilestoneAchieved(row, activatedColumn)) cityData.activated++
+    if (row.mos_af) cityData.mos++
     byCity.set(city, cityData)
 
     // === Nano Cluster aggregation (skip rows without nano_cluster) ===
@@ -738,12 +745,13 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
     dataScope,
     milestoneFields,
     progressCurveFields,
+    dailyRunrateMilestone = "activated",
   } = options
 
-  // Scoped dashboards (e.g. NR 2600) fetch only their program_report slice server-side.
-  // User filters (vendor, city, etc.) stay client-side for instant changes.
+  // Scoped dashboards fetch a smaller server-filtered dataset; unscoped pages keep the full cache.
   const cacheKey = `hermes-site-data-${getDataScopeCacheKey(dataScope)}-v3`
 
+  // Track if this is initial load vs filter change
   const hasLoadedOnceRef = useRef(false)
 
   const fetchFn = useCallback(async () => {
@@ -774,7 +782,14 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
         if (!data || !typedData.data || !typedData.stats) {
           return false
         }
-        return Array.isArray(typedData.data) && typeof typedData.stats === 'object'
+        if (!Array.isArray(typedData.data) || typeof typedData.stats !== 'object') {
+          return false
+        }
+        // Invalidate stale cache missing wbs_status when dashboard scope requires it
+        if (dataScope?.wbs_status && typedData.data.length > 0 && typedData.data[0].wbs_status == null) {
+          return false
+        }
+        return true
       }
     }
   )
@@ -785,10 +800,10 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
     }
 
-    const serverScoped = Boolean(dataScope?.program_report)
+    const serverScoped = Boolean(dataScope?.program_report || dataScope?.wbs_status)
     const scopedData = serverScoped
       ? baseData.data
-      : filterRowsByProgramReportScope(baseData.data, dataScope)
+      : filterRowsByDataScope(baseData.data, dataScope)
 
     const hasFilters = vendorNames.length > 0 || programReports.length > 0 ||
                        impTtps.length > 0 || nanoClusters.length > 0 ||
@@ -798,9 +813,17 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       ? filterDataClientSide(scopedData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search)
       : scopedData
 
-    const aggregationResult = aggregateDataSinglePassWithStats(dataToUse, milestoneFields, progressCurveFields)
+    const aggregationResult = aggregateDataSinglePassWithStats(
+      dataToUse,
+      milestoneFields,
+      progressCurveFields,
+      dailyRunrateMilestone,
+    )
     const useAggregatedStats =
-      hasFilters || Boolean(milestoneFields) || Boolean(progressCurveFields)
+      hasFilters ||
+      serverScoped ||
+      Boolean(milestoneFields) ||
+      Boolean(progressCurveFields)
     const stats = useAggregatedStats ? aggregationResult.stats : baseData.stats
     const agg = aggregationResult.aggregated
 
@@ -809,7 +832,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       filteredStats: stats,
       aggregated: agg
     }
-  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search, dataScope, milestoneFields, progressCurveFields])
+  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search, dataScope, milestoneFields, progressCurveFields, dailyRunrateMilestone])
 
   // Refetch function
   const refetch = useCallback(async () => {

@@ -42,6 +42,7 @@ export interface SiteData5G {
   region?: string | null
   region_circle?: string | null
   site_category?: string | null
+  wbs_status?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -108,6 +109,8 @@ export interface SiteData5GFilters {
   readiness_column?: string
   /** Override activation milestone column for status filter (e.g. activation_2600_af) */
   activated_column?: string
+  /** WBS status filter — single value uses ILIKE (case-insensitive exact match) */
+  wbs_status?: string | string[]
   limit?: number
   offset?: number
 }
@@ -159,7 +162,8 @@ export async function getSiteData5G(
     'year',        // Year filter
     'region',      // Region filter (deprecated)
     'region_circle', // Circle filter
-    'site_category'  // Site category filter
+    'site_category', // Site category filter
+    'wbs_status',    // Dashboard scope filter (Active only)
   ].join(',')
 
   const { includeExcludedProgramReports = false, onlyExcludedProgramReports = false } = options
@@ -228,6 +232,18 @@ export async function getSiteData5G(
     }
 
     q = applyRanScoreFilterByProgramReport(q, filters.ran_score)
+
+    if (filters.wbs_status) {
+      const wbsValues = (Array.isArray(filters.wbs_status) ? filters.wbs_status : [filters.wbs_status])
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value))
+
+      if (wbsValues.length === 1) {
+        q = q.ilike('wbs_status', wbsValues[0])
+      } else if (wbsValues.length > 1) {
+        q = q.or(wbsValues.map((value) => `wbs_status.ilike.${value}`).join(','))
+      }
+    }
 
     if (filters.search) {
       q = q.or(

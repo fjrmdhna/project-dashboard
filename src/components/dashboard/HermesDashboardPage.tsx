@@ -171,6 +171,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
     dataScope: config.dataScope,
     milestoneFields: config.milestoneFields,
     progressCurveFields: config.progressCurveFields,
+    dailyRunrateMilestone: config.dailyRunrateMilestone,
   })
   
   // Use deferred value for rows only (heavy visual component)
@@ -339,6 +340,13 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
         ? config.dataScope.program_report[0]
         : config.dataScope.program_report
       if (needle) params.set("program_report_contains", needle)
+    }
+
+    if (config.dataScope?.wbs_status) {
+      const wbsStatuses = Array.isArray(config.dataScope.wbs_status)
+        ? config.dataScope.wbs_status
+        : [config.dataScope.wbs_status]
+      wbsStatuses.forEach((value) => params.append("wbs_status", value))
     }
 
     filter.imp_ttp.forEach((value) => {
@@ -517,6 +525,24 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
     />
   )
 
+  const cityMilestoneTopCard = config.cityMilestoneCard ? (
+    <FiveGReadinessCard
+      rows={rows}
+      maxCities={10}
+      variant="city"
+      aggregatedByCircle={deferredAggregated?.byCity}
+      milestoneColumn={config.cityMilestoneCard.milestoneColumn}
+      achievedMetricKey={config.cityMilestoneCard.achievedMetricKey}
+      cardTitle={config.cityMilestoneCard.cardTitle}
+      achievedLegendLabel={config.cityMilestoneCard.achievedLabel}
+      pendingLegendLabel={config.cityMilestoneCard.pendingLabel}
+      chartTheme={config.cityMilestoneCard.chartTheme}
+    />
+  ) : null
+
+  const wallboardTopCityCard = cityMilestoneTopCard ?? readinessCard
+  const wallboardBottomCityCard = config.hideActivatedCityCard ? readinessCard : activatedCard
+
   // Nano Cluster component
   const nanoClusterCard = (
     <NanoClusterCard
@@ -539,8 +565,8 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
   
 
   const dailyRunrateSeries = useMemo(
-    () => resolveDailyRunrateSeries(config.progressCurveFields),
-    [config.progressCurveFields]
+    () => resolveDailyRunrateSeries(config.progressCurveFields, config.dailyRunrateMilestone),
+    [config.progressCurveFields, config.dailyRunrateMilestone]
   )
 
   // Daily Runrate component - OPTIMIZED: Use pre-aggregated data
@@ -548,6 +574,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
     <DailyRunrateCard
       data={dailyRunrateData}
       isLoading={loading}
+      title={config.dailyRunrateTitle}
       seriesLabels={{
         forecast: dailyRunrateSeries.commitmentLabel,
         actual: dailyRunrateSeries.actualLabel,
@@ -685,8 +712,9 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
           {renderMobileCard(matrixStats)}
 
           <div className="grid gap-4 sm:grid-cols-2">
+            {cityMilestoneTopCard && renderMobileCard(cityMilestoneTopCard, 260)}
             {renderMobileCard(readinessCard, 260)}
-            {renderMobileCard(activatedCard, 260)}
+            {!config.hideActivatedCityCard && renderMobileCard(activatedCard, 260)}
           </div>
 
           {renderMobileCard(progressCurveCard, 280)}
@@ -730,8 +758,8 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
       header={header}
       filterBar={filterBar}
       matrixStats={matrixStats}
-      readinessCard={readinessCard}
-      activatedCard={activatedCard}
+      readinessCard={wallboardTopCityCard}
+      activatedCard={wallboardBottomCityCard}
       progressCurve={progressCurveCard}
       dailyRunrate={dailyRunrateCard}
       top5Issue={topIssueCard}

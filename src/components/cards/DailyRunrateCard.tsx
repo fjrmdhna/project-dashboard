@@ -14,19 +14,37 @@ import {
 import { DailyRunrateItem } from "@/hooks/useDailyRunrateData"
 import { AopDailyRunrateItem } from "@/hooks/useAopDailyRunrateData"
 
+const DEFAULT_DAILY_RUNRATE_TITLE = "Daily Runrate – Last 7 Days"
+
 export interface DailyRunrateCardProps {
   data: DailyRunrateItem[] | AopDailyRunrateItem[]
   isLoading?: boolean
+  /** Card header badge text */
+  title?: string
+  /** Optional class for the title badge (e.g. caf-subtitle on CAF dashboard) */
+  titleClassName?: string
   /** Override legend/tooltip labels for forecast & actual series */
   seriesLabels?: {
     forecast?: string
     actual?: string
   }
+  /** Hide value labels above chart points (cleaner on dense dashboards) */
+  hidePointLabels?: boolean
 }
 
-export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: DailyRunrateCardProps) {
+export function DailyRunrateCard({
+  data,
+  isLoading = false,
+  title = DEFAULT_DAILY_RUNRATE_TITLE,
+  titleClassName,
+  seriesLabels,
+  hidePointLabels = false,
+}: DailyRunrateCardProps) {
   const forecastLabel = seriesLabels?.forecast ?? 'Forecast'
   const actualLabel = seriesLabels?.actual ?? 'Actual'
+  const titleBadgeClass =
+    titleClassName ??
+    "text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full"
   // Detect if data is AOP format (has forecast/actual) or legacy format (has readiness/activated)
   const isAopFormat = data.length > 0 && ('forecast' in data[0] || 'actual' in data[0])
   const legacyForecastLabel = seriesLabels?.forecast ?? 'Readiness'
@@ -69,12 +87,10 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
     return null;
   };
 
-  // Custom label for data points
   const renderLabel = (props: any) => {
-    const { x, y, value, index } = props;
-    // Only render label if value is not 0
-    if (value === 0) return null;
-    
+    const { x, y, value } = props
+    if (value === 0) return null
+
     return (
       <text
         x={x}
@@ -82,15 +98,17 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
         fill="#FFFFFF"
         fontSize={9}
         textAnchor="middle"
-        style={{ 
-          filter: 'drop-shadow(0px 0px 1px rgba(0,0,0,0.7))',
-          textShadow: '0px 0px 2px rgba(0,0,0,0.7)'
+        style={{
+          filter: "drop-shadow(0px 0px 1px rgba(0,0,0,0.7))",
+          textShadow: "0px 0px 2px rgba(0,0,0,0.7)",
         }}
       >
         {value}
       </text>
-    );
-  };
+    )
+  }
+
+  const pointLabel = hidePointLabels ? false : renderLabel
 
   // Loading state
   if (isLoading) {
@@ -100,8 +118,8 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
           <div className="bg-blue-500/20 p-1 rounded-md">
             <BarChart className="h-3 w-3 text-blue-400" />
           </div>
-          <div className="text-[10px] font-medium bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">
-            Daily Runrate – Last 7 Days
+          <div className={titleBadgeClass}>
+            {title}
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center text-white/50 text-xs">
@@ -131,8 +149,8 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
           <div className="bg-blue-500/20 p-1 rounded-md">
             <BarChart className="h-3 w-3 text-blue-400" />
           </div>
-          <div className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">
-            Daily Runrate – Last 7 Days
+          <div className={titleBadgeClass}>
+            {title}
           </div>
         </div>
         
@@ -151,8 +169,8 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
         <div className="bg-blue-500/20 p-1 rounded-md">
           <BarChart className="h-3 w-3 text-blue-400" />
         </div>
-        <div className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">
-          Daily Runrate – Last 7 Days
+        <div className={titleBadgeClass}>
+          {title}
         </div>
       </div>
       
@@ -162,10 +180,10 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
           <LineChart
             data={data}
             margin={{
-              top: 15,
-              right: 5,
+              top: 12,
+              right: 8,
               left: 0,
-              bottom: -5
+              bottom: 12
             }}
           >
             <CartesianGrid strokeDasharray="2 2" stroke="rgba(255,255,255,0.08)" vertical={false} />
@@ -209,7 +227,7 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
                   activeDot={{ r: 4, fill: '#8A5AA3', stroke: '#fff', strokeWidth: 1 }}
                   isAnimationActive={true}
                   animationDuration={800}
-                  label={renderLabel}
+                  label={pointLabel}
                 />
                 <Line 
                   type="monotone"
@@ -221,7 +239,7 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
                   activeDot={{ r: 4, fill: '#7CB342', stroke: '#fff', strokeWidth: 1 }}
                   isAnimationActive={true}
                   animationDuration={1000}
-                  label={renderLabel}
+                  label={pointLabel}
                 />
               </>
             ) : (
@@ -236,7 +254,7 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
                   activeDot={{ r: 4, fill: '#8A5AA3', stroke: '#fff', strokeWidth: 1 }}
                   isAnimationActive={true}
                   animationDuration={800}
-                  label={renderLabel}
+                  label={pointLabel}
                 />
                 <Line 
                   type="monotone"
@@ -248,7 +266,7 @@ export function DailyRunrateCard({ data, isLoading = false, seriesLabels }: Dail
                   activeDot={{ r: 4, fill: '#7CB342', stroke: '#fff', strokeWidth: 1 }}
                   isAnimationActive={true}
                   animationDuration={1000}
-                  label={renderLabel}
+                  label={pointLabel}
                 />
               </>
             )}
