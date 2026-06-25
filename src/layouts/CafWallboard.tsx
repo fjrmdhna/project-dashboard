@@ -1,14 +1,15 @@
 "use client"
 
 import { ReactNode, useEffect } from "react"
+import { hasCafWallboardSidePanels } from "@/config/caf-wallboard-panels"
 
 interface CafWallboardProps {
   header?: ReactNode
   filterBar?: ReactNode
   matrixStats?: ReactNode
   milestoneAlignment?: ReactNode
-  statusFunnel?: ReactNode
-  aging?: ReactNode
+  statusAssigneeGrid?: ReactNode
+  statusVendorFollowup?: ReactNode
   dailyRunrate?: ReactNode
   vendorRan?: ReactNode
   vendorTlp?: ReactNode
@@ -23,12 +24,14 @@ export function CafWallboard({
   filterBar,
   matrixStats,
   milestoneAlignment,
-  statusFunnel,
-  aging,
+  statusAssigneeGrid,
+  statusVendorFollowup,
   dailyRunrate,
   vendorRan,
   vendorTlp,
 }: CafWallboardProps) {
+  const hasSidePanels = hasCafWallboardSidePanels()
+
   useEffect(() => {
     document.documentElement.classList.add("viewport-active")
     document.body.classList.add("viewport-active")
@@ -38,21 +41,33 @@ export function CafWallboard({
     }
   }, [])
 
+  const bodyClass = hasSidePanels
+    ? "caf-wallboard-body"
+    : "caf-wallboard-body caf-wallboard-body--assignee"
+
   return (
     <div id="wb-wrapper" className="viewport-wrapper">
       <div id="wb-canvas" className="wallboard-scale caf-wallboard-scale">
         <div className="caf-wallboard-grid">
-          <header className="caf-wallboard-header">{header}</header>
+          <header className="caf-wallboard-header">
+            <div className="caf-wallboard-header-main">{header}</div>
+            {filterBar ? <div className="caf-wallboard-header-filters">{filterBar}</div> : null}
+          </header>
 
-          <div className="caf-wallboard-body">
-            <Panel className="caf-wallboard-filters">{filterBar}</Panel>
+          <div className={bodyClass}>
             <Panel className="caf-wallboard-matrix">{matrixStats}</Panel>
             <Panel className="caf-wallboard-milestone">{milestoneAlignment}</Panel>
-            <Panel className="caf-wallboard-funnel">{statusFunnel}</Panel>
-            <Panel className="caf-wallboard-aging">{aging}</Panel>
-            <Panel className="caf-wallboard-runrate">{dailyRunrate}</Panel>
-            <Panel className="caf-wallboard-vendor-ran">{vendorRan}</Panel>
-            <Panel className="caf-wallboard-vendor-tlp">{vendorTlp}</Panel>
+            <Panel className="caf-wallboard-status-grid">{statusAssigneeGrid}</Panel>
+            {statusVendorFollowup ? (
+              <Panel className="caf-wallboard-followup">{statusVendorFollowup}</Panel>
+            ) : null}
+            <Panel className="caf-wallboard-runrate caf-wallboard-runrate--compact">{dailyRunrate}</Panel>
+            {vendorRan ? (
+              <Panel className="caf-wallboard-vendor-ran">{vendorRan}</Panel>
+            ) : null}
+            {vendorTlp ? (
+              <Panel className="caf-wallboard-vendor-tlp">{vendorTlp}</Panel>
+            ) : null}
           </div>
         </div>
       </div>

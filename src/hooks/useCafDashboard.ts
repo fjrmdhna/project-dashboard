@@ -28,7 +28,7 @@ export function useCafDashboard(filters: CafSiteFilters) {
   }, [])
 
   const { data: baseRows, loading: baseLoading, error, refetch } = useApiCache<CafFilterableRow[]>(
-    "caf-site-data-all-v2",
+    "caf-site-data-all-v3",
     fetchFn,
     {
       staleTime: 3 * 60 * 1000,
@@ -52,7 +52,6 @@ export function useCafDashboard(filters: CafSiteFilters) {
 
   const matrix = dashboard?.matrix
   const statusFunnel = dashboard?.statusFunnel
-  const aging = dashboard?.aging
 
   const loading = baseLoading && !hasLoadedOnceRef.current
 
@@ -67,15 +66,13 @@ export function useCafDashboard(filters: CafSiteFilters) {
     resubmit: matrix?.resubmit ?? 0,
     statusItems: statusFunnel?.items ?? [],
     funnelTotal: statusFunnel?.totalCaf ?? 0,
-    buckets: aging?.buckets ?? {
-      under7: 0,
-      days8to14: 0,
-      days15to30: 0,
-      over30: 0,
-    },
-    waitingImplementation: aging?.waitingImplementation ?? 0,
-    pendingAging: aging?.pendingAging ?? 0,
-    totalOpen: aging?.totalOpen ?? 0,
+    statusAssigneeCards: dashboard?.statusAssigneeCards ?? [],
+    statusVendorPending: dashboard?.statusVendorPending ?? [],
+    pendingFollowupTotal:
+      (matrix?.inReview ?? 0) +
+      (matrix?.approved ?? 0) +
+      (matrix?.notConfirmed ?? 0) +
+      (matrix?.other ?? 0),
     milestoneAlignment: dashboard?.milestoneAlignment ?? {
       missingRfs: 0,
       missingEndorse: 0,

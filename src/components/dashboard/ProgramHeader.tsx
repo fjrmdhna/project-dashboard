@@ -18,7 +18,7 @@ export function ProgramHeader({
   mapLabel = "Map",
   mapHref,
   backHref = "/",
-  exportButton
+  exportButton,
 }: ProgramHeaderProps) {
   const formattedDate =
     dateLabel ??
@@ -26,15 +26,15 @@ export function ProgramHeader({
       weekday: "long",
       year: "numeric",
       month: "long",
-      day: "numeric"
+      day: "numeric",
     })
 
   return (
-    <div className="flex h-full w-full items-center justify-between px-4">
-      <div className="flex flex-shrink-0 items-center gap-3">
+    <div className="program-header grid h-full w-full grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-3 gap-y-0.5 px-4 py-1">
+      <div className="col-start-1 row-span-2 flex items-center gap-3 self-center">
         <Link
           href={backHref}
-          className="group -ml-9 mt-3 flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 transition hover:border-white/30 hover:bg-white/20"
+          className="group flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 transition hover:border-white/30 hover:bg-white/20"
           aria-label="Back to dashboard landing"
         >
           <svg
@@ -46,29 +46,30 @@ export function ProgramHeader({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <img src="/logo-indosat-putih.png" alt="Indosat Logo" className="h-8" />
+        <img src="/logo-indosat-putih.png" alt="Indosat Logo" className="h-8 shrink-0" />
       </div>
 
-      <div className="flex-grow text-center">
-        <h1 className="text-3xl font-bold uppercase tracking-wide text-white">{title}</h1>
+      <h1 className="col-start-2 row-span-2 self-center text-center text-3xl font-bold uppercase tracking-wide text-white">
+        {title}
+      </h1>
+
+      <div className="col-start-3 row-start-1 shrink-0 text-right text-sm font-medium leading-tight text-white">
+        {formattedDate}
       </div>
 
-      <div className="-mr-9 mt-2 flex flex-col items-end gap-2 text-right">
-        <div className="text-sm font-medium text-white">{formattedDate}</div>
-        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.32em]">
-          {exportButton}
-          <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-3 py-1 font-semibold text-[#34D399]">
-            {overviewLabel}
-          </span>
-          {mapHref ? (
-            <Link
-              href={mapHref}
-              className="rounded-full border border-white/20 px-3 py-1 font-medium text-white/80 transition hover:bg-white/10"
-            >
-              {mapLabel}
-            </Link>
-          ) : null}
-        </div>
+      <div className="col-start-3 row-start-2 flex shrink-0 items-center justify-end gap-2 text-[11px] uppercase tracking-[0.32em]">
+        {exportButton}
+        <span className="rounded-full border border-[#34D399] bg-[#34D399]/10 px-3 py-1 font-semibold text-[#34D399]">
+          {overviewLabel}
+        </span>
+        {mapHref ? (
+          <Link
+            href={mapHref}
+            className="rounded-full border border-white/20 px-3 py-1 font-medium text-white/80 transition hover:bg-white/10"
+          >
+            {mapLabel}
+          </Link>
+        ) : null}
       </div>
     </div>
   )

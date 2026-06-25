@@ -15,6 +15,7 @@ export type CafFilterableRow = {
   caf_status?: string | null
   caf_type?: string | null
   avp?: string | null
+  staff?: string | null
   caf_number?: string | null
   site_id_indosat?: string | null
   site_name?: string | null

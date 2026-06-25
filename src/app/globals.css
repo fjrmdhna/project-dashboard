@@ -859,7 +859,7 @@ html, body {
 /* CAF Monitoring — dedicated layout (no empty Hermes slots) */
 .caf-wallboard-grid {
   display: grid;
-  grid-template-rows: var(--wb-header-height) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   width: 100%;
   height: 100%;
   box-sizing: border-box;
@@ -868,18 +868,35 @@ html, body {
 
 .caf-wallboard-header {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 2rem;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 1.5rem 4px;
   min-height: 0;
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.caf-wallboard-header-main {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.caf-wallboard-header-filters {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.caf-wallboard-header-filters > * {
+  flex: 0 0 auto;
+  height: auto;
 }
 
 .caf-wallboard-body {
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
-  grid-template-rows: auto auto auto minmax(0, 0.68fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 0.68fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 6px;
-  padding: 5px 6px 6px;
+  padding: 4px 6px 6px;
   box-sizing: border-box;
   min-height: 0;
   overflow: hidden;
@@ -897,16 +914,6 @@ html, body {
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
-}
-
-.caf-wallboard-filters {
-  grid-column: 1 / -1;
-}
-
-.caf-wallboard-filters .caf-wallboard-panel > *,
-.caf-wallboard-filters > * {
-  flex: 0 0 auto;
-  height: auto;
 }
 
 .caf-wallboard-matrix {
@@ -929,32 +936,291 @@ html, body {
 
 .caf-wallboard-funnel {
   grid-column: 1;
-  grid-row: 4;
+  grid-row: 3;
   min-height: 0;
 }
 
-.caf-wallboard-aging {
+.caf-wallboard-followup {
   grid-column: 2;
-  grid-row: 4;
+  grid-row: 3;
   min-height: 0;
 }
 
 .caf-wallboard-runrate {
   grid-column: 1;
-  grid-row: 5 / 7;
+  grid-row: 4 / 6;
   min-height: 0;
 }
 
 .caf-wallboard-vendor-ran {
   grid-column: 2;
-  grid-row: 5;
+  grid-row: 4;
   min-height: 0;
 }
 
 .caf-wallboard-vendor-tlp {
   grid-column: 2;
-  grid-row: 6;
+  grid-row: 5;
   min-height: 0;
+}
+
+/* Funnel + runrate only — legacy layout when side panels disabled */
+.caf-wallboard-body--focus {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto minmax(0, 0.72fr) minmax(0, 1fr);
+}
+
+.caf-wallboard-body--focus .caf-wallboard-funnel {
+  grid-column: 1 / -1;
+  grid-row: 3;
+}
+
+.caf-wallboard-body--focus .caf-wallboard-runrate {
+  grid-column: 1 / -1;
+  grid-row: 4;
+}
+
+/* Per-status assignee cards (4 x 2) + compact runrate footer */
+.caf-wallboard-body--assignee {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 1fr) minmax(108px, 0.34fr);
+}
+
+.caf-wallboard-status-grid {
+  grid-column: 1 / -1;
+  grid-row: 3 / 5;
+  min-height: 0;
+}
+
+.caf-wallboard-body--assignee .caf-wallboard-runrate--compact {
+  grid-column: 1 / -1;
+  grid-row: 5;
+  min-height: 0;
+  max-height: 196px;
+}
+
+.caf-runrate-header--compact {
+  min-height: 0;
+}
+
+.caf-runrate-summary {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.caf-runrate-summary__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.caf-runrate-summary__item--forecast {
+  color: #c4a3d8;
+}
+
+.caf-runrate-summary__item--actual {
+  color: #9ccc65;
+}
+
+.caf-runrate-summary__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.caf-runrate-chart {
+  min-height: 88px;
+}
+
+.caf-wallboard-runrate--compact .caf-runrate-chart {
+  min-height: 92px;
+}
+
+.caf-status-assignee-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.caf-status-assignee-grid--state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(15, 22, 48, 0.82);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.caf-status-assignee-grid--error {
+  color: rgba(252, 165, 165, 0.9);
+}
+
+.caf-status-assignee-card {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(15, 22, 48, 0.94) 0%, rgba(10, 16, 34, 0.96) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.caf-status-assignee-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-left: 3px solid var(--status-accent, #60a5fa);
+  padding: 5px 6px 4px 7px;
+}
+
+.caf-status-assignee-card__title {
+  margin: 0;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.caf-status-assignee-card__subtitle {
+  margin: 1px 0 0;
+  font-size: 7px;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.caf-status-assignee-card__badge {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.caf-status-assignee-card__list {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  margin: 0;
+  min-height: 0;
+  padding: 3px 4px;
+  list-style: none;
+}
+
+.caf-status-assignee-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  border-radius: 4px;
+  padding: 0 4px;
+  isolation: isolate;
+}
+
+.caf-status-assignee-row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: var(--bar-width, 0%);
+  border-radius: 4px;
+  background: var(--status-accent, #60a5fa);
+  opacity: 0.14;
+  pointer-events: none;
+}
+
+.caf-status-assignee-row__rank,
+.caf-status-assignee-row__name,
+.caf-status-assignee-row__count {
+  position: relative;
+  z-index: 1;
+}
+
+.caf-status-assignee-row__rank {
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+}
+
+.caf-status-assignee-row__name {
+  font-size: 8px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.caf-status-assignee-row__count {
+  font-size: 8px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.caf-status-assignee-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 2px 5px 3px;
+}
+
+.caf-status-assignee-card__page-info {
+  min-width: 0;
+  font-size: 7px;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.caf-status-assignee-card__pager {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.caf-status-assignee-card__pager-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.caf-status-assignee-card__pager-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.caf-status-assignee-card__empty {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .caf-panel-card {
@@ -1286,6 +1552,109 @@ html, body {
   color: rgba(255, 255, 255, 0.45);
 }
 
+.caf-vendor-list--detailed {
+  grid-template-rows: repeat(5, minmax(0, 1fr));
+}
+
+.caf-vendor-row--detailed {
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 4px;
+  padding: 1px 4px 1px 0;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.caf-vendor-row__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.caf-vendor-row__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.caf-vendor-stack {
+  display: flex;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.caf-vendor-stack__segment {
+  min-width: 2px;
+  height: 100%;
+}
+
+.caf-vendor-row__legend {
+  margin: 0;
+  font-size: 7px;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.caf-followup-list {
+  display: grid;
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  gap: 2px;
+  overflow: hidden;
+}
+
+.caf-followup-row {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 5px;
+}
+
+.caf-followup-row__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  border-left: 3px solid var(--bar-color, #f59e0b);
+  padding-left: 4px;
+}
+
+.caf-followup-row__status {
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.caf-followup-row__count {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
+
+.caf-followup-row__vendors {
+  margin: 0;
+  padding-left: 7px;
+  font-size: 7px;
+  line-height: 1.15;
+  color: rgba(251, 191, 36, 0.82);
+}
+
+.caf-followup-row__vendors--empty {
+  color: rgba(255, 255, 255, 0.35);
+}
+
 .caf-panel-header {
   display: flex;
   flex-shrink: 0;
@@ -1325,6 +1694,15 @@ html, body {
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.caf-wallboard-runrate--compact .rounded-xl {
+  border-radius: 0.85rem !important;
+  padding: 6px 8px 2px !important;
+}
+
+.caf-wallboard-runrate--compact .recharts-wrapper {
+  margin-bottom: 0;
+}
+
 .caf-wallboard-runrate .rounded-xl {
   border-radius: 1rem !important;
   padding: 8px 10px 4px !important;
@@ -1337,12 +1715,27 @@ html, body {
 @media (max-width: 1200px) {
   .caf-wallboard-body {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto minmax(180px, 1fr) minmax(160px, 1fr) minmax(180px, 0.9fr) minmax(140px, 0.75fr) minmax(140px, 0.75fr);
+    grid-template-rows: auto auto minmax(180px, 1fr) minmax(160px, 1fr) minmax(180px, 0.9fr) minmax(140px, 0.75fr) minmax(140px, 0.75fr);
+  }
+
+  .caf-wallboard-body--assignee {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(120px, 0.42fr);
+  }
+
+  .caf-status-assignee-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(4, minmax(0, 1fr));
+  }
+
+  .caf-wallboard-body--focus {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(200px, 1fr) minmax(220px, 1.1fr);
   }
 
   .caf-wallboard-milestone,
-  .caf-wallboard-funnel,
-  .caf-wallboard-aging,
+  .caf-wallboard-status-grid,
+  .caf-wallboard-followup,
   .caf-wallboard-runrate,
   .caf-wallboard-vendor-ran,
   .caf-wallboard-vendor-tlp {

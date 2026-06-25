@@ -15,13 +15,12 @@ test.describe("CAF Monitoring Dashboard", () => {
     expect(payload.data.length).toBeGreaterThan(0)
 
     await expect(page.getByRole("heading", { name: /CAF Monitoring Dashboard/i })).toBeVisible()
+    await expect(page.getByRole("button", { name: /^Export$/i })).toBeVisible()
     await expect(page.getByText("CAF Pipeline")).toBeVisible()
     await expect(page.getByText("AF Milestone Coverage")).toBeVisible()
-    await expect(page.getByText("CAF Status Funnel")).toBeVisible()
-    await expect(page.getByText("CAF Aging")).toBeVisible()
+    await expect(page.getByText("Approved – Awaiting Impl.")).toBeVisible()
+    await expect(page.getByText("Review – TLP")).toBeVisible()
     await expect(page.getByText("Daily CAF Runrate")).toBeVisible()
-    await expect(page.getByText("Top 5 RAN Vendor")).toBeVisible()
-    await expect(page.getByText("Top 5 TLP Vendor")).toBeVisible()
 
     const totalText = payload.data.length.toLocaleString("en-US")
     await expect(page.getByText(totalText).first()).toBeVisible()
@@ -40,7 +39,7 @@ test.describe("CAF Monitoring Dashboard", () => {
     await page.goto("/caf-monitoring")
     await page.waitForResponse((res) => res.url().includes("/api/caf/site-data"))
 
-    await expect(page.getByText("CAF Status Funnel")).toBeVisible()
+    await expect(page.locator(".caf-status-assignee-grid")).toBeVisible()
 
     const siteDataHits = cafRequests.filter((p) => p === "/api/caf/site-data")
     expect(siteDataHits.length).toBe(1)
@@ -84,53 +83,25 @@ test.describe("CAF Monitoring Dashboard", () => {
     await page.goto("/caf-monitoring")
     await page.waitForResponse((res) => res.url().includes("/api/caf/site-data"))
 
-    await expect(page.getByText("Top 5 RAN Vendor")).toBeVisible()
-    await expect(page.getByText("Top 5 TLP Vendor")).toBeVisible()
     await expect(page.locator(".caf-wallboard-grid")).toBeVisible()
 
-    const agingCard = page.locator(".caf-aging-card")
-    const agingBox = await agingCard.boundingBox()
-    expect(agingBox).not.toBeNull()
+    const statusGrid = page.locator(".caf-status-assignee-grid")
+    await expect(statusGrid).toBeVisible()
 
-    const agingFooter = agingCard.locator(".caf-aging-footer")
-    const footerBox = await agingFooter.boundingBox()
-    expect(footerBox).not.toBeNull()
-    expect(footerBox!.y + footerBox!.height).toBeLessThanOrEqual(agingBox!.y + agingBox!.height + 1)
+    const statusCards = statusGrid.locator(".caf-status-assignee-card")
+    await expect(statusCards).toHaveCount(8)
 
-    const funnelCard = page.locator(".caf-wallboard-funnel")
-    const funnelBox = await funnelCard.boundingBox()
-    expect(funnelBox).not.toBeNull()
-
-    const funnelRows = funnelCard.locator(".caf-funnel-row")
-    await expect(funnelRows).toHaveCount(8)
-
-    for (let rowIndex = 0; rowIndex < 8; rowIndex++) {
-      const rowBox = await funnelRows.nth(rowIndex).boundingBox()
-      expect(rowBox).not.toBeNull()
-      expect(rowBox!.y).toBeGreaterThanOrEqual(funnelBox!.y - 1)
-      expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(funnelBox!.y + funnelBox!.height + 1)
-      expect(rowBox!.height).toBeGreaterThan(6)
-    }
-
-    const vendorCards = page.locator(".caf-wallboard-vendor-ran, .caf-wallboard-vendor-tlp")
-    await expect(vendorCards).toHaveCount(2)
-
-    for (let cardIndex = 0; cardIndex < 2; cardIndex++) {
-      const card = vendorCards.nth(cardIndex)
+    for (let cardIndex = 0; cardIndex < 8; cardIndex++) {
+      const card = statusCards.nth(cardIndex)
       const cardBox = await card.boundingBox()
       expect(cardBox).not.toBeNull()
-
-      const rows = card.locator(".caf-vendor-row")
-      await expect(rows).toHaveCount(5)
-
-      for (let rowIndex = 0; rowIndex < 5; rowIndex++) {
-        const rowBox = await rows.nth(rowIndex).boundingBox()
-        expect(rowBox).not.toBeNull()
-        expect(rowBox!.y).toBeGreaterThanOrEqual(cardBox!.y - 1)
-        expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(cardBox!.y + cardBox!.height + 1)
-        expect(rowBox!.height).toBeGreaterThan(6)
-      }
+      expect(cardBox!.height).toBeGreaterThan(48)
     }
+
+    const runrateCard = page.locator(".caf-wallboard-runrate--compact")
+    const runrateBox = await runrateCard.boundingBox()
+    expect(runrateBox).not.toBeNull()
+    expect(runrateBox!.height).toBeLessThan(240)
 
     await page.screenshot({
       path: "screenshots/caf-monitoring-layout.png",

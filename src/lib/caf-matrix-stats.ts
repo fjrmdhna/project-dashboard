@@ -46,6 +46,37 @@ export function isImplementedStatus(
   return hasDate(row.implemented_date) || status.includes("fully implemented")
 }
 
+export function isActionablePendingStatus(
+  row: Pick<CafFilterableRow, "caf_status" | "implemented_date">
+): boolean {
+  const status = normalizeStatus(row.caf_status)
+  if (isRejectedStatus(status)) return false
+  if (isImplementedStatus(status, row)) return false
+  return true
+}
+
+export type CafPipelineBucket =
+  | "implemented"
+  | "approved"
+  | "inReview"
+  | "rejected"
+  | "notConfirmed"
+  | "other"
+
+/** Mutually exclusive pipeline bucket for a single CAF row. */
+export function classifyCafPipelineBucket(
+  row: Pick<CafFilterableRow, "caf_status" | "implemented_date" | "approved_date">
+): CafPipelineBucket {
+  const status = normalizeStatus(row.caf_status)
+
+  if (isRejectedStatus(status)) return "rejected"
+  if (isNotConfirmedStatus(status)) return "notConfirmed"
+  if (isImplementedStatus(status, row)) return "implemented"
+  if (isApprovedPendingStatus(status) || hasDate(row.approved_date)) return "approved"
+  if (isInReviewStatus(status)) return "inReview"
+  return "other"
+}
+
 export function computeCafMatrixStats(rows: CafFilterableRow[]): CafMatrixStats {
   let inReview = 0
   let approved = 0

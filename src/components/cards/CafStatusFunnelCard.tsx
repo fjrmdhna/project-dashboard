@@ -3,19 +3,9 @@
 import { useMemo } from "react"
 import { Filter } from "lucide-react"
 import type { CafStatusFunnelItem } from "@/lib/caf-dashboard-aggregate"
-import { getCafStatusShortLabel } from "@/lib/caf-status-labels"
+import { getCafStatusColor, getCafStatusShortLabel } from "@/lib/caf-status-labels"
 
 const MAX_VISIBLE = 8
-
-function statusColor(status: string): string {
-  const s = status.toLowerCase()
-  if (s.includes("reject")) return "#EF4444"
-  if (s.includes("fully implemented") || s.includes("implemented")) return "#22C55E"
-  if (s.includes("approve")) return "#3B82F6"
-  if (s.includes("waiting")) return "#F59E0B"
-  if (s.includes("not confirmed")) return "#A855F7"
-  return "#60A5FA"
-}
 
 function FunnelRow({
   row,
@@ -30,7 +20,7 @@ function FunnelRow({
 }) {
   const widthPct = Math.max((row.count / maxCount) * 100, row.count > 0 ? 6 : 0)
   const sharePct = totalCaf > 0 ? Math.round((row.count / totalCaf) * 100) : 0
-  const fill = statusColor(row.status)
+  const fill = getCafStatusColor(row.status)
   const shortLabel = getCafStatusShortLabel(row.status)
 
   return (

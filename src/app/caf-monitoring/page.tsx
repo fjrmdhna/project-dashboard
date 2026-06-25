@@ -1,22 +1,25 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { Building2, Users } from "lucide-react"
 import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
+import { DashboardExportButton, downloadExportResponse } from "@/components/dashboard/DashboardExportButton"
 import { DashboardLoadingScreen } from "@/components/dashboard/DashboardLoadingScreen"
 import { MatrixStatsCard } from "@/components/cards/MatrixStatsCard"
-import { CafStatusFunnelCard } from "@/components/cards/CafStatusFunnelCard"
-import { CafAgingCard } from "@/components/cards/CafAgingCard"
+import { CafStatusAssigneeGrid } from "@/components/cards/CafStatusAssigneeGrid"
+import { CafStatusVendorFollowupCard } from "@/components/cards/CafStatusVendorFollowupCard"
 import { CafMilestoneAlignmentCard } from "@/components/cards/CafMilestoneAlignmentCard"
 import { CafVendorTopCard } from "@/components/cards/CafVendorTopCard"
 import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
 import { CafFilterBar, getInitialCafFilters } from "@/components/filters/CafFilterBar"
 import { CafWallboard } from "@/layouts/CafWallboard"
 import { useCafDashboard } from "@/hooks/useCafDashboard"
-import type { CafSiteFilters } from "@/lib/caf-filters"
+import { CAF_WALLBOARD_PANELS } from "@/config/caf-wallboard-panels"
+import { cafFiltersToQueryString, type CafSiteFilters } from "@/lib/caf-filters"
 
 export default function CafMonitoringPage() {
   const [filters, setFilters] = useState<CafSiteFilters>(getInitialCafFilters)
+  const [isExporting, setIsExporting] = useState(false)
 
   const {
     hasData,
@@ -27,12 +30,10 @@ export default function CafMonitoringPage() {
     rejected,
     notConfirmed,
     resubmit,
-    statusItems,
     funnelTotal,
-    buckets,
-    waitingImplementation,
-    pendingAging,
-    totalOpen,
+    statusAssigneeCards,
+    statusVendorPending,
+    pendingFollowupTotal,
     runrateData,
     topVendorRequestor,
     topVendorTlp,
@@ -48,18 +49,37 @@ export default function CafMonitoringPage() {
     day: "numeric",
   })
 
+  const handleExport = useCallback(async () => {
+    try {
+      setIsExporting(true)
+      const params = new URLSearchParams(cafFiltersToQueryString(filters))
+      const response = await fetch(`/api/caf/export?${params.toString()}`)
+      await downloadExportResponse(response, "caf-export.xlsx")
+    } catch (error) {
+      console.error("Failed to export CAF data", error)
+    } finally {
+      setIsExporting(false)
+    }
+  }, [filters])
+
   if (loading && !hasData) {
     return (
       <DashboardLoadingScreen
         label="CAF Monitoring"
         message="Retrieving latest CAF pipeline data..."
-        placeholders={["CAF Pipeline", "Status Funnel", "Vendor Leaderboard"]}
+        placeholders={["CAF Pipeline", "Status Breakdown", "Daily Runrate"]}
       />
     )
   }
 
   const header = (
-    <ProgramHeader title="CAF Monitoring Dashboard" dateLabel={formattedDate} />
+    <ProgramHeader
+      title="CAF Monitoring Dashboard"
+      dateLabel={formattedDate}
+      exportButton={
+        <DashboardExportButton onClick={handleExport} isExporting={isExporting} />
+      }
+    />
   )
 
   const matrixStats = (
@@ -86,10 +106,9 @@ export default function CafMonitoringPage() {
     />
   )
 
-  const statusFunnelCard = (
-    <CafStatusFunnelCard
-      items={statusItems}
-      totalCaf={funnelTotal}
+  const statusAssigneeGrid = (
+    <CafStatusAssigneeGrid
+      cards={statusAssigneeCards}
       isLoading={false}
       error={error}
     />
@@ -99,49 +118,11 @@ export default function CafMonitoringPage() {
     <DailyRunrateCard
       data={runrateData}
       isLoading={false}
+      compact
       title="Daily CAF Runrate – Last 7 Days"
-      titleClassName="caf-subtitle rounded-full bg-blue-500/20 text-blue-300 px-1.5 py-0.5"
+      titleClassName="caf-subtitle rounded-full bg-blue-500/20 text-blue-300 px-1.5 py-0.5 text-[9px]"
       seriesLabels={{ forecast: "Created", actual: "Approved" }}
       hidePointLabels
-    />
-  )
-
-  const agingCard = (
-    <CafAgingCard
-      buckets={buckets}
-      waitingImplementation={waitingImplementation}
-      pendingAging={pendingAging}
-      totalOpen={totalOpen}
-      isLoading={false}
-      error={error}
-    />
-  )
-
-  const vendorRanCard = (
-    <CafVendorTopCard
-      title="Top 5 RAN Vendor"
-      items={topVendorRequestor}
-      totalCaf={funnelTotal}
-      icon={Users}
-      iconClassName="bg-violet-500/20 text-violet-300"
-      titleClassName="text-violet-200"
-      badgeClassName="bg-violet-500/10 text-violet-200"
-      barColor="#A78BFA"
-      error={error}
-    />
-  )
-
-  const vendorTlpCard = (
-    <CafVendorTopCard
-      title="Top 5 TLP Vendor"
-      items={topVendorTlp}
-      totalCaf={funnelTotal}
-      icon={Building2}
-      iconClassName="bg-teal-500/20 text-teal-300"
-      titleClassName="text-teal-200"
-      badgeClassName="bg-teal-500/10 text-teal-200"
-      barColor="#2DD4BF"
-      error={error}
     />
   )
 
@@ -157,11 +138,46 @@ export default function CafMonitoringPage() {
       }
       matrixStats={matrixStats}
       milestoneAlignment={milestoneAlignmentCard}
-      statusFunnel={statusFunnelCard}
-      aging={agingCard}
+      statusAssigneeGrid={statusAssigneeGrid}
+      statusVendorFollowup={
+        CAF_WALLBOARD_PANELS.statusVendorFollowup ? (
+          <CafStatusVendorFollowupCard
+            items={statusVendorPending}
+            pendingTotal={pendingFollowupTotal}
+            isLoading={false}
+            error={error}
+          />
+        ) : undefined
+      }
       dailyRunrate={dailyRunrateCard}
-      vendorRan={vendorRanCard}
-      vendorTlp={vendorTlpCard}
+      vendorRan={
+        CAF_WALLBOARD_PANELS.vendorRan ? (
+          <CafVendorTopCard
+            title="Top 5 RAN Vendor – Pipeline Mix"
+            items={topVendorRequestor}
+            totalCaf={funnelTotal}
+            icon={Users}
+            iconClassName="bg-violet-500/20 text-violet-300"
+            titleClassName="text-violet-200"
+            badgeClassName="bg-violet-500/10 text-violet-200"
+            error={error}
+          />
+        ) : undefined
+      }
+      vendorTlp={
+        CAF_WALLBOARD_PANELS.vendorTlp ? (
+          <CafVendorTopCard
+            title="Top 5 TLP Vendor – Pipeline Mix"
+            items={topVendorTlp}
+            totalCaf={funnelTotal}
+            icon={Building2}
+            iconClassName="bg-teal-500/20 text-teal-300"
+            titleClassName="text-teal-200"
+            badgeClassName="bg-teal-500/10 text-teal-200"
+            error={error}
+          />
+        ) : undefined
+      }
     />
   )
 }

@@ -1,6 +1,12 @@
 import { differenceInCalendarDays, format, startOfDay, subDays } from "date-fns"
 import type { CafFilterableRow } from "@/lib/caf-filters"
-import { computeCafMatrixStats, type CafMatrixStats } from "@/lib/caf-matrix-stats"
+import {
+  classifyCafPipelineBucket,
+  computeCafMatrixStats,
+  isActionablePendingStatus,
+  type CafMatrixStats,
+  type CafPipelineBucket,
+} from "@/lib/caf-matrix-stats"
 import {
   classifyAgingBucket,
   parseStatusDurationDays,
@@ -10,20 +16,133 @@ import {
   computeCafMilestoneAlignment,
   type CafMilestoneAlignmentData,
 } from "@/lib/caf-milestone-fields"
+import {
+  getCafRowAssigneeName,
+  getCafStatusAssigneeLabel,
+  resolveCafStatusAssigneeKind,
+  type CafAssigneeKind,
+} from "@/lib/caf-status-assignee"
 
 const MAX_FUNNEL_STATUSES = 10
 const MAX_VENDOR_LEADERBOARD = 5
+const MAX_STATUS_VENDOR_ITEMS = 6
+const MAX_VENDORS_PER_STATUS = 3
+const MAX_STATUS_ASSIGNEE_CARDS = 8
 
-function bumpVendorCount(map: Map<string, number>, value: string | null | undefined) {
-  const name = (value ?? "").trim() || "Unassigned"
-  map.set(name, (map.get(name) ?? 0) + 1)
+type VendorAgg = {
+  count: number
+  implemented: number
+  approved: number
+  inReview: number
+  rejected: number
+  notConfirmed: number
+  other: number
 }
 
-function toTopVendorList(map: Map<string, number>, limit: number): CafVendorLeaderboardItem[] {
+function createEmptyVendorAgg(): VendorAgg {
+  return {
+    count: 0,
+    implemented: 0,
+    approved: 0,
+    inReview: 0,
+    rejected: 0,
+    notConfirmed: 0,
+    other: 0,
+  }
+}
+
+function bumpVendorAgg(
+  map: Map<string, VendorAgg>,
+  value: string | null | undefined,
+  bucket: CafPipelineBucket
+) {
+  const name = (value ?? "").trim() || "Unassigned"
+  const agg = map.get(name) ?? createEmptyVendorAgg()
+  agg.count += 1
+  agg[bucket] += 1
+  map.set(name, agg)
+}
+
+function bumpStatusVendorCount(
+  map: Map<string, Map<string, number>>,
+  status: string,
+  vendor: string | null | undefined
+) {
+  const vendorName = (vendor ?? "").trim() || "Unassigned"
+  const vendorMap = map.get(status) ?? new Map<string, number>()
+  vendorMap.set(vendorName, (vendorMap.get(vendorName) ?? 0) + 1)
+  map.set(status, vendorMap)
+}
+
+function bumpStatusAssigneeCount(
+  map: Map<string, Map<string, number>>,
+  status: string,
+  assignee: string
+) {
+  const assigneeMap = map.get(status) ?? new Map<string, number>()
+  assigneeMap.set(assignee, (assigneeMap.get(assignee) ?? 0) + 1)
+  map.set(status, assigneeMap)
+}
+
+function toStatusAssigneeCards(
+  statusCounts: Map<string, number>,
+  assigneeMap: Map<string, Map<string, number>>
+): CafStatusAssigneeCardData[] {
+  return Array.from(statusCounts.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, MAX_STATUS_ASSIGNEE_CARDS)
+    .map(([status, count]) => {
+      const assigneeKind = resolveCafStatusAssigneeKind(status)
+      const assigneeCounts = assigneeMap.get(status) ?? new Map<string, number>()
+      const assignees = Array.from(assigneeCounts.entries())
+        .map(([name, assigneeCount]) => ({ name, count: assigneeCount }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+
+      return {
+        status,
+        count,
+        assigneeKind,
+        assigneeLabel: getCafStatusAssigneeLabel(assigneeKind),
+        assignees,
+      }
+    })
+}
+
+function toTopVendorList(map: Map<string, VendorAgg>, limit: number): CafVendorLeaderboardItem[] {
   return Array.from(map.entries())
-    .map(([name, count]) => ({ name, count }))
+    .map(([name, agg]) => ({
+      name,
+      count: agg.count,
+      implemented: agg.implemented,
+      approved: agg.approved,
+      inReview: agg.inReview,
+      rejected: agg.rejected,
+      notConfirmed: agg.notConfirmed,
+      other: agg.other,
+    }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
     .slice(0, limit)
+}
+
+function toStatusVendorPendingList(
+  map: Map<string, Map<string, number>>
+): CafStatusVendorPendingItem[] {
+  return Array.from(map.entries())
+    .map(([status, vendorMap]) => {
+      const totalCount = Array.from(vendorMap.values()).reduce((sum, value) => sum + value, 0)
+      const vendors = Array.from(vendorMap.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+        .slice(0, MAX_VENDORS_PER_STATUS)
+
+      return {
+        status,
+        count: totalCount,
+        vendors,
+      }
+    })
+    .sort((a, b) => b.count - a.count || a.status.localeCompare(b.status))
+    .slice(0, MAX_STATUS_VENDOR_ITEMS)
 }
 
 export type CafStatusFunnelItem = {
@@ -40,6 +159,31 @@ export type CafDailyRunrateItem = {
 export type CafVendorLeaderboardItem = {
   name: string
   count: number
+  implemented: number
+  approved: number
+  inReview: number
+  rejected: number
+  notConfirmed: number
+  other: number
+}
+
+export type CafStatusVendorPendingItem = {
+  status: string
+  count: number
+  vendors: Array<{ name: string; count: number }>
+}
+
+export type CafStatusAssigneeRow = {
+  name: string
+  count: number
+}
+
+export type CafStatusAssigneeCardData = {
+  status: string
+  count: number
+  assigneeKind: CafAssigneeKind
+  assigneeLabel: string
+  assignees: CafStatusAssigneeRow[]
 }
 
 export type CafAgingData = {
@@ -62,6 +206,8 @@ export type CafDashboardData = {
   dailyRunrate: CafDailyRunrateItem[]
   topVendorRequestor: CafVendorLeaderboardItem[]
   topVendorTlp: CafVendorLeaderboardItem[]
+  statusVendorPending: CafStatusVendorPendingItem[]
+  statusAssigneeCards: CafStatusAssigneeCardData[]
 }
 
 function hasDate(value: string | null | undefined): boolean {
@@ -145,15 +291,26 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
   const dateSet = new Set(runrateWindow.map((d) => d.sqlDate))
   const createdMap: Record<string, number> = {}
   const approvedMap: Record<string, number> = {}
-  const vendorRequestorCounts = new Map<string, number>()
-  const vendorTlpCounts = new Map<string, number>()
+  const vendorRequestorCounts = new Map<string, VendorAgg>()
+  const vendorTlpCounts = new Map<string, VendorAgg>()
+  const statusVendorPendingMap = new Map<string, Map<string, number>>()
+  const statusAssigneeMap = new Map<string, Map<string, number>>()
 
   for (const row of rows) {
     const status = (row.caf_status ?? "Unknown").trim() || "Unknown"
     statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1)
 
-    bumpVendorCount(vendorRequestorCounts, row.vendor_requestor_name)
-    bumpVendorCount(vendorTlpCounts, row.vendor_tlp_name)
+    const assigneeKind = resolveCafStatusAssigneeKind(status)
+    const assigneeName = getCafRowAssigneeName(row, assigneeKind)
+    bumpStatusAssigneeCount(statusAssigneeMap, status, assigneeName)
+
+    const bucket = classifyCafPipelineBucket(row)
+    bumpVendorAgg(vendorRequestorCounts, row.vendor_requestor_name, bucket)
+    bumpVendorAgg(vendorTlpCounts, row.vendor_tlp_name, bucket)
+
+    if (isActionablePendingStatus(row)) {
+      bumpStatusVendorCount(statusVendorPendingMap, status, row.vendor_tlp_name)
+    }
 
     const createdKey = toSqlDateKey(row.created_date, dateSet)
     if (createdKey) createdMap[createdKey] = (createdMap[createdKey] ?? 0) + 1
@@ -204,6 +361,8 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
     dailyRunrate,
     topVendorRequestor: toTopVendorList(vendorRequestorCounts, MAX_VENDOR_LEADERBOARD),
     topVendorTlp: toTopVendorList(vendorTlpCounts, MAX_VENDOR_LEADERBOARD),
+    statusVendorPending: toStatusVendorPendingList(statusVendorPendingMap),
+    statusAssigneeCards: toStatusAssigneeCards(statusCounts, statusAssigneeMap),
   }
 }
 
