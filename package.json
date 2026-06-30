@@ -13,6 +13,7 @@
     "test:redis": "npx --yes tsx scripts/test-redis-caching.ts",
     "test:e2e": "playwright test",
     "test:caf": "playwright test e2e/caf-monitoring.spec.ts",
+    "upload:tlp-excel": "node scripts/upload-tlp-excel.mjs",
     "dev:e2e": "next dev"
   },
   "dependencies": {

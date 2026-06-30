@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getTlpSupabaseClient, hasNonEmptyValue } from "@/lib/tlp-new-site-server"
+import { extractRfsYear } from "@/lib/caf-filters"
 import { getCacheOrFetch } from "@/lib/redis"
 
 type CafFilterOptions = {
@@ -9,13 +10,14 @@ type CafFilterOptions = {
   cafStatus: string[]
   cafType: string[]
   avp: string[]
+  rfsYear: string[]
 }
 
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url)
     const forceRefresh = url.searchParams.get("refresh") === "true"
-    const cacheKey = "caf-monitoring:filter-options:v1"
+    const cacheKey = "caf-monitoring:filter-options:v2"
 
     const options = await getCacheOrFetch<CafFilterOptions>(
       cacheKey + (forceRefresh ? ":refresh" : ""),
@@ -31,12 +33,13 @@ export async function GET(request: Request) {
         const cafStatus = new Set<string>()
         const cafType = new Set<string>()
         const avp = new Set<string>()
+        const rfsYear = new Set<string>()
 
         while (hasMore) {
           const { data, error } = await supabase
             .from("site_data_caf")
             .select(
-              "project_name, vendor_tlp_name, vendor_requestor_name, caf_status, caf_type, avp"
+              "project_name, vendor_tlp_name, vendor_requestor_name, caf_status, caf_type, avp, rfs_af"
             )
             .range(offset, offset + pageSize - 1)
 
@@ -51,6 +54,8 @@ export async function GET(request: Request) {
             if (hasNonEmptyValue(row.caf_status)) cafStatus.add(String(row.caf_status).trim())
             if (hasNonEmptyValue(row.caf_type)) cafType.add(String(row.caf_type).trim())
             if (hasNonEmptyValue(row.avp)) avp.add(String(row.avp).trim())
+            const year = extractRfsYear(row.rfs_af as string | null | undefined)
+            if (year) rfsYear.add(year)
           }
 
           hasMore = Boolean(data && data.length === pageSize)
@@ -59,6 +64,9 @@ export async function GET(request: Request) {
 
         const sort = (s: Set<string>) => Array.from(s.values()).sort((a, b) => a.localeCompare(b))
 
+        const sortDesc = (s: Set<string>) =>
+          Array.from(s.values()).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+
         return {
           projects: sort(projects),
           vendorTlp: sort(vendorTlp),
@@ -66,6 +74,7 @@ export async function GET(request: Request) {
           cafStatus: sort(cafStatus),
           cafType: sort(cafType),
           avp: sort(avp),
+          rfsYear: sortDesc(rfsYear),
         }
       },
       300

@@ -1,15 +1,11 @@
 import { expect, test } from "@playwright/test"
 
 test.describe("CAF Monitoring Dashboard", () => {
-  test("loads dashboard with consistent KPI and card data", async ({ page }) => {
-    const apiPromise = page.waitForResponse(
-      (res) => res.url().includes("/api/caf/site-data") && res.status() === 200,
-      { timeout: 60_000 }
-    )
-
-    await page.goto("/caf-monitoring")
-    const apiResponse = await apiPromise
-    const payload = await apiResponse.json()
+  test("loads dashboard with consistent KPI and card data", async ({ page, request }) => {
+    const [payload] = await Promise.all([
+      request.get("/api/caf/site-data").then((res) => res.json()),
+      page.goto("/caf-monitoring"),
+    ])
 
     expect(payload.status).toBe("success")
     expect(payload.data.length).toBeGreaterThan(0)
@@ -17,9 +13,9 @@ test.describe("CAF Monitoring Dashboard", () => {
     await expect(page.getByRole("heading", { name: /CAF Monitoring Dashboard/i })).toBeVisible()
     await expect(page.getByRole("button", { name: /^Export$/i })).toBeVisible()
     await expect(page.getByText("CAF Pipeline")).toBeVisible()
-    await expect(page.getByText("AF Milestone Coverage")).toBeVisible()
-    await expect(page.getByText("Approved – Awaiting Impl.")).toBeVisible()
-    await expect(page.getByText("Review – TLP")).toBeVisible()
+    await expect(page.getByText(/AF Complete/i)).toBeVisible()
+    await expect(page.locator(".caf-status-assignee-grid").getByText("Approved – Awaiting Impl.")).toBeVisible()
+    await expect(page.locator(".caf-status-assignee-grid").getByText("Review – TLP")).toBeVisible()
     await expect(page.getByText("Daily CAF Runrate")).toBeVisible()
 
     const totalText = payload.data.length.toLocaleString("en-US")
@@ -101,11 +97,49 @@ test.describe("CAF Monitoring Dashboard", () => {
     const runrateCard = page.locator(".caf-wallboard-runrate--compact")
     const runrateBox = await runrateCard.boundingBox()
     expect(runrateBox).not.toBeNull()
-    expect(runrateBox!.height).toBeLessThan(240)
+    expect(runrateBox!.height).toBeLessThan(180)
 
     await page.screenshot({
       path: "screenshots/caf-monitoring-layout.png",
       fullPage: false,
     })
+  })
+
+  test("tablet uses scalable wallboard above mobile breakpoint", async ({ page }) => {
+    await page.setViewportSize({ width: 820, height: 1180 })
+    await page.goto("/caf-monitoring")
+    await page.waitForResponse((res) => res.url().includes("/api/caf/site-data"))
+
+    await expect(page.locator(".caf-wallboard-grid")).toBeVisible()
+    await expect(page.locator(".caf-mobile-layout")).toHaveCount(0)
+  })
+
+  test("desktop uses wallboard at full scale", async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto("/caf-monitoring")
+    await page.waitForResponse((res) => res.url().includes("/api/caf/site-data"))
+
+    await expect(page.locator(".caf-wallboard-grid")).toBeVisible()
+    await expect(page.locator(".viewport-wrapper--fitted")).toHaveCount(0)
+
+    const scale = await page.locator("#wb-canvas").evaluate((el) =>
+      getComputedStyle(el).getPropertyValue("--wb-scale").trim()
+    )
+    expect(scale === "" || scale === "1").toBeTruthy()
+  })
+
+  test("mobile layout shows scrollable cards without wallboard scale", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto("/caf-monitoring")
+    await page.waitForResponse((res) => res.url().includes("/api/caf/site-data"))
+
+    await expect(page.locator(".caf-mobile-layout")).toBeVisible()
+    await expect(page.locator(".caf-wallboard-grid")).toHaveCount(0)
+    await expect(page.getByRole("heading", { name: /CAF Monitoring Dashboard/i })).toBeVisible()
+    await expect(page.getByText("Filter Data")).toBeVisible()
+    await expect(page.getByText("CAF Pipeline")).toBeVisible()
+    await expect(page.getByText(/AF Complete/i)).toBeVisible()
+    await expect(page.locator(".caf-status-assignee-grid--mobile")).toBeVisible()
+    await expect(page.getByText("Daily CAF Runrate")).toBeVisible()
   })
 })

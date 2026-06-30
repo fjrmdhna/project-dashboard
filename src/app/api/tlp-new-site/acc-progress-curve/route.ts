@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { applyTlpYearDbFilter, getTlpSupabaseClient } from "@/lib/tlp-new-site-server"
+import { applyTlpDbFilters, getTlpSupabaseClient } from "@/lib/tlp-new-site-server"
 import {
   type AccProgressPoint,
   endOfMonth,
@@ -33,11 +33,11 @@ export async function GET(request: Request) {
     }> = []
 
     while (hasMore) {
-      const { data, error } = await applyTlpYearDbFilter(
+      const { data, error } = await applyTlpDbFilters(
         supabase
           .from("site_data_tlp")
           .select(
-            "program_name, twr_owner, wbs_status, wo_number_1, year_from_wo, site_category, ic_000010_ff, ic_000010_af, rfi_accepted"
+            "program_group, program_name, project_name, twr_owner, wbs_status, wo_number_1, year_from_wo, site_category, ic_000010_ff, ic_000010_af, rfi_accepted"
           ),
         filters
       ).range(offset, offset + pageSize - 1)

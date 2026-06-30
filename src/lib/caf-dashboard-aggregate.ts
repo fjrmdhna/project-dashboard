@@ -13,7 +13,9 @@ import {
   type CafAgingBucket,
 } from "@/lib/caf-status-duration"
 import {
+  computeCafAfCompleteStatusBreakdown,
   computeCafMilestoneAlignment,
+  type CafAfCompleteStatusData,
   type CafMilestoneAlignmentData,
 } from "@/lib/caf-milestone-fields"
 import {
@@ -193,7 +195,7 @@ export type CafAgingData = {
   totalOpen: number
 }
 
-export type { CafMilestoneAlignmentData } from "@/lib/caf-milestone-fields"
+export type { CafMilestoneAlignmentData, CafAfCompleteStatusData } from "@/lib/caf-milestone-fields"
 
 export type CafDashboardData = {
   matrix: CafMatrixStats
@@ -203,6 +205,7 @@ export type CafDashboardData = {
   }
   aging: CafAgingData
   milestoneAlignment: CafMilestoneAlignmentData
+  afCompleteStatus: CafAfCompleteStatusData
   dailyRunrate: CafDailyRunrateItem[]
   topVendorRequestor: CafVendorLeaderboardItem[]
   topVendorTlp: CafVendorLeaderboardItem[]
@@ -358,6 +361,7 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
       totalOpen,
     },
     milestoneAlignment: computeCafMilestoneAlignment(rows),
+    afCompleteStatus: computeCafAfCompleteStatusBreakdown(rows),
     dailyRunrate,
     topVendorRequestor: toTopVendorList(vendorRequestorCounts, MAX_VENDOR_LEADERBOARD),
     topVendorTlp: toTopVendorList(vendorTlpCounts, MAX_VENDOR_LEADERBOARD),

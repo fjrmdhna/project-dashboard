@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useApiCache } from "@/hooks/useApiCache"
 import { filterCafRows, type CafSiteFilters, type CafFilterableRow } from "@/lib/caf-filters"
 import { aggregateCafDashboard } from "@/lib/caf-dashboard-aggregate"
+import { createEmptyCafAfCompleteStatusData } from "@/lib/caf-milestone-fields"
 
 interface CafSiteDataResponse {
   status: "success"
@@ -73,13 +74,7 @@ export function useCafDashboard(filters: CafSiteFilters) {
       (matrix?.approved ?? 0) +
       (matrix?.notConfirmed ?? 0) +
       (matrix?.other ?? 0),
-    milestoneAlignment: dashboard?.milestoneAlignment ?? {
-      missingRfs: 0,
-      missingEndorse: 0,
-      missingPatp: 0,
-      allComplete: 0,
-      totalCaf: 0,
-    },
+    afCompleteStatus: dashboard?.afCompleteStatus ?? createEmptyCafAfCompleteStatusData(),
     runrateData: dashboard?.dailyRunrate ?? [],
     topVendorRequestor: dashboard?.topVendorRequestor ?? [],
     topVendorTlp: dashboard?.topVendorTlp ?? [],

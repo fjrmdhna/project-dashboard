@@ -6,6 +6,7 @@ export type CafSiteFilters = {
   caf_status?: string[]
   caf_type?: string[]
   avp?: string[]
+  rfs_year?: string[]
 }
 
 export type CafFilterableRow = {
@@ -36,6 +37,23 @@ function normalizeString(v: unknown): string {
   return isNonEmptyString(v) ? String(v).trim().toLowerCase() : ""
 }
 
+/** Calendar year from `rfs_af` (ISO date string or timestamp). */
+export function extractRfsYear(rfsAf: string | null | undefined): string | null {
+  if (!isNonEmptyString(rfsAf)) return null
+  const year = String(rfsAf).trim().slice(0, 4)
+  return /^\d{4}$/.test(year) ? year : null
+}
+
+export function buildRfsYearOrClause(years: string[]): string | null {
+  const ranges = years
+    .map((y) => Number.parseInt(String(y), 10))
+    .filter((y) => Number.isFinite(y) && y >= 1900 && y <= 2100)
+    .map((y) => `and(rfs_af.gte.${y}-01-01,rfs_af.lt.${y + 1}-01-01)`)
+
+  if (ranges.length === 0) return null
+  return ranges.join(",")
+}
+
 export function cafFiltersToQueryString(filters: CafSiteFilters): string {
   const sp = new URLSearchParams()
 
@@ -54,6 +72,7 @@ export function cafFiltersToQueryString(filters: CafSiteFilters): string {
   appendAll("caf_status", filters.caf_status)
   appendAll("caf_type", filters.caf_type)
   appendAll("avp", filters.avp)
+  appendAll("rfs_year", filters.rfs_year)
 
   return sp.toString()
 }
@@ -66,6 +85,7 @@ export function parseCafFiltersFromSearchParams(searchParams: URLSearchParams): 
   const caf_status = searchParams.getAll("caf_status")
   const caf_type = searchParams.getAll("caf_type")
   const avp = searchParams.getAll("avp")
+  const rfs_year = searchParams.getAll("rfs_year")
 
   return {
     q,
@@ -75,6 +95,7 @@ export function parseCafFiltersFromSearchParams(searchParams: URLSearchParams): 
     caf_status: caf_status.length > 0 ? caf_status : undefined,
     caf_type: caf_type.length > 0 ? caf_type : undefined,
     avp: avp.length > 0 ? avp : undefined,
+    rfs_year: rfs_year.length > 0 ? rfs_year : undefined,
   }
 }
 
@@ -115,6 +136,13 @@ export function rowMatchesCafFilters(row: CafFilterableRow, filters: CafSiteFilt
   if (Array.isArray(filters.avp) && filters.avp.length > 0) {
     const set = new Set(filters.avp.map((v) => normalizeString(v)))
     if (!set.has(normalizeString(row.avp))) return false
+  }
+
+  if (Array.isArray(filters.rfs_year) && filters.rfs_year.length > 0) {
+    const rowYear = extractRfsYear(row.rfs_af)
+    if (!rowYear) return false
+    const set = new Set(filters.rfs_year.map((v) => String(v).trim()))
+    if (!set.has(rowYear)) return false
   }
 
   return true

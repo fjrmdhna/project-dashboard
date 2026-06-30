@@ -6,18 +6,22 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  LabelList,
   Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts"
+import type { LabelProps } from "recharts"
 import type { TlpRfiByCircleItem } from "@/hooks/useTlpRfiByCircle"
-
 import { TLP_ACTUAL_COLOR, TLP_PLAN_COLOR } from "@/lib/tlp-chart-colors"
+import { TlpCardHeader, TlpCardHeaderPlanActual } from "@/components/cards/tlp/TlpCardHeader"
 
 const PLAN_COLOR = TLP_PLAN_COLOR
 const ACTUAL_COLOR = TLP_ACTUAL_COLOR
+
+const CHART_MARGIN = { top: 24, right: 6, left: 0, bottom: 4 }
 
 interface TlpRfiByCircleCardProps {
   rows: TlpRfiByCircleItem[]
@@ -25,6 +29,70 @@ interface TlpRfiByCircleCardProps {
   totalActualRfi: number
   isLoading?: boolean
   error?: string | null
+}
+
+function truncateCircleLabel(label: string, maxLen = 11): string {
+  const trimmed = label.trim()
+  if (trimmed.length <= maxLen) return trimmed
+  return `${trimmed.slice(0, maxLen - 1)}…`
+}
+
+function CircleXAxisTick({
+  x,
+  y,
+  payload,
+}: {
+  x?: number
+  y?: number
+  payload?: { value: string }
+}) {
+  if (x == null || y == null || !payload) return null
+
+  return (
+    <text
+      x={x}
+      y={y + 12}
+      textAnchor="middle"
+      fill="#D1D5DB"
+      fontSize={8}
+      fontWeight={600}
+    >
+      {truncateCircleLabel(String(payload.value))}
+    </text>
+  )
+}
+
+function BarValueLabel({
+  fill,
+  x,
+  y,
+  width,
+  value,
+}: LabelProps & { fill: string }) {
+  if (typeof x !== "number" || typeof y !== "number" || typeof width !== "number") return null
+  if (value == null || Number(value) === 0) return null
+
+  return (
+    <text
+      x={x + width / 2}
+      y={y - 4}
+      fill={fill}
+      textAnchor="middle"
+      fontSize={8}
+      fontWeight={700}
+      style={{ pointerEvents: "none" }}
+    >
+      {Number(value).toLocaleString()}
+    </text>
+  )
+}
+
+function PlanBarLabel(props: LabelProps) {
+  return <BarValueLabel {...props} fill={PLAN_COLOR} />
+}
+
+function ActualBarLabel(props: LabelProps) {
+  return <BarValueLabel {...props} fill="#E5E7EB" />
 }
 
 export function TlpRfiByCircleCard({
@@ -44,64 +112,66 @@ export function TlpRfiByCircleCard({
       }))
   }, [rows])
 
+  const yMax = useMemo(() => {
+    let max = 0
+    for (const row of chartData) {
+      max = Math.max(max, row.plan, row.actual)
+    }
+    return Math.ceil(max * 1.15) || 10
+  }, [chartData])
+
+  const showLoading = isLoading && rows.length === 0
+
   return (
     <div
-      className="rounded-2xl bg-[#0F1630]/80 border border-white/5 w-full h-full flex flex-col min-w-0"
+      className="flex h-full min-h-0 w-full min-w-0 flex-col rounded-2xl border border-white/5 bg-[#0F1630]/80"
       style={{ padding: "calc(var(--wb-card-padding) - 4px)" }}
     >
-      <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <div className="rounded-lg bg-purple-500/20 p-1">
-            <BarChart3 className="h-3.5 w-3.5 text-purple-300" />
-          </div>
-          <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-300">
-            RFI Plan vs Actual
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-semibold text-white/80">
-          <span>
-            Plan: <span style={{ color: PLAN_COLOR }}>{totalPlanRfi.toLocaleString()}</span>
-          </span>
-          <span className="text-white/40">|</span>
-          <span>
-            Actual: <span style={{ color: ACTUAL_COLOR }}>{totalActualRfi.toLocaleString()}</span>
-          </span>
-        </div>
-      </div>
+      <TlpCardHeader
+        title="RFI Plan vs Actual"
+        icon={BarChart3}
+        tone="purple"
+        trailing={
+          <TlpCardHeaderPlanActual
+            plan={totalPlanRfi}
+            actual={totalActualRfi}
+            planColor={PLAN_COLOR}
+            actualColor={ACTUAL_COLOR}
+          />
+        }
+      />
 
-      {isLoading ? (
+      {showLoading ? (
         <div className="flex flex-1 items-center justify-center text-[10px] text-white/60">Loading...</div>
       ) : error ? (
         <div className="flex flex-1 items-center justify-center text-[10px] text-red-300/90">{error}</div>
       ) : chartData.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-[10px] text-white/50">No data available</div>
       ) : (
-        <div className="flex-1 min-h-0">
+        <div className="min-h-0 flex-1">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={chartData}
-              margin={{ top: 18, right: 8, left: 6, bottom: 32 }}
-              barCategoryGap="22%"
-              barGap={4}
+              margin={CHART_MARGIN}
+              barCategoryGap="24%"
+              barGap={3}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={false} />
               <XAxis
                 dataKey="circle"
                 interval={0}
-                minTickGap={0}
-                angle={-25}
-                textAnchor="end"
-                tick={{ fill: "#D1D5DB", fontSize: 9, fontWeight: 600 }}
-                axisLine={{ stroke: "rgba(255,255,255,0.18)" }}
                 tickLine={false}
-                tickMargin={8}
-                height={52}
+                axisLine={{ stroke: "rgba(255,255,255,0.18)" }}
+                tick={<CircleXAxisTick />}
+                height={30}
               />
               <YAxis
-                tick={{ fill: "#A7B0C2", fontSize: 10 }}
+                domain={[0, yMax]}
+                tick={{ fill: "#A7B0C2", fontSize: 9 }}
                 axisLine={false}
                 tickLine={false}
-                width={38}
+                width={36}
+                tickCount={4}
                 tickFormatter={(value: number) => value.toLocaleString()}
               />
               <Tooltip
@@ -114,29 +184,38 @@ export function TlpRfiByCircleCard({
                   fontSize: "11px",
                 }}
                 formatter={(value: number, name: string) => [value.toLocaleString(), name]}
+                labelFormatter={(label) => String(label)}
               />
               <Legend
                 verticalAlign="bottom"
-                height={28}
-                wrapperStyle={{ paddingTop: 4 }}
+                height={24}
+                wrapperStyle={{ paddingTop: 2 }}
+                payload={[
+                  { value: "Plan", type: "square", color: PLAN_COLOR, id: "plan" },
+                  { value: "Actual", type: "square", color: ACTUAL_COLOR, id: "actual" },
+                ]}
                 formatter={(value) => <span className="text-[9px] text-white/80">{value}</span>}
               />
               <Bar
                 dataKey="plan"
                 name="Plan"
                 fill={PLAN_COLOR}
-                radius={[4, 4, 0, 0]}
-                maxBarSize={22}
-                label={{ position: "top", fill: PLAN_COLOR, fontSize: 9, fontWeight: 700 }}
-              />
+                radius={[3, 3, 0, 0]}
+                maxBarSize={24}
+                isAnimationActive={false}
+              >
+                <LabelList dataKey="plan" content={<PlanBarLabel />} />
+              </Bar>
               <Bar
                 dataKey="actual"
                 name="Actual"
                 fill={ACTUAL_COLOR}
-                radius={[4, 4, 0, 0]}
-                maxBarSize={22}
-                label={{ position: "top", fill: "#E5E7EB", fontSize: 9, fontWeight: 700 }}
-              />
+                radius={[3, 3, 0, 0]}
+                maxBarSize={24}
+                isAnimationActive={false}
+              >
+                <LabelList dataKey="actual" content={<ActualBarLabel />} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>

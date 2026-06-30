@@ -7,6 +7,7 @@ import {
   resolveMilestoneColumns,
   type HermesMilestoneFields,
 } from "@/lib/hermes-milestone-fields"
+import { TlpCardHeader } from "@/components/cards/tlp/TlpCardHeader"
 
 export interface Row {
   system_key: string
@@ -39,6 +40,8 @@ export interface MatrixStatsCardProps {
   rows: Row[]
   patpCount?: number
   variant?: "default" | "aop" | "tlp" | "caf"
+  /** `mobile` — stacked pipeline layout for narrow viewports (CAF variant only) */
+  layout?: "default" | "mobile"
   milestoneFields?: HermesMilestoneFields
   stats?: {
     totalSites?: number
@@ -100,6 +103,44 @@ const CAF_METRIC_CONFIG = [
   { key: "notConfirmed", label: "NOT CONF.", color: "#A855F7" },
   { key: "resubmit", label: "RESUBMIT", color: "#94A3B8" },
 ] as const
+
+const CAF_MOBILE_METRIC_LABELS: Record<(typeof CAF_METRIC_CONFIG)[number]["key"], string> = {
+  inReview: "In Review",
+  approved: "Approved",
+  implemented: "Implemented",
+  rejected: "Rejected",
+  notConfirmed: "Not Confirmed",
+  resubmit: "Resubmit",
+}
+
+function CafMobilePipelineList({
+  metrics,
+}: {
+  metrics: MetricMap
+}) {
+  return (
+    <div className="caf-matrix-pipeline-list">
+      {CAF_METRIC_CONFIG.map((metric) => {
+        const color = metric.color
+        const value = metrics[metric.key] ?? 0
+
+        return (
+          <div key={metric.key} className="caf-matrix-pipeline-row">
+            <span
+              className="caf-matrix-pipeline-row__dot"
+              style={{ backgroundColor: color }}
+              aria-hidden="true"
+            />
+            <span className="caf-matrix-pipeline-row__label">{CAF_MOBILE_METRIC_LABELS[metric.key]}</span>
+            <span className="caf-matrix-pipeline-row__value tabular-nums" style={{ color }}>
+              {value.toLocaleString()}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 // TLP New Site — Total Sites is shown separately; these match site_data_tlp columns
 const TLP_METRIC_CONFIG = [
@@ -201,7 +242,7 @@ function normalizeSiteStatus(value: string | null | undefined): string {
   return normalized
 }
 
-export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", milestoneFields, stats: providedStats }: MatrixStatsCardProps) {
+export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layout = "default", milestoneFields, stats: providedStats }: MatrixStatsCardProps) {
   const { readinessColumn, activatedColumn } = resolveMilestoneColumns(milestoneFields)
 
   const stats = useMemo(() => {
@@ -447,37 +488,59 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", mile
             pac: stats.pac,
           }
 
+  const isCafMobile = variant === "caf" && layout === "mobile"
+
   return (
-    <div className={`rounded-2xl bg-[#0F1630]/85 border border-white/5 w-full h-full matrix-compact text-white px-3 py-2 ${variant === "caf" ? "caf-matrix-card" : ""}`}>
+    <div className={`rounded-2xl bg-[#0F1630]/85 border border-white/5 w-full h-full matrix-compact text-white px-3 py-2 ${variant === "caf" ? "caf-matrix-card" : ""} ${isCafMobile ? "caf-matrix-card--mobile" : ""}`}>
       <div className="flex h-full flex-col gap-1.5">
-        <div className="flex items-center gap-1.5">
-          <div className="bg-blue-500/15 p-0.5 rounded-sm">
-            <BarChart3 className="h-2.5 w-2.5 text-blue-300" />
+        {variant === "tlp" ? (
+          <TlpCardHeader title="Matrix Statistics" icon={BarChart3} tone="blue" className="mb-0" />
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <div className="bg-blue-500/15 p-0.5 rounded-sm">
+              <BarChart3 className="h-2.5 w-2.5 text-blue-300" />
+            </div>
+            <div
+              className={
+                variant === "caf"
+                  ? "caf-subtitle rounded-full bg-blue-500/15 px-1.5 py-0.5 text-blue-200 whitespace-nowrap leading-tight"
+                  : "text-[8px] font-semibold uppercase tracking-[0.18em] bg-blue-500/15 text-blue-200 px-1.5 py-0.5 rounded-full whitespace-nowrap leading-tight"
+              }
+            >
+              {variant === "caf" ? "CAF Pipeline" : "Matrix Statistics"}
+            </div>
           </div>
-          <div
-            className={
-              variant === "caf"
-                ? "caf-subtitle rounded-full bg-blue-500/15 px-1.5 py-0.5 text-blue-200 whitespace-nowrap leading-tight"
-                : "text-[8px] font-semibold uppercase tracking-[0.18em] bg-blue-500/15 text-blue-200 px-1.5 py-0.5 rounded-full whitespace-nowrap leading-tight"
-            }
-          >
-            {variant === "caf" ? "CAF Pipeline" : "Matrix Statistics"}
-          </div>
-        </div>
+        )}
 
         <div
           className={`flex w-full flex-wrap items-center gap-3 gap-y-1 ${
-            variant === "caf" ? "caf-matrix-metrics" : "justify-center"
+            variant === "caf"
+              ? isCafMobile
+                ? "caf-matrix-metrics caf-matrix-metrics--mobile"
+                : "caf-matrix-metrics"
+              : "justify-center"
           }`}
         >
-          <div className={`flex flex-col items-center text-center justify-center ${variant === "caf" ? "caf-matrix-total" : "min-w-[72px]"}`}>
-            <span className={`font-bold leading-none text-white ${variant === "caf" ? "text-2xl" : "text-lg"}`}>
+          <div
+            className={`flex flex-col items-center text-center justify-center ${
+              variant === "caf"
+                ? isCafMobile
+                  ? "caf-matrix-total caf-matrix-total--mobile"
+                  : "caf-matrix-total"
+                : "min-w-[72px]"
+            }`}
+          >
+            <span
+              className={`font-bold leading-none text-white ${
+                isCafMobile ? "text-[1.75rem]" : variant === "caf" ? "text-2xl" : "text-lg"
+              }`}
+            >
               {stats.totalSites.toLocaleString()}
             </span>
             <span
               className={
                 variant === "caf"
-                  ? "mt-0.5 caf-subtitle text-[#90A0C4]"
+                  ? `mt-1 caf-subtitle text-[#90A0C4] ${isCafMobile ? "text-xs tracking-[0.16em]" : ""}`
                   : "text-[8px] uppercase tracking-[0.16em] text-[#90A0C4]"
               }
             >
@@ -486,17 +549,21 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", mile
           </div>
 
           {variant === "caf" ? (
-            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-              {metricConfig.map((metric) => (
-                <MetricItem
-                  key={metric.key}
-                  label={metric.label}
-                  value={metrics[metric.key] ?? 0}
-                  accentColor={"color" in metric ? metric.color : undefined}
-                  variant="caf"
-                />
-              ))}
-            </div>
+            isCafMobile ? (
+              <CafMobilePipelineList metrics={metrics} />
+            ) : (
+              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                {metricConfig.map((metric) => (
+                  <MetricItem
+                    key={metric.key}
+                    label={metric.label}
+                    value={metrics[metric.key] ?? 0}
+                    accentColor={"color" in metric ? metric.color : undefined}
+                    variant="caf"
+                  />
+                ))}
+              </div>
+            )
           ) : (
             metricConfig.map((metric) => (
               <MetricItem

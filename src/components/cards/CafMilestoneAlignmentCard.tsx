@@ -41,6 +41,7 @@ function MetricTile({
   color,
   icon: Icon,
   totalCaf,
+  layout = "wallboard",
 }: {
   value: number
   label: string
@@ -48,24 +49,29 @@ function MetricTile({
   color: string
   icon: typeof Radio
   totalCaf: number
+  layout?: "wallboard" | "mobile"
 }) {
   const sharePct = totalCaf > 0 ? Math.round((value / totalCaf) * 100) : 0
   const barWidth = totalCaf > 0 ? Math.max((value / totalCaf) * 100, value > 0 ? 6 : 0) : 0
+  const isMobile = layout === "mobile"
 
   return (
-    <div className="caf-milestone-tile">
+    <div className={isMobile ? "caf-milestone-tile caf-milestone-tile--mobile" : "caf-milestone-tile"}>
       <div className="caf-milestone-tile__header">
         <span className="caf-milestone-tile__icon" style={{ color }}>
-          <Icon className="h-3 w-3" />
+          <Icon className={isMobile ? "h-3.5 w-3.5" : "h-3 w-3"} />
         </span>
         <span className="caf-milestone-tile__label" title={label}>
-          {shortLabel}
+          {isMobile ? label : shortLabel}
         </span>
         <span className="caf-milestone-tile__pct tabular-nums" style={{ color }}>
           {sharePct}%
         </span>
       </div>
-      <div className="caf-milestone-tile__value tabular-nums" style={{ color }}>
+      <div
+        className={`caf-milestone-tile__value tabular-nums ${isMobile ? "caf-milestone-tile__value--mobile" : ""}`}
+        style={{ color }}
+      >
         {value.toLocaleString()}
       </div>
       <div className="caf-milestone-tile__bar-track" aria-hidden="true">
@@ -82,25 +88,34 @@ export function CafMilestoneAlignmentCard({
   data,
   isLoading = false,
   error,
+  layout = "wallboard",
 }: {
   data: CafMilestoneAlignmentData
   isLoading?: boolean
   error?: string | null
+  layout?: "wallboard" | "mobile"
 }) {
   const { totalCaf } = data
+  const isMobile = layout === "mobile"
 
   return (
-    <div className="caf-panel-card caf-panel-card-compact caf-milestone-card flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <div className="caf-panel-header caf-panel-header-compact">
+    <div
+      className={`caf-panel-card caf-panel-card-compact caf-milestone-card flex h-full min-h-0 w-full flex-col overflow-hidden ${
+        isMobile ? "caf-milestone-card--mobile" : ""
+      }`}
+    >
+      <div className={`caf-panel-header caf-panel-header-compact ${isMobile ? "caf-panel-header--mobile" : ""}`}>
         <div className="flex min-w-0 items-center gap-1.5">
           <div className="rounded-md bg-cyan-500/20 p-0.5">
-            <CircleDashed className="h-3 w-3 text-cyan-300" />
+            <CircleDashed className={`text-cyan-300 ${isMobile ? "h-3.5 w-3.5" : "h-3 w-3"}`} />
           </div>
-          <span className="caf-subtitle text-cyan-200">AF Milestone Coverage</span>
+          <span className={`caf-subtitle text-cyan-200 ${isMobile ? "text-[11px]" : ""}`}>
+            AF Milestone Coverage
+          </span>
         </div>
-        <div className="flex shrink-0 items-baseline gap-1 text-[9px]">
+        <div className={`flex shrink-0 items-baseline gap-1 ${isMobile ? "text-[10px]" : "text-[9px]"}`}>
           <span className="text-white/50">Total</span>
-          <span className="text-[10px] font-bold tabular-nums text-white">
+          <span className={`font-bold tabular-nums text-white ${isMobile ? "text-xs" : "text-[10px]"}`}>
             {totalCaf.toLocaleString()}
           </span>
         </div>
@@ -116,7 +131,13 @@ export function CafMilestoneAlignmentCard({
         </div>
       ) : (
         <div className="caf-milestone-body">
-          <div className="grid shrink-0 grid-cols-4 gap-1.5">
+          <div
+            className={
+              isMobile
+                ? "grid shrink-0 grid-cols-2 gap-2.5"
+                : "grid shrink-0 grid-cols-4 gap-1.5"
+            }
+          >
             {METRIC_CONFIG.map((metric) => (
               <MetricTile
                 key={metric.key}
@@ -126,6 +147,7 @@ export function CafMilestoneAlignmentCard({
                 color={metric.color}
                 icon={metric.icon}
                 totalCaf={totalCaf}
+                layout={layout}
               />
             ))}
           </div>

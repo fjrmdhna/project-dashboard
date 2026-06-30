@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { applyTlpYearDbFilter, getTlpSupabaseClient, hasNonEmptyValue } from "@/lib/tlp-new-site-server"
+import { applyTlpDbFilters, getTlpSupabaseClient, hasNonEmptyValue } from "@/lib/tlp-new-site-server"
 import { parseTlpFiltersFromSearchParams, rowMatchesTlpFilters, type TlpSiteFilters } from "@/lib/tlp-new-site-filters"
 import { buildTopVendorsWithOthers, type TlpVendorPlanActual } from "@/lib/tlp-vendor-aggregation"
 
@@ -17,11 +17,11 @@ export async function GET(request: Request) {
     let hasMore = true
 
     while (hasMore) {
-      const { data, error } = await applyTlpYearDbFilter(
+      const { data, error } = await applyTlpDbFilters(
         supabase
           .from("site_data_tlp")
           .select(
-            "twr_owner, ic_000010_ff, ic_000010_af, program_name, wbs_status, wo_number_1, year_from_wo, site_category"
+            "twr_owner, ic_000010_ff, ic_000010_af, program_group, program_name, project_name, wbs_status, wo_number_1, year_from_wo, site_category"
           ),
         filters
       ).range(offset, offset + pageSize - 1)

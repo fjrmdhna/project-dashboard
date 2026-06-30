@@ -54,6 +54,7 @@ export interface SiteDataTLP {
   network_header?: string | null
   project_name?: string | null
   program_name?: string | null
+  program_group?: string | null
   site_id?: string | null
   site_name?: string | null
   wbs_status?: string | null
@@ -61,6 +62,7 @@ export interface SiteDataTLP {
   new_site_id?: string | null
   new_site_name?: string | null
   region?: string | null
+  ran_vendor?: string | null
   region_circle?: string | null
   site_category?: string | null
   twr_owner?: string | null
@@ -70,7 +72,10 @@ export interface SiteDataTLP {
   ic_000010_ff?: string | null
   ic_000010_af?: string | null
   rfi_accepted?: string | null
+  site_status?: string | null
+  return_replacement_status?: string | null
   progress_status?: string | null
+  issue_category?: string | null
   price_month_actual?: string | null
   site_id_tlp?: string | null
   bauf_date?: string | null // DATE in database, returned as ISO string

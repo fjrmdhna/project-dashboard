@@ -7,14 +7,22 @@ export function CafStatusAssigneeGrid({
   cards,
   isLoading = false,
   error,
+  layout = "wallboard",
 }: {
   cards: CafStatusAssigneeCardData[]
   isLoading?: boolean
   error?: string | null
+  /** `mobile` — single-column scroll stack instead of 4×2 wallboard grid */
+  layout?: "wallboard" | "mobile"
 }) {
+  const gridClass =
+    layout === "mobile"
+      ? "caf-status-assignee-grid caf-status-assignee-grid--mobile"
+      : "caf-status-assignee-grid"
+
   if (isLoading) {
     return (
-      <div className="caf-status-assignee-grid caf-status-assignee-grid--state">
+      <div className={`${gridClass} caf-status-assignee-grid--state`}>
         Loading status breakdown...
       </div>
     )
@@ -22,7 +30,7 @@ export function CafStatusAssigneeGrid({
 
   if (error) {
     return (
-      <div className="caf-status-assignee-grid caf-status-assignee-grid--state caf-status-assignee-grid--error">
+      <div className={`${gridClass} caf-status-assignee-grid--state caf-status-assignee-grid--error`}>
         {error}
       </div>
     )
@@ -30,14 +38,14 @@ export function CafStatusAssigneeGrid({
 
   if (cards.length === 0) {
     return (
-      <div className="caf-status-assignee-grid caf-status-assignee-grid--state">
+      <div className={`${gridClass} caf-status-assignee-grid--state`}>
         No CAF status data
       </div>
     )
   }
 
   return (
-    <div className="caf-status-assignee-grid">
+    <div className={gridClass}>
       {cards.map((card) => (
         <CafStatusAssigneeCard key={card.status} data={card} />
       ))}

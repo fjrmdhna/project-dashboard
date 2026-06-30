@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts"
 import { trimAccProgressPointsWithNoActivity, type AccProgressPoint } from "@/lib/tlp-acc-progress"
+import { TlpCardHeader } from "@/components/cards/tlp/TlpCardHeader"
 
 const SERIES = [
   { key: "planCcoAcc" as const, name: "Plan CCO ACC", color: "#3B82F6" },
@@ -29,22 +30,16 @@ interface TlpAccProgressCurveCardProps {
 
 export function TlpAccProgressCurveCard({ data, isLoading = false, error }: TlpAccProgressCurveCardProps) {
   const chartData = useMemo(() => trimAccProgressPointsWithNoActivity(data), [data])
+  const showLoading = isLoading && chartData.length === 0
 
   return (
     <div
       className="rounded-2xl bg-[#0F1630]/80 border border-white/5 flex h-full min-h-0 min-w-0 w-full flex-col"
       style={{ padding: "calc(var(--wb-card-padding) - 4px)" }}
     >
-      <div className="mb-2 flex shrink-0 items-center gap-2">
-        <div className="rounded-lg bg-cyan-500/20 p-1">
-          <TrendingUp className="h-3.5 w-3.5 text-cyan-300" />
-        </div>
-        <span className="rounded-full bg-cyan-500/20 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
-          ACC Progress Curve
-        </span>
-      </div>
+      <TlpCardHeader title="ACC Progress Curve" icon={TrendingUp} tone="cyan" className="mb-2" />
 
-      {isLoading ? (
+      {showLoading ? (
         <div className="flex flex-1 items-center justify-center text-[10px] text-white/60">Loading...</div>
       ) : error ? (
         <div className="flex flex-1 items-center justify-center text-[10px] text-red-300/90">{error}</div>

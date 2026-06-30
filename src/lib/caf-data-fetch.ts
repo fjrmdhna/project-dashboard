@@ -1,5 +1,6 @@
 import { getTlpSupabaseClient } from "@/lib/tlp-new-site-server"
 import {
+  buildRfsYearOrClause,
   parseCafFiltersFromSearchParams,
   type CafFilterableRow,
   type CafSiteFilters,
@@ -36,6 +37,11 @@ function applyCafDbFilters(query: CafQueryBuilder, filters: CafSiteFilters): Caf
   }
   if (Array.isArray(filters.avp) && filters.avp.length > 0) {
     q = q.in("avp", filters.avp)
+  }
+
+  if (Array.isArray(filters.rfs_year) && filters.rfs_year.length > 0) {
+    const yearOr = buildRfsYearOrClause(filters.rfs_year)
+    if (yearOr) q = q.or(yearOr)
   }
 
   if (filters.q?.trim()) {

@@ -1,13 +1,13 @@
 "use client"
 
-import { ReactNode, useEffect } from "react"
+import { type ReactNode, useEffect } from "react"
 import { hasCafWallboardSidePanels } from "@/config/caf-wallboard-panels"
 
 interface CafWallboardProps {
   header?: ReactNode
   filterBar?: ReactNode
   matrixStats?: ReactNode
-  milestoneAlignment?: ReactNode
+  afCompleteStatus?: ReactNode
   statusAssigneeGrid?: ReactNode
   statusVendorFollowup?: ReactNode
   dailyRunrate?: ReactNode
@@ -23,7 +23,7 @@ export function CafWallboard({
   header,
   filterBar,
   matrixStats,
-  milestoneAlignment,
+  afCompleteStatus,
   statusAssigneeGrid,
   statusVendorFollowup,
   dailyRunrate,
@@ -47,7 +47,7 @@ export function CafWallboard({
 
   return (
     <div id="wb-wrapper" className="viewport-wrapper">
-      <div id="wb-canvas" className="wallboard-scale caf-wallboard-scale">
+      <div id="wb-canvas" className="wallboard-scale">
         <div className="caf-wallboard-grid">
           <header className="caf-wallboard-header">
             <div className="caf-wallboard-header-main">{header}</div>
@@ -56,8 +56,10 @@ export function CafWallboard({
 
           <div className={bodyClass}>
             <Panel className="caf-wallboard-matrix">{matrixStats}</Panel>
-            <Panel className="caf-wallboard-milestone">{milestoneAlignment}</Panel>
             <Panel className="caf-wallboard-status-grid">{statusAssigneeGrid}</Panel>
+            {afCompleteStatus ? (
+              <Panel className="caf-wallboard-af-complete">{afCompleteStatus}</Panel>
+            ) : null}
             {statusVendorFollowup ? (
               <Panel className="caf-wallboard-followup">{statusVendorFollowup}</Panel>
             ) : null}

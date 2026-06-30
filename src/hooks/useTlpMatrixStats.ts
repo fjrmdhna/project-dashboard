@@ -36,7 +36,7 @@ export function useTlpMatrixStats(filters: TlpSiteFilters) {
   }, [qs])
 
   const { data, loading, error, refetch } = useApiCache<TlpMatrixStatsResponse>(
-    `tlp-new-site-matrix-stats:${qs || "all"}`,
+    `tlp-new-site-matrix-stats:v2:${qs || "all"}`,
     fetchFn,
     {
       staleTime: 3 * 60 * 1000,

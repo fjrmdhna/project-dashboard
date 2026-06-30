@@ -11,6 +11,10 @@ export interface FilterValue {
   q: string
   vendor_name: string[]
   program_report: string[]
+  /** TLP New Site: filters by site_data_tlp.project_name */
+  project_name?: string[]
+  /** TLP New Site: filters by site_data_tlp.program_group (empty → Other) */
+  program_group?: string[]
   imp_ttp: string[]
   nano_cluster: string[]
   status: string[] // New status filter array

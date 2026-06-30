@@ -1,6 +1,6 @@
 "use client"
 
-import { ReactNode, useRef, useEffect } from "react"
+import { ReactNode, useEffect } from "react"
 
 interface GridItemProps {
   children: ReactNode
@@ -10,10 +10,7 @@ interface GridItemProps {
 
 function GridItem({ children, className = "", style = {} }: GridItemProps) {
   return (
-    <div 
-      style={style}
-      className={`wallboard-grid-item ${className}`}
-    >
+    <div style={style} className={`wallboard-grid-item ${className}`}>
       {children}
     </div>
   )
@@ -31,6 +28,8 @@ interface Wallboard1080Props {
   nanoCluster?: ReactNode
   newFeature?: ReactNode
   leaderboard?: ReactNode
+  /** When set, replaces the top two right-column slots with one tall card (2fr + 1fr leaderboard). */
+  tallSideCard?: ReactNode
 }
 
 export function Wallboard1080({
@@ -44,9 +43,10 @@ export function Wallboard1080({
   top5Issue,
   nanoCluster,
   newFeature,
-  leaderboard
+  leaderboard,
+  tallSideCard,
 }: Wallboard1080Props) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const showTallLeaderboard = Boolean(leaderboard)
 
   // Prevent body scroll when wallboard is active
   useEffect(() => {
@@ -63,7 +63,7 @@ export function Wallboard1080({
 
   return (
     <div id="wb-wrapper" className="viewport-wrapper">
-      <div id="wb-canvas" ref={containerRef} className="wallboard-scale">
+      <div id="wb-canvas" className="wallboard-scale">
         <div className="wallboard-grid">
           {/* Header - Full width, minimal height */}
           <div className="wallboard-header">
@@ -116,23 +116,32 @@ export function Wallboard1080({
               </div>
             </div>
             
-            {/* Column 3: Nano Cluster, New Feature & Leaderboard (Right) */}
-            <div className="wallboard-side-column wallboard-side-column-3" style={{ gridTemplateRows: '1fr 1fr 1fr' }}>
-              {/* Nano Cluster - Top third */}
-              <GridItem className="wallboard-side-card">
-                {nanoCluster}
-              </GridItem>
-              
-              {/* New Feature - Middle third */}
-              <GridItem className="wallboard-side-card">
-                {newFeature}
-              </GridItem>
-              
-              {/* Leaderboard - Bottom third */}
-              <GridItem className="wallboard-side-card">
-                {leaderboard}
-              </GridItem>
-            </div>
+            {/* Column 3: Right side stack */}
+            {tallSideCard ? (
+              <div
+                className={`wallboard-side-column wallboard-side-column-3 ${
+                  showTallLeaderboard
+                    ? "wallboard-side-column-3-tall"
+                    : "wallboard-side-column-3-tall-full"
+                }`}
+              >
+                <GridItem
+                  className="wallboard-side-card wallboard-side-card-tall"
+                  style={{ height: "100%", minHeight: 0 }}
+                >
+                  {tallSideCard}
+                </GridItem>
+                {showTallLeaderboard ? (
+                  <GridItem className="wallboard-side-card">{leaderboard}</GridItem>
+                ) : null}
+              </div>
+            ) : (
+              <div className="wallboard-side-column wallboard-side-column-3" style={{ gridTemplateRows: "1fr 1fr 1fr" }}>
+                <GridItem className="wallboard-side-card">{nanoCluster}</GridItem>
+                <GridItem className="wallboard-side-card">{newFeature}</GridItem>
+                <GridItem className="wallboard-side-card">{leaderboard}</GridItem>
+              </div>
+            )}
           </div>
         </div>
       </div>

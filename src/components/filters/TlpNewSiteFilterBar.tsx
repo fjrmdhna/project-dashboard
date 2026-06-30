@@ -6,11 +6,11 @@ import { type FilterValue } from "@/components/filters/FilterBar"
 import { MultiSelect } from "@/components/ui/MultiSelect"
 
 type TlpNewSiteFilterOptions = {
+  programGroups: string[]
   vendors: string[]
-  programs: string[]
+  projects: string[]
   years: string[]
   siteCategories: string[]
-  wbsStatus: string[]
 }
 
 type TlpNewSiteFilterOptionsResponse = {
@@ -18,6 +18,10 @@ type TlpNewSiteFilterOptionsResponse = {
   data?: TlpNewSiteFilterOptions
   message?: string
 }
+
+const FILTER_GRID_STYLE = {
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr)) auto",
+} as const
 
 export function TlpNewSiteFilterBar({
   value,
@@ -29,11 +33,11 @@ export function TlpNewSiteFilterBar({
   onReset: () => void
 }) {
   const [options, setOptions] = useState<TlpNewSiteFilterOptions>({
+    programGroups: [],
     vendors: [],
-    programs: [],
+    projects: [],
     years: [],
     siteCategories: [],
-    wbsStatus: [],
   })
   const [loading, setLoading] = useState(true)
 
@@ -47,11 +51,11 @@ export function TlpNewSiteFilterBar({
         const payload: TlpNewSiteFilterOptionsResponse = await response.json()
         if (!cancelled && payload?.status === "success" && payload.data) {
           setOptions({
+            programGroups: payload.data.programGroups ?? [],
             vendors: payload.data.vendors ?? [],
-            programs: payload.data.programs ?? [],
+            projects: payload.data.projects ?? [],
             years: payload.data.years ?? [],
             siteCategories: payload.data.siteCategories ?? [],
-            wbsStatus: payload.data.wbsStatus ?? [],
           })
         }
       } catch {
@@ -69,8 +73,8 @@ export function TlpNewSiteFilterBar({
 
   const hasActiveFilters = useMemo(() => {
     return (
-      (value.program_report?.length ?? 0) > 0 ||
-      (value.wbs_status?.length ?? 0) > 0 ||
+      (value.program_group?.length ?? 0) > 0 ||
+      (value.project_name?.length ?? 0) > 0 ||
       (value.year?.length ?? 0) > 0 ||
       (value.site_category?.length ?? 0) > 0 ||
       (value.vendor_name?.length ?? 0) > 0
@@ -78,14 +82,14 @@ export function TlpNewSiteFilterBar({
   }, [value])
 
   return (
-    <div className="h-full min-h-[68px] flex flex-col gap-2">
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs flex-shrink-0 w-full items-center">
+    <div className="flex h-full min-h-0 w-full min-w-0 items-center">
+      <div className="grid w-full items-center gap-1.5 text-xs" style={FILTER_GRID_STYLE}>
         <div className="min-w-0">
           <MultiSelect
-            options={options.programs}
-            selected={value.program_report}
-            placeholder="Program"
-            onChange={(selected) => onChange({ ...value, program_report: selected })}
+            options={options.programGroups}
+            selected={value.program_group ?? []}
+            placeholder="Group"
+            onChange={(selected) => onChange({ ...value, program_group: selected })}
             disabled={loading}
             width="w-full"
           />
@@ -93,13 +97,12 @@ export function TlpNewSiteFilterBar({
 
         <div className="min-w-0">
           <MultiSelect
-            options={options.wbsStatus}
-            selected={value.wbs_status ?? []}
-            placeholder="WBS Status"
-            onChange={(selected) => onChange({ ...value, wbs_status: selected })}
+            options={options.projects}
+            selected={value.project_name ?? []}
+            placeholder="Project"
+            onChange={(selected) => onChange({ ...value, project_name: selected })}
             disabled={loading}
             width="w-full"
-            caseInsensitiveMatch
           />
         </div>
 
@@ -135,17 +138,15 @@ export function TlpNewSiteFilterBar({
             width="w-full"
           />
         </div>
-      </div>
 
-      <div className="flex justify-end">
         <button
           type="button"
           onClick={onReset}
           disabled={!hasActiveFilters || loading}
-          className={`inline-flex items-center justify-center rounded-md h-7 px-2 text-xs font-semibold transition-colors border ${
+          className={`inline-flex h-6 shrink-0 items-center justify-center gap-0.5 rounded-md border px-1.5 text-xs font-semibold transition-colors ${
             hasActiveFilters && !loading
               ? "border-white/20 bg-white/10 text-white hover:bg-white/20"
-              : "border-white/5 bg-transparent text-gray-400 cursor-not-allowed"
+              : "cursor-not-allowed border-white/5 bg-transparent text-gray-400"
           }`}
           aria-label="Reset filters"
         >
@@ -156,4 +157,3 @@ export function TlpNewSiteFilterBar({
     </div>
   )
 }
-
