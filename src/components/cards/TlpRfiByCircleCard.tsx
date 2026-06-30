@@ -190,10 +190,6 @@ export function TlpRfiByCircleCard({
                 verticalAlign="bottom"
                 height={24}
                 wrapperStyle={{ paddingTop: 2 }}
-                payload={[
-                  { value: "Plan", type: "square", color: PLAN_COLOR, id: "plan" },
-                  { value: "Actual", type: "square", color: ACTUAL_COLOR, id: "actual" },
-                ]}
                 formatter={(value) => <span className="text-[9px] text-white/80">{value}</span>}
               />
               <Bar

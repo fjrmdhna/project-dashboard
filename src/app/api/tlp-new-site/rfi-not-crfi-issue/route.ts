@@ -19,8 +19,9 @@ export async function GET(request: Request) {
       ran_vendor: string | null
       issue_category: string | null
       region_circle: string | null
-      vendor_code: string | null
+      program_group: string | null
       program_name: string | null
+      project_name: string | null
       wbs_status: string | null
       wo_number_1: string | null
       year_from_wo: number | null
