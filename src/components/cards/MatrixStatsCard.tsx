@@ -489,9 +489,10 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
           }
 
   const isCafMobile = variant === "caf" && layout === "mobile"
+  const isTlpMobile = variant === "tlp" && layout === "mobile"
 
   return (
-    <div className={`rounded-2xl bg-[#0F1630]/85 border border-white/5 w-full h-full matrix-compact text-white px-3 py-2 ${variant === "caf" ? "caf-matrix-card" : ""} ${isCafMobile ? "caf-matrix-card--mobile" : ""}`}>
+    <div className={`rounded-2xl bg-[#0F1630]/85 border border-white/5 w-full h-full matrix-compact text-white px-3 py-2 ${variant === "caf" ? "caf-matrix-card" : ""} ${isCafMobile ? "caf-matrix-card--mobile" : ""} ${isTlpMobile ? "tlp-matrix-card--mobile" : ""}`}>
       <div className="flex h-full flex-col gap-1.5">
         {variant === "tlp" ? (
           <TlpCardHeader title="Matrix Statistics" icon={BarChart3} tone="blue" className="mb-0" />
@@ -518,7 +519,9 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
               ? isCafMobile
                 ? "caf-matrix-metrics caf-matrix-metrics--mobile"
                 : "caf-matrix-metrics"
-              : "justify-center"
+              : isTlpMobile
+                ? "tlp-matrix-metrics--mobile"
+                : "justify-center"
           }`}
         >
           <div
@@ -527,12 +530,14 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
                 ? isCafMobile
                   ? "caf-matrix-total caf-matrix-total--mobile"
                   : "caf-matrix-total"
-                : "min-w-[72px]"
+                : isTlpMobile
+                  ? "tlp-matrix-total--mobile min-w-[88px]"
+                  : "min-w-[72px]"
             }`}
           >
             <span
               className={`font-bold leading-none text-white ${
-                isCafMobile ? "text-[1.75rem]" : variant === "caf" ? "text-2xl" : "text-lg"
+                isCafMobile ? "text-[1.75rem]" : isTlpMobile ? "text-2xl" : variant === "caf" ? "text-2xl" : "text-lg"
               }`}
             >
               {stats.totalSites.toLocaleString()}

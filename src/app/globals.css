@@ -2262,3 +2262,38 @@ html, body {
   padding-bottom: 10px;
   margin-bottom: 2px;
 }
+
+/* TLP New Site — mobile matrix stats */
+.tlp-matrix-card--mobile {
+  min-height: auto;
+  height: auto;
+}
+
+.tlp-matrix-metrics--mobile {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  align-items: start;
+}
+
+@media (min-width: 480px) {
+  .tlp-matrix-metrics--mobile {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.tlp-matrix-total--mobile {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 2px;
+}
+
+.caf-mobile-layout .rounded-2xl.bg-\[\#0F1630\] {
+  min-height: 0;
+  height: auto;
+}
