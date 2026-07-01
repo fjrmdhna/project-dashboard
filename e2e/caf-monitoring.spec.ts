@@ -14,8 +14,6 @@ test.describe("CAF Monitoring Dashboard", () => {
     await expect(page.getByRole("button", { name: /^Export$/i })).toBeVisible()
     await expect(page.getByText("CAF Pipeline")).toBeVisible()
     await expect(page.getByText(/AF Complete/i)).toBeVisible()
-    await expect(page.locator(".caf-status-assignee-grid").getByText("Approved – Awaiting Impl.")).toBeVisible()
-    await expect(page.locator(".caf-status-assignee-grid").getByText("Review – TLP")).toBeVisible()
     await expect(page.getByText("Daily CAF Runrate")).toBeVisible()
 
     const totalText = payload.data.length.toLocaleString("en-US")
@@ -35,7 +33,7 @@ test.describe("CAF Monitoring Dashboard", () => {
     await page.goto("/caf-monitoring")
     await page.waitForResponse((res) => res.url().includes("/api/caf/site-data"))
 
-    await expect(page.locator(".caf-status-assignee-grid")).toBeVisible()
+    await expect(page.locator(".caf-pipeline-card")).toBeVisible()
 
     const siteDataHits = cafRequests.filter((p) => p === "/api/caf/site-data")
     expect(siteDataHits.length).toBe(1)
@@ -80,19 +78,8 @@ test.describe("CAF Monitoring Dashboard", () => {
     await page.waitForResponse((res) => res.url().includes("/api/caf/site-data"))
 
     await expect(page.locator(".caf-wallboard-grid")).toBeVisible()
-
-    const statusGrid = page.locator(".caf-status-assignee-grid")
-    await expect(statusGrid).toBeVisible()
-
-    const statusCards = statusGrid.locator(".caf-status-assignee-card")
-    await expect(statusCards).toHaveCount(8)
-
-    for (let cardIndex = 0; cardIndex < 8; cardIndex++) {
-      const card = statusCards.nth(cardIndex)
-      const cardBox = await card.boundingBox()
-      expect(cardBox).not.toBeNull()
-      expect(cardBox!.height).toBeGreaterThan(48)
-    }
+    await expect(page.locator(".caf-pipeline-card")).toBeVisible()
+    await expect(page.locator(".caf-af-complete-card")).toBeVisible()
 
     const runrateCard = page.locator(".caf-wallboard-runrate--compact")
     const runrateBox = await runrateCard.boundingBox()
@@ -139,7 +126,7 @@ test.describe("CAF Monitoring Dashboard", () => {
     await expect(page.getByText("Filter Data")).toBeVisible()
     await expect(page.getByText("CAF Pipeline")).toBeVisible()
     await expect(page.getByText(/AF Complete/i)).toBeVisible()
-    await expect(page.locator(".caf-status-assignee-grid--mobile")).toBeVisible()
     await expect(page.getByText("Daily CAF Runrate")).toBeVisible()
+    await expect(page.locator(".caf-status-assignee-grid--mobile")).toHaveCount(0)
   })
 })

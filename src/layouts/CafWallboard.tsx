@@ -1,13 +1,18 @@
 "use client"
 
 import { type ReactNode, useEffect } from "react"
-import { hasCafWallboardSidePanels } from "@/config/caf-wallboard-panels"
+import {
+  CAF_WALLBOARD_PANELS,
+  hasCafWallboardAssigneeGrid,
+  hasCafWallboardSidePanels,
+} from "@/config/caf-wallboard-panels"
 
 interface CafWallboardProps {
   header?: ReactNode
   filterBar?: ReactNode
   matrixStats?: ReactNode
   afCompleteStatus?: ReactNode
+  needFollowUp?: ReactNode
   statusAssigneeGrid?: ReactNode
   statusVendorFollowup?: ReactNode
   dailyRunrate?: ReactNode
@@ -24,6 +29,7 @@ export function CafWallboard({
   filterBar,
   matrixStats,
   afCompleteStatus,
+  needFollowUp,
   statusAssigneeGrid,
   statusVendorFollowup,
   dailyRunrate,
@@ -31,6 +37,7 @@ export function CafWallboard({
   vendorTlp,
 }: CafWallboardProps) {
   const hasSidePanels = hasCafWallboardSidePanels()
+  const showAssigneeGrid = hasCafWallboardAssigneeGrid() && Boolean(statusAssigneeGrid)
 
   useEffect(() => {
     document.documentElement.classList.add("viewport-active")
@@ -43,7 +50,9 @@ export function CafWallboard({
 
   const bodyClass = hasSidePanels
     ? "caf-wallboard-body"
-    : "caf-wallboard-body caf-wallboard-body--assignee"
+    : showAssigneeGrid
+      ? "caf-wallboard-body caf-wallboard-body--assignee"
+      : "caf-wallboard-body caf-wallboard-body--main"
 
   return (
     <div id="wb-wrapper" className="viewport-wrapper">
@@ -56,9 +65,14 @@ export function CafWallboard({
 
           <div className={bodyClass}>
             <Panel className="caf-wallboard-matrix">{matrixStats}</Panel>
-            <Panel className="caf-wallboard-status-grid">{statusAssigneeGrid}</Panel>
+            {showAssigneeGrid ? (
+              <Panel className="caf-wallboard-status-grid">{statusAssigneeGrid}</Panel>
+            ) : null}
             {afCompleteStatus ? (
               <Panel className="caf-wallboard-af-complete">{afCompleteStatus}</Panel>
+            ) : null}
+            {CAF_WALLBOARD_PANELS.needFollowUp && needFollowUp ? (
+              <Panel className="caf-wallboard-need-followup">{needFollowUp}</Panel>
             ) : null}
             {statusVendorFollowup ? (
               <Panel className="caf-wallboard-followup">{statusVendorFollowup}</Panel>

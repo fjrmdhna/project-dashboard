@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useApiCache } from "@/hooks/useApiCache"
 import { filterCafRows, type CafSiteFilters, type CafFilterableRow } from "@/lib/caf-filters"
 import { aggregateCafDashboard } from "@/lib/caf-dashboard-aggregate"
+import { createEmptyCafNeedFollowupData } from "@/lib/caf-need-followup"
 import { createEmptyCafAfCompleteStatusData } from "@/lib/caf-milestone-fields"
+import { createEmptyCafStatusBreakdown } from "@/lib/caf-status-registry"
 
 interface CafSiteDataResponse {
   status: "success"
@@ -65,6 +67,7 @@ export function useCafDashboard(filters: CafSiteFilters) {
     rejected: matrix?.rejected ?? 0,
     notConfirmed: matrix?.notConfirmed ?? 0,
     resubmit: matrix?.resubmit ?? 0,
+    statusBreakdown: dashboard?.statusBreakdown ?? createEmptyCafStatusBreakdown(),
     statusItems: statusFunnel?.items ?? [],
     funnelTotal: statusFunnel?.totalCaf ?? 0,
     statusAssigneeCards: dashboard?.statusAssigneeCards ?? [],
@@ -75,6 +78,7 @@ export function useCafDashboard(filters: CafSiteFilters) {
       (matrix?.notConfirmed ?? 0) +
       (matrix?.other ?? 0),
     afCompleteStatus: dashboard?.afCompleteStatus ?? createEmptyCafAfCompleteStatusData(),
+    needFollowup: dashboard?.needFollowup ?? createEmptyCafNeedFollowupData(),
     runrateData: dashboard?.dailyRunrate ?? [],
     topVendorRequestor: dashboard?.topVendorRequestor ?? [],
     topVendorTlp: dashboard?.topVendorTlp ?? [],

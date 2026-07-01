@@ -24,6 +24,14 @@ import {
   resolveCafStatusAssigneeKind,
   type CafAssigneeKind,
 } from "@/lib/caf-status-assignee"
+import {
+  computeCafNeedFollowupData,
+  type CafNeedFollowupData,
+} from "@/lib/caf-need-followup"
+import {
+  computeCafStatusBreakdown,
+  type CafStatusBreakdown,
+} from "@/lib/caf-status-registry"
 
 const MAX_FUNNEL_STATUSES = 10
 const MAX_VENDOR_LEADERBOARD = 5
@@ -197,8 +205,13 @@ export type CafAgingData = {
 
 export type { CafMilestoneAlignmentData, CafAfCompleteStatusData } from "@/lib/caf-milestone-fields"
 
+export type { CafNeedFollowupData } from "@/lib/caf-need-followup"
+
+export type { CafStatusBreakdown } from "@/lib/caf-status-registry"
+
 export type CafDashboardData = {
   matrix: CafMatrixStats
+  statusBreakdown: CafStatusBreakdown
   statusFunnel: {
     items: CafStatusFunnelItem[]
     totalCaf: number
@@ -206,6 +219,7 @@ export type CafDashboardData = {
   aging: CafAgingData
   milestoneAlignment: CafMilestoneAlignmentData
   afCompleteStatus: CafAfCompleteStatusData
+  needFollowup: CafNeedFollowupData
   dailyRunrate: CafDailyRunrateItem[]
   topVendorRequestor: CafVendorLeaderboardItem[]
   topVendorTlp: CafVendorLeaderboardItem[]
@@ -350,6 +364,7 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
 
   return {
     matrix,
+    statusBreakdown: computeCafStatusBreakdown(rows),
     statusFunnel: {
       items: funnelItems,
       totalCaf: rows.length,
@@ -362,6 +377,7 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
     },
     milestoneAlignment: computeCafMilestoneAlignment(rows),
     afCompleteStatus: computeCafAfCompleteStatusBreakdown(rows),
+    needFollowup: computeCafNeedFollowupData(rows),
     dailyRunrate,
     topVendorRequestor: toTopVendorList(vendorRequestorCounts, MAX_VENDOR_LEADERBOARD),
     topVendorTlp: toTopVendorList(vendorTlpCounts, MAX_VENDOR_LEADERBOARD),

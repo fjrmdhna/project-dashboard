@@ -1,25 +1,40 @@
 /** Short display labels for long CAF status strings (UI only). */
+import {
+  CAF_STATUS_BY_ID,
+  resolveCafStatusId,
+} from "@/lib/caf-status-registry"
+
 const CAF_STATUS_SHORT_LABELS: Record<string, string> = {
-  "Approve Waiting Implementation": "Approved – Awaiting Impl.",
+  "Approve Waiting Implementation": "Awaiting Impl.",
   "CAF Rejected": "Rejected",
-  "Waiting for Review – TLP": "Review – TLP",
+  "Waiting for Review – TLP": "TLP Review",
   "CAF Not Confirmed": "Not Confirmed",
-  "Waiting Fully Implemented - TLP": "Awaiting Impl. – TLP",
-  "Waiting for Confirmation - Site Management": "Confirm – Site Mgmt",
-  "Waiting for Confirmation - Staff": "Confirm – Staff",
-  "Fully Implemented": "Fully Implemented",
-  "Waiting for Approval - TLP": "Approval – TLP",
-  "Waiting Fully Implemented - AVP": "Awaiting Impl. – AVP",
+  "Waiting Fully Implemented - TLP": "TLP Final",
+  "Waiting for Confirmation - Site Management": "Site Mgmt",
+  "Waiting for Confirmation - Staff": "Staff Confirm",
+  "Fully Implemented": "Implemented",
+  "Waiting for Approval - TLP": "TLP Approval",
+  "Waiting Fully Implemented - AVP": "AVP Pending",
+  "Waiting for CAF Scenario – PM Vendor": "PM Scenario",
+  "PM Vendor Approval": "PM Approval",
+  "CAF Basic": "CAF Basic",
 }
 
 export function getCafStatusShortLabel(status: string): string {
   const trimmed = status.trim()
   if (!trimmed) return "Unknown"
+
+  const fromId = CAF_STATUS_BY_ID.get(resolveCafStatusId(trimmed))
+  if (fromId) return fromId.shortLabel
+
   return CAF_STATUS_SHORT_LABELS[trimmed] ?? trimmed
 }
 
 /** Consistent status colors across CAF dashboard cards. */
 export function getCafStatusColor(status: string): string {
+  const fromId = CAF_STATUS_BY_ID.get(resolveCafStatusId(status))
+  if (fromId) return fromId.color
+
   const s = status.toLowerCase()
   if (s.includes("reject")) return "#EF4444"
   if (s.includes("fully implemented") || s.includes("implemented")) return "#22C55E"

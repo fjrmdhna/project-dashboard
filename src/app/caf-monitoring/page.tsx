@@ -5,8 +5,8 @@ import { Building2, ChevronDown, Download, SlidersHorizontal, Users } from "luci
 import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
 import { DashboardExportButton, downloadExportResponse } from "@/components/dashboard/DashboardExportButton"
 import { DashboardLoadingScreen } from "@/components/dashboard/DashboardLoadingScreen"
-import { MatrixStatsCard } from "@/components/cards/MatrixStatsCard"
-import { CafStatusAssigneeGrid } from "@/components/cards/CafStatusAssigneeGrid"
+import { CafNeedFollowupCard } from "@/components/cards/CafNeedFollowupCard"
+import { CafPipelineCard } from "@/components/cards/CafPipelineCard"
 import { CafStatusVendorFollowupCard } from "@/components/cards/CafStatusVendorFollowupCard"
 import { CafAfCompleteStatusCard } from "@/components/cards/CafAfCompleteStatusCard"
 import { CafVendorTopCard } from "@/components/cards/CafVendorTopCard"
@@ -46,21 +46,15 @@ export default function CafMonitoringPage() {
 
   const {
     hasData,
-    totalCaf,
-    inReview,
-    approved,
-    implemented,
-    rejected,
-    notConfirmed,
-    resubmit,
+    statusBreakdown,
     funnelTotal,
-    statusAssigneeCards,
     statusVendorPending,
     pendingFollowupTotal,
     runrateData,
     topVendorRequestor,
     topVendorTlp,
     afCompleteStatus,
+    needFollowup,
     loading,
     error,
   } = useCafDashboard(filters)
@@ -135,27 +129,17 @@ export default function CafMonitoringPage() {
       <DashboardLoadingScreen
         label="CAF Monitoring"
         message="Retrieving latest CAF pipeline data..."
-        placeholders={["CAF Pipeline", "Status Breakdown", "AF Complete", "Daily Runrate"]}
+        placeholders={["CAF Pipeline", "AF Complete", "Need Follow-up", "Daily Runrate"]}
       />
     )
   }
 
-  const cafStats = {
-    totalSites: totalCaf,
-    inReview,
-    approved,
-    implemented,
-    rejected,
-    notConfirmed,
-    resubmit,
-  }
-
-  const matrixStatsWallboard = (
-    <MatrixStatsCard variant="caf" rows={[]} stats={cafStats} layout="default" />
+  const pipelineWallboard = (
+    <CafPipelineCard breakdown={statusBreakdown} layout="wallboard" />
   )
 
-  const matrixStatsMobile = (
-    <MatrixStatsCard variant="caf" rows={[]} stats={cafStats} layout="mobile" />
+  const pipelineMobile = (
+    <CafPipelineCard breakdown={statusBreakdown} layout="mobile" />
   )
 
   const afCompleteStatusWallboard = (
@@ -176,23 +160,15 @@ export default function CafMonitoringPage() {
     />
   )
 
-  const statusAssigneeGridWallboard = (
-    <CafStatusAssigneeGrid
-      cards={statusAssigneeCards}
-      isLoading={false}
-      error={error}
-      layout="wallboard"
-    />
-  )
+  const needFollowupWallboard =
+    CAF_WALLBOARD_PANELS.needFollowUp ? (
+      <CafNeedFollowupCard data={needFollowup} isLoading={false} error={error} layout="wallboard" />
+    ) : null
 
-  const statusAssigneeGridMobile = (
-    <CafStatusAssigneeGrid
-      cards={statusAssigneeCards}
-      isLoading={false}
-      error={error}
-      layout="mobile"
-    />
-  )
+  const needFollowupMobile =
+    CAF_WALLBOARD_PANELS.needFollowUp ? (
+      <CafNeedFollowupCard data={needFollowup} isLoading={false} error={error} layout="mobile" />
+    ) : null
 
   const dailyRunrateCardWallboard = (
     <DailyRunrateCard
@@ -340,10 +316,10 @@ export default function CafMonitoringPage() {
         </section>
 
         <section className="caf-mobile-layout__cards px-4 pt-4 pb-8 space-y-4">
-          {renderMobileCard(matrixStatsMobile)}
+          {renderMobileCard(pipelineMobile)}
           {renderMobileCard(afCompleteStatusMobile)}
+          {needFollowupMobile ? renderMobileCard(needFollowupMobile, 260) : null}
           {renderMobileCard(dailyRunrateCardMobile, 220)}
-          {renderMobileCard(statusAssigneeGridMobile)}
           {statusVendorFollowupCard ? renderMobileCard(statusVendorFollowupCard, 260) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             {vendorRanCard ? renderMobileCard(vendorRanCard, 280) : null}
@@ -364,9 +340,9 @@ export default function CafMonitoringPage() {
           onReset={handleFilterReset}
         />
       }
-      matrixStats={matrixStatsWallboard}
+      matrixStats={pipelineWallboard}
       afCompleteStatus={afCompleteStatusWallboard}
-      statusAssigneeGrid={statusAssigneeGridWallboard}
+      needFollowUp={needFollowupWallboard ?? undefined}
       statusVendorFollowup={statusVendorFollowupCard ?? undefined}
       dailyRunrate={dailyRunrateCardWallboard}
       vendorRan={vendorRanCard ?? undefined}
