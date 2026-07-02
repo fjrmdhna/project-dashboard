@@ -1988,29 +1988,207 @@ html, body {
   color: rgba(253, 164, 175, 0.95);
 }
 
-.caf-need-followup-section-label {
-  margin: 0;
-  padding: 0 6px 2px;
+.caf-need-followup-year-badge {
+  border-radius: 999px;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  background: rgba(244, 63, 94, 0.14);
+  padding: 0 5px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(253, 164, 175, 0.95);
+}
+
+.caf-need-followup-groups {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  padding: 2px 4px 4px;
+}
+
+.caf-need-followup-groups--wallboard {
+  gap: 3px;
+}
+
+.caf-need-followup-groups--mobile {
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.caf-need-followup-status-group {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.caf-need-followup-status-group__header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 3px 6px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--status-accent, #f43f5e) 14%, transparent),
+    transparent 72%
+  );
+}
+
+.caf-need-followup-status-group__title-wrap {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.caf-need-followup-status-group__title {
+  min-width: 0;
   font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--status-accent, #f43f5e) 72%, white);
+}
+
+.caf-need-followup-status-group__meta {
+  font-size: 6px;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.caf-need-followup-status-group__total {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.caf-need-followup-status-group__body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 4px 3px;
+}
+
+.caf-need-followup-status-group__list-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 2px 2px 1px;
+  font-size: 6px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.42);
+  color: rgba(255, 255, 255, 0.38);
 }
 
-.caf-need-followup-list {
+.caf-need-followup-status-group__vendor-count {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.caf-need-followup-status-group__list-area {
   display: flex;
   min-height: 0;
-  flex: 1;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.caf-need-followup-status-group__list {
+  display: flex;
   flex-direction: column;
   gap: 2px;
+  margin: 0;
   overflow: hidden;
-  padding: 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.caf-need-followup-status-group__pager {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 2px 2px 3px;
+}
+
+.caf-need-followup-status-group__page-info {
+  min-width: 0;
+  font-size: 6px;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.caf-need-followup-status-group__pager-controls {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 3px;
+}
+
+.caf-need-followup-status-group__page-num {
+  min-width: 22px;
+  text-align: center;
+  font-size: 6px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.caf-need-followup-status-group__pager-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.caf-need-followup-status-group__pager-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.caf-need-followup-status-group__empty {
+  margin: 0;
+  padding: 8px 6px;
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+}
+
+.caf-need-followup-status-group__footer {
+  margin: 0;
+  padding: 2px 6px 3px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 6px;
+  line-height: 1.2;
 }
 
 .caf-need-followup-row {
   position: relative;
   display: grid;
+  min-height: 20px;
   grid-template-columns: 14px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 4px;

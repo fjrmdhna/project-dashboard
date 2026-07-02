@@ -318,7 +318,7 @@ export default function CafMonitoringPage() {
         <section className="caf-mobile-layout__cards px-4 pt-4 pb-8 space-y-4">
           {renderMobileCard(pipelineMobile)}
           {renderMobileCard(afCompleteStatusMobile)}
-          {needFollowupMobile ? renderMobileCard(needFollowupMobile, 260) : null}
+          {needFollowupMobile ? renderMobileCard(needFollowupMobile) : null}
           {renderMobileCard(dailyRunrateCardMobile, 220)}
           {statusVendorFollowupCard ? renderMobileCard(statusVendorFollowupCard, 260) : null}
           <div className="grid gap-4 sm:grid-cols-2">

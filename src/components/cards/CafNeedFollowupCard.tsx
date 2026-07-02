@@ -1,13 +1,18 @@
 "use client"
 
-import { useMemo } from "react"
-import { BellRing } from "lucide-react"
-import type { CafNeedFollowupData } from "@/lib/caf-need-followup"
-import { CAF_STATUS_DEFINITIONS } from "@/lib/caf-status-registry"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { BellRing, ChevronLeft, ChevronRight } from "lucide-react"
+import type {
+  CafNeedFollowupData,
+  CafNeedFollowupStatusGroup,
+  CafNeedFollowupVendorItem,
+} from "@/lib/caf-need-followup"
 
 const MILESTONE_TAGS = ["RFS", "Endorse", "PATP"] as const
-const AWAITING_IMPL_LABEL =
-  CAF_STATUS_DEFINITIONS.find((d) => d.id === 6)?.label ?? "Approve Waiting Implementation"
+
+const VENDOR_ROW_HEIGHT_PX = 20
+const VENDOR_ROW_GAP_PX = 2
+const PAGER_HEIGHT_PX = 18
 
 function VendorRow({
   name,
@@ -41,6 +46,177 @@ function VendorRow({
   )
 }
 
+function rowsThatFit(heightPx: number): number {
+  if (heightPx <= 0) return 1
+  return Math.max(1, Math.floor((heightPx + VENDOR_ROW_GAP_PX) / (VENDOR_ROW_HEIGHT_PX + VENDOR_ROW_GAP_PX)))
+}
+
+function computeRowsPerPage(totalHeight: number, itemCount: number): number {
+  if (totalHeight <= 0) return 1
+
+  const rowsIfNoPager = rowsThatFit(totalHeight)
+  if (itemCount <= rowsIfNoPager) return rowsIfNoPager
+
+  return rowsThatFit(Math.max(VENDOR_ROW_HEIGHT_PX, totalHeight - PAGER_HEIGHT_PX))
+}
+
+function usePaginatedVendorList(items: CafNeedFollowupVendorItem[]) {
+  const listAreaRef = useRef<HTMLDivElement>(null)
+  const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(4)
+
+  useEffect(() => {
+    setPage(0)
+  }, [items])
+
+  useEffect(() => {
+    const el = listAreaRef.current
+    if (!el) return
+
+    const update = () => {
+      setRowsPerPage(computeRowsPerPage(el.clientHeight, items.length))
+    }
+
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [items.length])
+
+  const totalPages = Math.max(1, Math.ceil(items.length / rowsPerPage))
+  const safePage = Math.min(page, totalPages - 1)
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage)
+  }, [page, safePage])
+
+  const pageItems = useMemo(
+    () => items.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage),
+    [items, safePage, rowsPerPage]
+  )
+
+  return {
+    listAreaRef,
+    page: safePage,
+    setPage,
+    totalPages,
+    pageItems,
+    rowsPerPage,
+  }
+}
+
+function StatusGroupPanel({ group }: { group: CafNeedFollowupStatusGroup }) {
+  const vendors = useMemo(
+    () => [...group.vendors].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+    [group.vendors]
+  )
+  const maxCount = useMemo(() => Math.max(...vendors.map((v) => v.count), 1), [vendors])
+  const stalePct = group.total > 0 ? Math.round((group.over30Days / group.total) * 100) : 0
+
+  const { listAreaRef, page, setPage, totalPages, pageItems, rowsPerPage } =
+    usePaginatedVendorList(vendors)
+
+  const rangeStart = vendors.length === 0 ? 0 : page * rowsPerPage + 1
+  const rangeEnd = Math.min((page + 1) * rowsPerPage, vendors.length)
+
+  if (group.total === 0 && group.statusTotal === 0) {
+    return null
+  }
+
+  return (
+    <section
+      className="caf-need-followup-status-group"
+      aria-label={group.label}
+      style={{ ["--status-accent" as string]: group.color }}
+    >
+      <header className="caf-need-followup-status-group__header">
+        <div className="caf-need-followup-status-group__title-wrap min-w-0">
+          <span className="caf-need-followup-status-group__title truncate" title={group.label}>
+            {group.shortLabel}
+          </span>
+          {group.statusTotal > 0 ? (
+            <span className="caf-need-followup-status-group__meta tabular-nums">
+              {group.shareOfStatusPct}% AF complete
+            </span>
+          ) : null}
+        </div>
+        <span className="caf-need-followup-status-group__total tabular-nums">
+          {group.total.toLocaleString()}
+        </span>
+      </header>
+
+      {vendors.length === 0 ? (
+        <p className="caf-need-followup-status-group__empty">No vendor data</p>
+      ) : (
+        <div className="caf-need-followup-status-group__body">
+          <p className="caf-need-followup-status-group__list-label">
+            TLP Vendor{" "}
+            <span className="caf-need-followup-status-group__vendor-count tabular-nums">
+              ({vendors.length})
+            </span>
+          </p>
+
+          <div ref={listAreaRef} className="caf-need-followup-status-group__list-area">
+            <ul className="caf-need-followup-status-group__list">
+              {pageItems.map((vendor, index) => (
+                <VendorRow
+                  key={vendor.name}
+                  name={vendor.name}
+                  count={vendor.count}
+                  rank={page * rowsPerPage + index + 1}
+                  maxCount={maxCount}
+                  total={group.total}
+                />
+              ))}
+            </ul>
+
+            {totalPages > 1 ? (
+              <div className="caf-need-followup-status-group__pager">
+                <span className="caf-need-followup-status-group__page-info tabular-nums">
+                  {rangeStart}–{rangeEnd} of {vendors.length}
+                </span>
+                <div className="caf-need-followup-status-group__pager-controls">
+                  <button
+                    type="button"
+                    className="caf-need-followup-status-group__pager-btn"
+                    onClick={() => setPage((current) => Math.max(0, current - 1))}
+                    disabled={page === 0}
+                    aria-label="Previous vendor page"
+                  >
+                    <ChevronLeft className="h-3 w-3" />
+                  </button>
+                  <span className="caf-need-followup-status-group__page-num tabular-nums">
+                    {page + 1}/{totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="caf-need-followup-status-group__pager-btn"
+                    onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
+                    disabled={page >= totalPages - 1}
+                    aria-label="Next vendor page"
+                  >
+                    <ChevronRight className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {group.over30Days > 0 ? (
+        <footer className="caf-need-followup-status-group__footer">
+          <span className="tabular-nums text-rose-300/90">{stalePct}%</span>
+          <span className="text-white/45">
+            {" "}
+            waiting &gt;30 days ({group.over30Days.toLocaleString()})
+          </span>
+        </footer>
+      ) : null}
+    </section>
+  )
+}
+
 export function CafNeedFollowupCard({
   data,
   isLoading = false,
@@ -52,13 +228,9 @@ export function CafNeedFollowupCard({
   error?: string | null
   layout?: "wallboard" | "mobile"
 }) {
-  const vendors = useMemo(() => data.vendors, [data.vendors])
-  const maxCount = useMemo(() => Math.max(...vendors.map((v) => v.count), 1), [vendors])
-
-  const stalePct =
-    data.total > 0 ? Math.round((data.over30Days / data.total) * 100) : 0
-
-  const isCompact = layout === "wallboard"
+  const isWallboard = layout === "wallboard"
+  const isCompact = isWallboard
+  const visibleGroups = data.groups.filter((group) => group.total > 0 || group.statusTotal > 0)
 
   return (
     <div className="caf-panel-card caf-panel-card-compact caf-need-followup-card flex h-full min-h-0 w-full flex-col overflow-hidden">
@@ -69,12 +241,13 @@ export function CafNeedFollowupCard({
               <BellRing className="h-3 w-3 text-rose-300" />
             </div>
             <span className="caf-subtitle text-rose-200">Need Follow-up</span>
+            <span className="caf-need-followup-year-badge tabular-nums">{data.splitYear}</span>
           </div>
           <p
             className={`truncate text-white/50 ${isCompact ? "text-[7px] leading-tight" : "text-[10px]"}`}
-            title={`${AWAITING_IMPL_LABEL} · AF milestones complete`}
+            title="2026 RFS AF · implementation statuses · AF milestones complete"
           >
-            {AWAITING_IMPL_LABEL} · AF complete
+            RFS {data.splitYear} · Await Impl · TLP Final · Done
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5">
@@ -84,9 +257,9 @@ export function CafNeedFollowupCard({
               {data.total.toLocaleString()}
             </span>
           </div>
-          {data.awaitingImplTotal > 0 ? (
+          {data.statusTotal > 0 ? (
             <span className="text-[7px] tabular-nums text-white/45">
-              {data.shareOfAwaitingPct}% of {data.awaitingImplTotal.toLocaleString()} awaiting impl.
+              {data.shareOfStatusPct}% of {data.statusTotal.toLocaleString()} in scope
             </span>
           ) : null}
         </div>
@@ -108,33 +281,18 @@ export function CafNeedFollowupCard({
         </div>
       ) : data.total === 0 ? (
         <div className="flex flex-1 items-center justify-center text-[10px] text-white/50">
-          No CAF items need follow-up
+          No CAF items need follow-up for {data.splitYear}
         </div>
       ) : (
-        <>
-          <p className="caf-need-followup-section-label">Top TLP Vendor backlog</p>
-          <ul className="caf-need-followup-list min-h-0 flex-1">
-            {vendors.map((vendor, index) => (
-              <VendorRow
-                key={vendor.name}
-                name={vendor.name}
-                count={vendor.count}
-                rank={index + 1}
-                maxCount={maxCount}
-                total={data.total}
-              />
-            ))}
-          </ul>
-          {data.over30Days > 0 ? (
-            <footer className="caf-need-followup-footer">
-              <span className="tabular-nums text-rose-300/90">{stalePct}%</span>
-              <span className="text-white/45">
-                {" "}
-                waiting &gt;30 days ({data.over30Days.toLocaleString()})
-              </span>
-            </footer>
-          ) : null}
-        </>
+        <div
+          className={`caf-need-followup-groups min-h-0 flex-1 ${
+            isWallboard ? "caf-need-followup-groups--wallboard" : "caf-need-followup-groups--mobile"
+          }`}
+        >
+          {visibleGroups.map((group) => (
+            <StatusGroupPanel key={group.statusId} group={group} />
+          ))}
+        </div>
       )}
     </div>
   )
