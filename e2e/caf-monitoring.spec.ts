@@ -13,7 +13,7 @@ test.describe("CAF Monitoring Dashboard", () => {
     await expect(page.getByRole("heading", { name: /CAF Monitoring Dashboard/i })).toBeVisible()
     await expect(page.getByRole("button", { name: /^Export$/i })).toBeVisible()
     await expect(page.getByText("CAF Pipeline")).toBeVisible()
-    await expect(page.getByText(/AF Complete/i)).toBeVisible()
+    await expect(page.getByText("PIC Follow-up")).toBeVisible()
     await expect(page.getByText("Daily CAF Runrate")).toBeVisible()
 
     const totalText = payload.data.length.toLocaleString("en-US")
@@ -79,7 +79,7 @@ test.describe("CAF Monitoring Dashboard", () => {
 
     await expect(page.locator(".caf-wallboard-grid")).toBeVisible()
     await expect(page.locator(".caf-pipeline-card")).toBeVisible()
-    await expect(page.locator(".caf-af-complete-card")).toBeVisible()
+    await expect(page.locator(".caf-pic-pending-card")).toBeVisible()
 
     const runrateCard = page.locator(".caf-wallboard-runrate--compact")
     const runrateBox = await runrateCard.boundingBox()
@@ -125,7 +125,7 @@ test.describe("CAF Monitoring Dashboard", () => {
     await expect(page.getByRole("heading", { name: /CAF Monitoring Dashboard/i })).toBeVisible()
     await expect(page.getByText("Filter Data")).toBeVisible()
     await expect(page.getByText("CAF Pipeline")).toBeVisible()
-    await expect(page.getByText(/AF Complete/i)).toBeVisible()
+    await expect(page.getByText("PIC Follow-up")).toBeVisible()
     await expect(page.getByText("Daily CAF Runrate")).toBeVisible()
     await expect(page.locator(".caf-status-assignee-grid--mobile")).toHaveCount(0)
   })

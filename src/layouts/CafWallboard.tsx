@@ -11,7 +11,7 @@ interface CafWallboardProps {
   header?: ReactNode
   filterBar?: ReactNode
   matrixStats?: ReactNode
-  afCompleteStatus?: ReactNode
+  picPending?: ReactNode
   needFollowUp?: ReactNode
   statusAssigneeGrid?: ReactNode
   statusVendorFollowup?: ReactNode
@@ -28,7 +28,7 @@ export function CafWallboard({
   header,
   filterBar,
   matrixStats,
-  afCompleteStatus,
+  picPending,
   needFollowUp,
   statusAssigneeGrid,
   statusVendorFollowup,
@@ -68,8 +68,8 @@ export function CafWallboard({
             {showAssigneeGrid ? (
               <Panel className="caf-wallboard-status-grid">{statusAssigneeGrid}</Panel>
             ) : null}
-            {afCompleteStatus ? (
-              <Panel className="caf-wallboard-af-complete">{afCompleteStatus}</Panel>
+            {CAF_WALLBOARD_PANELS.picPending && picPending ? (
+              <Panel className="caf-wallboard-pic-pending">{picPending}</Panel>
             ) : null}
             {CAF_WALLBOARD_PANELS.needFollowUp && needFollowUp ? (
               <Panel className="caf-wallboard-need-followup">{needFollowUp}</Panel>

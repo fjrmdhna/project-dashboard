@@ -8,7 +8,7 @@ import { DashboardLoadingScreen } from "@/components/dashboard/DashboardLoadingS
 import { CafNeedFollowupCard } from "@/components/cards/CafNeedFollowupCard"
 import { CafPipelineCard } from "@/components/cards/CafPipelineCard"
 import { CafStatusVendorFollowupCard } from "@/components/cards/CafStatusVendorFollowupCard"
-import { CafAfCompleteStatusCard } from "@/components/cards/CafAfCompleteStatusCard"
+import { CafPicPendingCard } from "@/components/cards/CafPicPendingCard"
 import { CafVendorTopCard } from "@/components/cards/CafVendorTopCard"
 import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
 import { CafFilterBar, getInitialCafFilters } from "@/components/filters/CafFilterBar"
@@ -53,7 +53,7 @@ export default function CafMonitoringPage() {
     runrateData,
     topVendorRequestor,
     topVendorTlp,
-    afCompleteStatus,
+    picPending,
     needFollowup,
     loading,
     error,
@@ -129,7 +129,7 @@ export default function CafMonitoringPage() {
       <DashboardLoadingScreen
         label="CAF Monitoring"
         message="Retrieving latest CAF pipeline data..."
-        placeholders={["CAF Pipeline", "AF Complete", "Need Follow-up", "Daily Runrate"]}
+        placeholders={["CAF Pipeline", "PIC Follow-up", "Need Follow-up", "Daily Runrate"]}
       />
     )
   }
@@ -142,23 +142,15 @@ export default function CafMonitoringPage() {
     <CafPipelineCard breakdown={statusBreakdown} layout="mobile" />
   )
 
-  const afCompleteStatusWallboard = (
-    <CafAfCompleteStatusCard
-      data={afCompleteStatus}
-      isLoading={false}
-      error={error}
-      layout="wallboard"
-    />
-  )
+  const picPendingWallboard =
+    CAF_WALLBOARD_PANELS.picPending ? (
+      <CafPicPendingCard data={picPending} isLoading={false} error={error} layout="wallboard" />
+    ) : null
 
-  const afCompleteStatusMobile = (
-    <CafAfCompleteStatusCard
-      data={afCompleteStatus}
-      isLoading={false}
-      error={error}
-      layout="mobile"
-    />
-  )
+  const picPendingMobile =
+    CAF_WALLBOARD_PANELS.picPending ? (
+      <CafPicPendingCard data={picPending} isLoading={false} error={error} layout="mobile" />
+    ) : null
 
   const needFollowupWallboard =
     CAF_WALLBOARD_PANELS.needFollowUp ? (
@@ -317,7 +309,7 @@ export default function CafMonitoringPage() {
 
         <section className="caf-mobile-layout__cards px-4 pt-4 pb-8 space-y-4">
           {renderMobileCard(pipelineMobile)}
-          {renderMobileCard(afCompleteStatusMobile)}
+          {picPendingMobile ? renderMobileCard(picPendingMobile, 420) : null}
           {needFollowupMobile ? renderMobileCard(needFollowupMobile) : null}
           {renderMobileCard(dailyRunrateCardMobile, 220)}
           {statusVendorFollowupCard ? renderMobileCard(statusVendorFollowupCard, 260) : null}
@@ -341,7 +333,7 @@ export default function CafMonitoringPage() {
         />
       }
       matrixStats={pipelineWallboard}
-      afCompleteStatus={afCompleteStatusWallboard}
+      picPending={picPendingWallboard ?? undefined}
       needFollowUp={needFollowupWallboard ?? undefined}
       statusVendorFollowup={statusVendorFollowupCard ?? undefined}
       dailyRunrate={dailyRunrateCardWallboard}

@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { BellRing, ChevronLeft, ChevronRight } from "lucide-react"
+import { useListPagination } from "@/hooks/useListPagination"
 import type {
   CafNeedFollowupData,
   CafNeedFollowupStatusGroup,
@@ -10,11 +11,10 @@ import type {
 
 const MILESTONE_TAGS = ["RFS", "Endorse", "PATP"] as const
 
-const VENDOR_ROW_HEIGHT_PX = 20
-const VENDOR_ROW_GAP_PX = 2
-const PAGER_HEIGHT_PX = 18
+const WALLBOARD_ROWS_PER_PAGE = 4
+const MOBILE_ROWS_PER_PAGE = 6
 
-function VendorRow({
+const VendorRow = memo(function VendorRow({
   name,
   count,
   rank,
@@ -44,68 +44,21 @@ function VendorRow({
       <span className="caf-need-followup-row__pct tabular-nums">{sharePct}%</span>
     </li>
   )
-}
+})
 
-function rowsThatFit(heightPx: number): number {
-  if (heightPx <= 0) return 1
-  return Math.max(1, Math.floor((heightPx + VENDOR_ROW_GAP_PX) / (VENDOR_ROW_HEIGHT_PX + VENDOR_ROW_GAP_PX)))
-}
-
-function computeRowsPerPage(totalHeight: number, itemCount: number): number {
-  if (totalHeight <= 0) return 1
-
-  const rowsIfNoPager = rowsThatFit(totalHeight)
-  if (itemCount <= rowsIfNoPager) return rowsIfNoPager
-
-  return rowsThatFit(Math.max(VENDOR_ROW_HEIGHT_PX, totalHeight - PAGER_HEIGHT_PX))
-}
-
-function usePaginatedVendorList(items: CafNeedFollowupVendorItem[]) {
-  const listAreaRef = useRef<HTMLDivElement>(null)
-  const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(4)
-
-  useEffect(() => {
-    setPage(0)
-  }, [items])
-
-  useEffect(() => {
-    const el = listAreaRef.current
-    if (!el) return
-
-    const update = () => {
-      setRowsPerPage(computeRowsPerPage(el.clientHeight, items.length))
-    }
-
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [items.length])
-
-  const totalPages = Math.max(1, Math.ceil(items.length / rowsPerPage))
-  const safePage = Math.min(page, totalPages - 1)
-
-  useEffect(() => {
-    if (page !== safePage) setPage(safePage)
-  }, [page, safePage])
-
-  const pageItems = useMemo(
-    () => items.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage),
-    [items, safePage, rowsPerPage]
-  )
-
-  return {
-    listAreaRef,
-    page: safePage,
-    setPage,
-    totalPages,
-    pageItems,
-    rowsPerPage,
-  }
-}
-
-function StatusGroupPanel({ group }: { group: CafNeedFollowupStatusGroup }) {
+const StatusGroupPanel = memo(function StatusGroupPanel({
+  group,
+  layout = "wallboard",
+  page,
+  onPageChange,
+}: {
+  group: CafNeedFollowupStatusGroup
+  layout?: "wallboard" | "mobile"
+  page: number
+  onPageChange: (statusId: number, page: number) => void
+}) {
+  const isWallboard = layout === "wallboard"
+  const rowsPerPage = isWallboard ? WALLBOARD_ROWS_PER_PAGE : MOBILE_ROWS_PER_PAGE
   const vendors = useMemo(
     () => [...group.vendors].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
     [group.vendors]
@@ -113,11 +66,24 @@ function StatusGroupPanel({ group }: { group: CafNeedFollowupStatusGroup }) {
   const maxCount = useMemo(() => Math.max(...vendors.map((v) => v.count), 1), [vendors])
   const stalePct = group.total > 0 ? Math.round((group.over30Days / group.total) * 100) : 0
 
-  const { listAreaRef, page, setPage, totalPages, pageItems, rowsPerPage } =
-    usePaginatedVendorList(vendors)
+  const {
+    page: activePage,
+    pageItems,
+    totalPages,
+    rowsPerPage: rowsPerPageActive,
+    goPrev,
+    goNext,
+    canPrev,
+    canNext,
+  } = useListPagination<CafNeedFollowupVendorItem>(
+    vendors,
+    rowsPerPage,
+    page,
+    (nextPage) => onPageChange(group.statusId, nextPage)
+  )
 
-  const rangeStart = vendors.length === 0 ? 0 : page * rowsPerPage + 1
-  const rangeEnd = Math.min((page + 1) * rowsPerPage, vendors.length)
+  const rangeStart = vendors.length === 0 ? 0 : activePage * rowsPerPageActive + 1
+  const rangeEnd = Math.min((activePage + 1) * rowsPerPageActive, vendors.length)
 
   if (group.total === 0 && group.statusTotal === 0) {
     return null
@@ -156,14 +122,14 @@ function StatusGroupPanel({ group }: { group: CafNeedFollowupStatusGroup }) {
             </span>
           </p>
 
-          <div ref={listAreaRef} className="caf-need-followup-status-group__list-area">
+          <div className="caf-need-followup-status-group__list-area">
             <ul className="caf-need-followup-status-group__list">
               {pageItems.map((vendor, index) => (
                 <VendorRow
                   key={vendor.name}
                   name={vendor.name}
                   count={vendor.count}
-                  rank={page * rowsPerPage + index + 1}
+                  rank={activePage * rowsPerPageActive + index + 1}
                   maxCount={maxCount}
                   total={group.total}
                 />
@@ -179,20 +145,20 @@ function StatusGroupPanel({ group }: { group: CafNeedFollowupStatusGroup }) {
                   <button
                     type="button"
                     className="caf-need-followup-status-group__pager-btn"
-                    onClick={() => setPage((current) => Math.max(0, current - 1))}
-                    disabled={page === 0}
+                    onClick={goPrev}
+                    disabled={!canPrev}
                     aria-label="Previous vendor page"
                   >
                     <ChevronLeft className="h-3 w-3" />
                   </button>
                   <span className="caf-need-followup-status-group__page-num tabular-nums">
-                    {page + 1}/{totalPages}
+                    {activePage + 1}/{totalPages}
                   </span>
                   <button
                     type="button"
                     className="caf-need-followup-status-group__pager-btn"
-                    onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
-                    disabled={page >= totalPages - 1}
+                    onClick={goNext}
+                    disabled={!canNext}
                     aria-label="Next vendor page"
                   >
                     <ChevronRight className="h-3 w-3" />
@@ -215,7 +181,7 @@ function StatusGroupPanel({ group }: { group: CafNeedFollowupStatusGroup }) {
       ) : null}
     </section>
   )
-}
+})
 
 export function CafNeedFollowupCard({
   data,
@@ -231,6 +197,29 @@ export function CafNeedFollowupCard({
   const isWallboard = layout === "wallboard"
   const isCompact = isWallboard
   const visibleGroups = data.groups.filter((group) => group.total > 0 || group.statusTotal > 0)
+
+  const [pagesByStatus, setPagesByStatus] = useState<Record<number, number>>({})
+  const vendorCountsRef = useRef<Record<number, number>>({})
+
+  useEffect(() => {
+    setPagesByStatus((current) => {
+      let next = current
+      for (const group of data.groups) {
+        const prevCount = vendorCountsRef.current[group.statusId]
+        const nextCount = group.vendors.length
+        if (prevCount !== undefined && prevCount !== nextCount) {
+          if (next === current) next = { ...current }
+          next[group.statusId] = 0
+        }
+        vendorCountsRef.current[group.statusId] = nextCount
+      }
+      return next
+    })
+  }, [data.groups])
+
+  const setPageForStatus = useCallback((statusId: number, page: number) => {
+    setPagesByStatus((current) => ({ ...current, [statusId]: page }))
+  }, [])
 
   return (
     <div className="caf-panel-card caf-panel-card-compact caf-need-followup-card flex h-full min-h-0 w-full flex-col overflow-hidden">
@@ -290,7 +279,13 @@ export function CafNeedFollowupCard({
           }`}
         >
           {visibleGroups.map((group) => (
-            <StatusGroupPanel key={group.statusId} group={group} />
+            <StatusGroupPanel
+              key={group.statusId}
+              group={group}
+              layout={layout}
+              page={pagesByStatus[group.statusId] ?? 0}
+              onPageChange={setPageForStatus}
+            />
           ))}
         </div>
       )}

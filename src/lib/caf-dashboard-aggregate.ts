@@ -25,11 +25,19 @@ import {
   type CafAssigneeKind,
 } from "@/lib/caf-status-assignee"
 import {
+  bumpCafPicPending,
+  CAF_PIC_PENDING_STATUS_IDS,
+  finalizeCafPicPendingData,
+  type CafPicPendingData,
+  type CafPicPendingStatusId,
+} from "@/lib/caf-pic-pending"
+import {
   computeCafNeedFollowupData,
   type CafNeedFollowupData,
 } from "@/lib/caf-need-followup"
 import {
   computeCafStatusBreakdown,
+  resolveCafStatusId,
   type CafStatusBreakdown,
 } from "@/lib/caf-status-registry"
 
@@ -207,6 +215,8 @@ export type { CafMilestoneAlignmentData, CafAfCompleteStatusData } from "@/lib/c
 
 export type { CafNeedFollowupData } from "@/lib/caf-need-followup"
 
+export type { CafPicPendingData } from "@/lib/caf-pic-pending"
+
 export type { CafStatusBreakdown } from "@/lib/caf-status-registry"
 
 export type CafDashboardData = {
@@ -219,6 +229,7 @@ export type CafDashboardData = {
   aging: CafAgingData
   milestoneAlignment: CafMilestoneAlignmentData
   afCompleteStatus: CafAfCompleteStatusData
+  picPending: CafPicPendingData
   needFollowup: CafNeedFollowupData
   dailyRunrate: CafDailyRunrateItem[]
   topVendorRequestor: CafVendorLeaderboardItem[]
@@ -312,6 +323,13 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
   const vendorTlpCounts = new Map<string, VendorAgg>()
   const statusVendorPendingMap = new Map<string, Map<string, number>>()
   const statusAssigneeMap = new Map<string, Map<string, number>>()
+  const picPendingMaps = new Map<
+    CafPicPendingStatusId,
+    Map<string, { count: number; over30Days: number }>
+  >()
+  for (const statusId of CAF_PIC_PENDING_STATUS_IDS) {
+    picPendingMaps.set(statusId, new Map())
+  }
 
   for (const row of rows) {
     const status = (row.caf_status ?? "Unknown").trim() || "Unknown"
@@ -327,6 +345,11 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
 
     if (isActionablePendingStatus(row)) {
       bumpStatusVendorCount(statusVendorPendingMap, status, row.vendor_tlp_name)
+    }
+
+    const statusId = resolveCafStatusId(status)
+    if ((CAF_PIC_PENDING_STATUS_IDS as readonly number[]).includes(statusId)) {
+      bumpCafPicPending(picPendingMaps.get(statusId as CafPicPendingStatusId)!, row, status)
     }
 
     const createdKey = toSqlDateKey(row.created_date, dateSet)
@@ -377,6 +400,7 @@ export function aggregateCafDashboard(rows: CafFilterableRow[]): CafDashboardDat
     },
     milestoneAlignment: computeCafMilestoneAlignment(rows),
     afCompleteStatus: computeCafAfCompleteStatusBreakdown(rows),
+    picPending: finalizeCafPicPendingData(picPendingMaps),
     needFollowup: computeCafNeedFollowupData(rows),
     dailyRunrate,
     topVendorRequestor: toTopVendorList(vendorRequestorCounts, MAX_VENDOR_LEADERBOARD),

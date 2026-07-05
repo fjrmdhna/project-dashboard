@@ -6,9 +6,14 @@
  * - statusAssigneeGrid — per-status PIC breakdown cards
  * - statusVendorFollowup — pending PIC follow-up card redesign
  * - vendorRan / vendorTlp — vendor leaderboard panels
+ *
+ * Active panels:
+ * - picPending — PIC backlog (Staff, TLP review/approval, AVP)
+ * - needFollowUp — AF-complete implementation follow-up by TLP vendor
  */
 export const CAF_WALLBOARD_PANELS = {
   statusAssigneeGrid: false,
+  picPending: true,
   needFollowUp: true,
   statusVendorFollowup: false,
   vendorRan: false,

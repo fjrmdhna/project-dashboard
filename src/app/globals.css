@@ -1039,7 +1039,7 @@ html, body {
   grid-row: 1;
 }
 
-.caf-wallboard-body--main .caf-wallboard-af-complete {
+.caf-wallboard-body--main .caf-wallboard-pic-pending {
   grid-column: 1;
   grid-row: 2;
   min-height: 0;
@@ -2249,6 +2249,403 @@ html, body {
   line-height: 1.2;
 }
 
+/* PIC follow-up — staff + TLP assignee backlog */
+.caf-pic-pending-groups {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  padding: 0 2px 2px;
+}
+
+.caf-pic-pending-groups--wallboard {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  overflow: hidden;
+}
+
+.caf-pic-pending-groups--mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.caf-pic-pending-group--wallboard .caf-pic-pending-group__header {
+  padding: 3px 5px 1px;
+}
+
+.caf-pic-pending-group--wallboard .caf-pic-pending-group__list-label {
+  padding: 0 5px 1px;
+  font-size: 6px;
+}
+
+.caf-pic-pending-group--wallboard .caf-pic-pending-row {
+  padding: 1px 4px 1px 3px;
+  font-size: 7px;
+}
+
+.caf-pic-pending-group--wallboard .caf-pic-pending-row__count {
+  font-size: 8px;
+}
+
+.caf-pic-pending-group__empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 4px;
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.caf-pic-pending-group {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.caf-pic-pending-group__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px 2px;
+  border-left: 3px solid var(--status-accent, #f59e0b);
+}
+
+.caf-pic-pending-group__title-wrap {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.caf-pic-pending-group__title {
+  font-size: 8px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--status-accent, #f59e0b) 78%, white);
+}
+
+.caf-pic-pending-group__meta {
+  font-size: 6px;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.caf-pic-pending-group__total {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.caf-pic-pending-group__list-label {
+  margin: 0;
+  padding: 0 6px 2px;
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.caf-pic-pending-group__assignee-count {
+  color: rgba(251, 191, 36, 0.75);
+}
+
+.caf-pic-pending-group__list-area {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 4px 3px;
+}
+
+.caf-pic-pending-group__list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.caf-pic-pending-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 5px 2px 4px;
+  font-size: 8px;
+}
+
+.caf-pic-pending-row__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--bar-width, 0%);
+  border-radius: 4px 0 0 4px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--status-accent, #f59e0b) 24%, transparent),
+    color-mix(in srgb, var(--status-accent, #f59e0b) 6%, transparent)
+  );
+  pointer-events: none;
+}
+
+.caf-pic-pending-row__rank {
+  position: relative;
+  z-index: 1;
+  font-size: 7px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--status-accent, #f59e0b) 80%, white);
+}
+
+.caf-pic-pending-row__name {
+  position: relative;
+  z-index: 1;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.caf-pic-pending-row__count {
+  position: relative;
+  z-index: 1;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.caf-pic-pending-row__pct {
+  position: relative;
+  z-index: 1;
+  min-width: 22px;
+  text-align: right;
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.caf-pic-pending-group__pager {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.caf-pic-pending-group__page-info {
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.caf-pic-pending-group__pager-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.caf-pic-pending-group__pager-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.caf-pic-pending-group__pager-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.caf-pic-pending-group__page-num {
+  min-width: 28px;
+  text-align: center;
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.caf-pic-pending-group__footer,
+.caf-pic-pending-card__footer {
+  margin: 0;
+  padding: 3px 6px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 7px;
+  line-height: 1.2;
+}
+
+.caf-staff-pending-section-label {
+  margin: 0;
+  padding: 0 6px 3px;
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.caf-staff-pending-section-count {
+  font-weight: 500;
+  color: rgba(251, 191, 36, 0.75);
+}
+
+.caf-staff-pending-list-area {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 4px 4px;
+}
+
+.caf-staff-pending-card--wallboard .caf-staff-pending-list-area {
+  flex: 0 1 auto;
+  align-content: flex-start;
+}
+
+.caf-staff-pending-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.caf-staff-pending-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 3px 5px 3px 4px;
+  font-size: 8px;
+}
+
+.caf-staff-pending-row__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--bar-width, 0%);
+  border-radius: 4px 0 0 4px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--status-accent, #f59e0b) 28%, transparent),
+    color-mix(in srgb, var(--status-accent, #f59e0b) 8%, transparent)
+  );
+  pointer-events: none;
+}
+
+.caf-staff-pending-row__rank {
+  position: relative;
+  z-index: 1;
+  font-size: 7px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--status-accent, #f59e0b) 80%, white);
+}
+
+.caf-staff-pending-row__name {
+  position: relative;
+  z-index: 1;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.caf-staff-pending-row__count {
+  position: relative;
+  z-index: 1;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.caf-staff-pending-row__pct {
+  position: relative;
+  z-index: 1;
+  min-width: 22px;
+  text-align: right;
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.caf-staff-pending-pager {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.caf-staff-pending-pager__info {
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.caf-staff-pending-pager__controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.caf-staff-pending-pager__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.caf-staff-pending-pager__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.caf-staff-pending-pager__num {
+  min-width: 28px;
+  text-align: center;
+  font-size: 7px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.caf-staff-pending-footer {
+  margin: 0;
+  padding: 3px 6px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 7px;
+  line-height: 1.2;
+}
+
 .caf-panel-header {
   display: flex;
   flex-shrink: 0;
@@ -2519,7 +2916,7 @@ html, body {
     grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr) minmax(200px, 0.45fr);
   }
 
-  .caf-wallboard-body--main .caf-wallboard-af-complete,
+  .caf-wallboard-body--main .caf-wallboard-pic-pending,
   .caf-wallboard-body--main .caf-wallboard-need-followup,
   .caf-wallboard-body--main .caf-wallboard-runrate--compact {
     grid-column: 1 / -1;

@@ -11,6 +11,9 @@ export function resolveCafStatusAssigneeKind(status: string): CafAssigneeKind {
   if (normalized.includes("avp")) {
     return "avp"
   }
+  if (normalized.includes("approval") && normalized.includes("tlp")) {
+    return "tlp_vendor"
+  }
   if (normalized.includes("site management") || normalized.includes("site mgmt")) {
     return "tlp_vendor"
   }
