@@ -1,4 +1,4 @@
-import { extractRfsYear, type CafFilterableRow } from "@/lib/caf-filters"
+import { type CafFilterableRow } from "@/lib/caf-filters"
 import { isCafAfMilestoneComplete } from "@/lib/caf-milestone-fields"
 import { parseStatusDurationDays } from "@/lib/caf-status-duration"
 import {
@@ -25,9 +25,9 @@ export type CafNeedFollowupStatusGroup = {
   label: string
   shortLabel: string
   color: string
-  /** Rows in this status for the target RFS year with all AF milestones filled. */
+  /** Rows in this status with all AF milestones filled. */
   total: number
-  /** All rows in this status for the target RFS year (any AF state). */
+  /** All rows in this status (any AF state). */
   statusTotal: number
   shareOfStatusPct: number
   over30Days: number
@@ -35,8 +35,6 @@ export type CafNeedFollowupStatusGroup = {
 }
 
 export type CafNeedFollowupData = {
-  /** Target RFS AF calendar year (default: current year). */
-  splitYear: number
   total: number
   statusTotal: number
   shareOfStatusPct: number
@@ -67,15 +65,6 @@ function emptyStatusGroup(definition: CafStatusDefinition): CafNeedFollowupStatu
     over30Days: 0,
     vendors: [],
   }
-}
-
-function isTargetRfsYear(
-  rfsAf: string | null | undefined,
-  splitYear: number
-): boolean {
-  const rfsYear = extractRfsYear(rfsAf)
-  if (!rfsYear) return false
-  return Number.parseInt(rfsYear, 10) === splitYear
 }
 
 function toVendorList(map: Map<string, number>): CafNeedFollowupVendorItem[] {
@@ -111,9 +100,7 @@ export function isCafNeedFollowupRow(row: CafFilterableRow): boolean {
   return isNeedFollowupStatusId(statusId) && isCafAfMilestoneComplete(row)
 }
 
-export function createEmptyCafNeedFollowupData(
-  splitYear = new Date().getFullYear()
-): CafNeedFollowupData {
+export function createEmptyCafNeedFollowupData(): CafNeedFollowupData {
   const groups = CAF_NEED_FOLLOWUP_STATUS_IDS.map((id) => {
     const definition = CAF_STATUS_BY_ID.get(id)
     if (!definition) {
@@ -130,7 +117,6 @@ export function createEmptyCafNeedFollowupData(
   })
 
   return {
-    splitYear,
     total: 0,
     statusTotal: 0,
     shareOfStatusPct: 0,
@@ -159,10 +145,7 @@ function finalizeStatusGroup(
   }
 }
 
-export function computeCafNeedFollowupData(
-  rows: CafFilterableRow[],
-  splitYear = new Date().getFullYear()
-): CafNeedFollowupData {
+export function computeCafNeedFollowupData(rows: CafFilterableRow[]): CafNeedFollowupData {
   const accByStatus = new Map<CafNeedFollowupStatusId, StatusAccumulator>()
   for (const statusId of CAF_NEED_FOLLOWUP_STATUS_IDS) {
     accByStatus.set(statusId, createEmptyStatusAccumulator())
@@ -171,7 +154,6 @@ export function computeCafNeedFollowupData(
   for (const row of rows) {
     const statusId = resolveCafStatusId(row.caf_status)
     if (!isNeedFollowupStatusId(statusId)) continue
-    if (!isTargetRfsYear(row.rfs_af, splitYear)) continue
 
     bumpStatusFollowup(
       accByStatus.get(statusId)!,
@@ -191,7 +173,6 @@ export function computeCafNeedFollowupData(
   const shareOfStatusPct = statusTotal > 0 ? Math.round((total / statusTotal) * 100) : 0
 
   return {
-    splitYear,
     total,
     statusTotal,
     shareOfStatusPct,

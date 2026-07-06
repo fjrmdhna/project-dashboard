@@ -27,7 +27,7 @@ function countActiveCafFilterGroups(filters: CafSiteFilters): number {
   if ((filters.vendor_requestor_name?.length ?? 0) > 0) count += 1
   if ((filters.caf_type?.length ?? 0) > 0) count += 1
   if ((filters.avp?.length ?? 0) > 0) count += 1
-  if ((filters.rfs_year?.length ?? 0) > 0) count += 1
+  if ((filters.year?.length ?? 0) > 0) count += 1
   return count
 }
 

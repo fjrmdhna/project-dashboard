@@ -10,14 +10,14 @@ type CafFilterOptions = {
   cafStatus: string[]
   cafType: string[]
   avp: string[]
-  rfsYear: string[]
+  year: string[]
 }
 
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url)
     const forceRefresh = url.searchParams.get("refresh") === "true"
-    const cacheKey = "caf-monitoring:filter-options:v2"
+    const cacheKey = "caf-monitoring:filter-options:v4"
 
     const options = await getCacheOrFetch<CafFilterOptions>(
       cacheKey + (forceRefresh ? ":refresh" : ""),
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
         const cafStatus = new Set<string>()
         const cafType = new Set<string>()
         const avp = new Set<string>()
-        const rfsYear = new Set<string>()
+        const year = new Set<string>()
 
         while (hasMore) {
           const { data, error } = await supabase
@@ -54,8 +54,8 @@ export async function GET(request: Request) {
             if (hasNonEmptyValue(row.caf_status)) cafStatus.add(String(row.caf_status).trim())
             if (hasNonEmptyValue(row.caf_type)) cafType.add(String(row.caf_type).trim())
             if (hasNonEmptyValue(row.avp)) avp.add(String(row.avp).trim())
-            const year = extractRfsYear(row.rfs_af as string | null | undefined)
-            if (year) rfsYear.add(year)
+            const rfsYear = extractRfsYear(row.rfs_af as string | null | undefined)
+            if (rfsYear) year.add(rfsYear)
           }
 
           hasMore = Boolean(data && data.length === pageSize)
@@ -74,7 +74,7 @@ export async function GET(request: Request) {
           cafStatus: sort(cafStatus),
           cafType: sort(cafType),
           avp: sort(avp),
-          rfsYear: sortDesc(rfsYear),
+          year: sortDesc(year),
         }
       },
       300

@@ -5,9 +5,13 @@ import { ChevronLeft, ChevronRight, UserSearch } from "lucide-react"
 import { useListPagination } from "@/hooks/useListPagination"
 import type { CafPicPendingData, CafPicPendingGroup, CafPicPendingItem } from "@/lib/caf-pic-pending"
 
-/** Fixed rows per page — avoids ResizeObserver churn in dense 2×2 wallboard cells. */
 const WALLBOARD_ROWS_PER_PAGE = 4
 const MOBILE_ROWS_PER_PAGE = 6
+
+function wallboardRowsPerPage(itemCount: number): number {
+  if (itemCount <= 0) return 1
+  return Math.min(WALLBOARD_ROWS_PER_PAGE, itemCount)
+}
 
 const AssigneeRow = memo(function AssigneeRow({
   name,
@@ -44,22 +48,32 @@ const AssigneeRow = memo(function AssigneeRow({
 const PicPendingGroupPanel = memo(function PicPendingGroupPanel({
   group,
   layout = "wallboard",
-  page,
-  onPageChange,
 }: {
   group: CafPicPendingGroup
   layout?: "wallboard" | "mobile"
-  page: number
-  onPageChange: (statusId: number, page: number) => void
 }) {
   const isWallboard = layout === "wallboard"
   const assignees = group.assignees
-  const rowsPerPage = isWallboard ? WALLBOARD_ROWS_PER_PAGE : MOBILE_ROWS_PER_PAGE
+  const rowsPerPage = isWallboard ? wallboardRowsPerPage(assignees.length) : MOBILE_ROWS_PER_PAGE
   const maxCount = useMemo(
     () => Math.max(...assignees.map((a) => a.count), 1),
     [assignees]
   )
   const stalePct = group.total > 0 ? Math.round((group.over30Days / group.total) * 100) : 0
+
+  const [page, setPage] = useState(0)
+  const assigneeCountRef = useRef(assignees.length)
+
+  useEffect(() => {
+    if (assigneeCountRef.current !== assignees.length) {
+      assigneeCountRef.current = assignees.length
+      setPage(0)
+    }
+  }, [assignees.length])
+
+  const handlePageChange = useCallback((nextPage: number) => {
+    setPage(nextPage)
+  }, [])
 
   const {
     page: activePage,
@@ -74,7 +88,7 @@ const PicPendingGroupPanel = memo(function PicPendingGroupPanel({
     assignees,
     rowsPerPage,
     page,
-    (nextPage) => onPageChange(group.statusId, nextPage)
+    handlePageChange
   )
 
   const rangeStart = assignees.length === 0 ? 0 : activePage * rowsPerPageActive + 1
@@ -86,7 +100,9 @@ const PicPendingGroupPanel = memo(function PicPendingGroupPanel({
 
   return (
     <section
-      className={`caf-pic-pending-group ${isWallboard ? "caf-pic-pending-group--wallboard" : ""}`}
+      className={`caf-pic-pending-group ${isWallboard ? "caf-pic-pending-group--wallboard" : ""}${
+        isWallboard && totalPages > 1 ? " caf-pic-pending-group--paginated" : ""
+      }`}
       aria-label={group.statusLabel}
       style={{ ["--status-accent" as string]: group.color }}
     >
@@ -178,7 +194,7 @@ const PicPendingGroupPanel = memo(function PicPendingGroupPanel({
   )
 })
 
-export function CafPicPendingCard({
+export const CafPicPendingCard = memo(function CafPicPendingCard({
   data,
   isLoading = false,
   error,
@@ -195,29 +211,6 @@ export function CafPicPendingCard({
   const mobileGroups = data.groups.filter((group) => group.total > 0)
   const stalePct = data.total > 0 ? Math.round((data.over30Days / data.total) * 100) : 0
   const groupsToRender = isWallboard ? wallboardGroups : mobileGroups
-
-  const [pagesByStatus, setPagesByStatus] = useState<Record<number, number>>({})
-  const assigneeCountsRef = useRef<Record<number, number>>({})
-
-  useEffect(() => {
-    setPagesByStatus((current) => {
-      let next = current
-      for (const group of data.groups) {
-        const prevCount = assigneeCountsRef.current[group.statusId]
-        const nextCount = group.assignees.length
-        if (prevCount !== undefined && prevCount !== nextCount) {
-          if (next === current) next = { ...current }
-          next[group.statusId] = 0
-        }
-        assigneeCountsRef.current[group.statusId] = nextCount
-      }
-      return next
-    })
-  }, [data.groups])
-
-  const setPageForStatus = useCallback((statusId: number, page: number) => {
-    setPagesByStatus((current) => ({ ...current, [statusId]: page }))
-  }, [])
 
   return (
     <div
@@ -273,13 +266,7 @@ export function CafPicPendingCard({
             }`}
           >
             {groupsToRender.map((group) => (
-              <PicPendingGroupPanel
-                key={group.statusId}
-                group={group}
-                layout={layout}
-                page={pagesByStatus[group.statusId] ?? 0}
-                onPageChange={setPageForStatus}
-              />
+              <PicPendingGroupPanel key={group.statusId} group={group} layout={layout} />
             ))}
           </div>
 
@@ -296,4 +283,4 @@ export function CafPicPendingCard({
       )}
     </div>
   )
-}
+})

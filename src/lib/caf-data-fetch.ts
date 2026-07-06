@@ -39,8 +39,8 @@ function applyCafDbFilters(query: CafQueryBuilder, filters: CafSiteFilters): Caf
     q = q.in("avp", filters.avp)
   }
 
-  if (Array.isArray(filters.rfs_year) && filters.rfs_year.length > 0) {
-    const yearOr = buildRfsYearOrClause(filters.rfs_year)
+  if (Array.isArray(filters.year) && filters.year.length > 0) {
+    const yearOr = buildRfsYearOrClause(filters.year)
     if (yearOr) q = q.or(yearOr)
   }
 

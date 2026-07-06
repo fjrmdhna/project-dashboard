@@ -38,4 +38,21 @@ describe("caf-filters", () => {
     expect(rowMatchesCafFilters(row, { project_name: ["hermes h1 2026"] })).toBe(true)
     expect(rowMatchesCafFilters(row, { project_name: ["Other"] })).toBe(false)
   })
+
+  it("filters rows by rfs_af year", () => {
+    const row2025 = { rfs_af: "2025-06-15" }
+    const row2026 = { rfs_af: "2026-01-07" }
+
+    expect(rowMatchesCafFilters(row2025, { year: ["2025"] })).toBe(true)
+    expect(rowMatchesCafFilters(row2026, { year: ["2025"] })).toBe(false)
+    expect(rowMatchesCafFilters(row2026, { year: ["2026"] })).toBe(true)
+    expect(rowMatchesCafFilters({ rfs_af: null }, { year: ["2026"] })).toBe(false)
+  })
+
+  it("round-trips year filter through query string", () => {
+    const original = { year: ["2025", "2026"] }
+    const qs = cafFiltersToQueryString(original)
+    const parsed = parseCafFiltersFromSearchParams(new URLSearchParams(qs))
+    expect(parsed.year).toEqual(original.year)
+  })
 })

@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { BellRing, ChevronLeft, ChevronRight } from "lucide-react"
 import { useListPagination } from "@/hooks/useListPagination"
+import { useWallboardRowsPerPage } from "@/hooks/useWallboardRowsPerPage"
 import type {
   CafNeedFollowupData,
   CafNeedFollowupStatusGroup,
@@ -11,8 +12,17 @@ import type {
 
 const MILESTONE_TAGS = ["RFS", "Endorse", "PATP"] as const
 
-const WALLBOARD_ROWS_PER_PAGE = 4
 const MOBILE_ROWS_PER_PAGE = 6
+
+function resolveRowsPerPage(
+  isWallboard: boolean,
+  itemCount: number,
+  measuredWallboardRows: number
+): number {
+  if (itemCount <= 0) return 1
+  if (!isWallboard) return MOBILE_ROWS_PER_PAGE
+  return Math.min(measuredWallboardRows, itemCount)
+}
 
 const VendorRow = memo(function VendorRow({
   name,
@@ -49,22 +59,42 @@ const VendorRow = memo(function VendorRow({
 const StatusGroupPanel = memo(function StatusGroupPanel({
   group,
   layout = "wallboard",
-  page,
-  onPageChange,
+  wallboardRowsPerPage = 2,
 }: {
   group: CafNeedFollowupStatusGroup
   layout?: "wallboard" | "mobile"
-  page: number
-  onPageChange: (statusId: number, page: number) => void
+  wallboardRowsPerPage?: number
 }) {
   const isWallboard = layout === "wallboard"
-  const rowsPerPage = isWallboard ? WALLBOARD_ROWS_PER_PAGE : MOBILE_ROWS_PER_PAGE
   const vendors = useMemo(
     () => [...group.vendors].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
     [group.vendors]
   )
+  const rowsPerPage = resolveRowsPerPage(isWallboard, vendors.length, wallboardRowsPerPage)
   const maxCount = useMemo(() => Math.max(...vendors.map((v) => v.count), 1), [vendors])
   const stalePct = group.total > 0 ? Math.round((group.over30Days / group.total) * 100) : 0
+
+  const [page, setPage] = useState(0)
+  const vendorCountRef = useRef(vendors.length)
+  const rowsPerPageRef = useRef(rowsPerPage)
+
+  useEffect(() => {
+    if (vendorCountRef.current !== vendors.length) {
+      vendorCountRef.current = vendors.length
+      setPage(0)
+    }
+  }, [vendors.length])
+
+  useEffect(() => {
+    if (rowsPerPageRef.current !== rowsPerPage) {
+      rowsPerPageRef.current = rowsPerPage
+      setPage(0)
+    }
+  }, [rowsPerPage])
+
+  const handlePageChange = useCallback((nextPage: number) => {
+    setPage(nextPage)
+  }, [])
 
   const {
     page: activePage,
@@ -79,7 +109,7 @@ const StatusGroupPanel = memo(function StatusGroupPanel({
     vendors,
     rowsPerPage,
     page,
-    (nextPage) => onPageChange(group.statusId, nextPage)
+    handlePageChange
   )
 
   const rangeStart = vendors.length === 0 ? 0 : activePage * rowsPerPageActive + 1
@@ -91,7 +121,9 @@ const StatusGroupPanel = memo(function StatusGroupPanel({
 
   return (
     <section
-      className="caf-need-followup-status-group"
+      className={`caf-need-followup-status-group${isWallboard ? " caf-need-followup-status-group--wallboard" : ""}${
+        isWallboard && totalPages > 1 ? " caf-need-followup-status-group--paginated" : ""
+      }`}
       aria-label={group.label}
       style={{ ["--status-accent" as string]: group.color }}
     >
@@ -100,7 +132,7 @@ const StatusGroupPanel = memo(function StatusGroupPanel({
           <span className="caf-need-followup-status-group__title truncate" title={group.label}>
             {group.shortLabel}
           </span>
-          {group.statusTotal > 0 ? (
+          {group.statusTotal > 0 && !isWallboard ? (
             <span className="caf-need-followup-status-group__meta tabular-nums">
               {group.shareOfStatusPct}% AF complete
             </span>
@@ -170,7 +202,7 @@ const StatusGroupPanel = memo(function StatusGroupPanel({
         </div>
       )}
 
-      {group.over30Days > 0 ? (
+      {!isWallboard && group.over30Days > 0 ? (
         <footer className="caf-need-followup-status-group__footer">
           <span className="tabular-nums text-rose-300/90">{stalePct}%</span>
           <span className="text-white/45">
@@ -183,7 +215,7 @@ const StatusGroupPanel = memo(function StatusGroupPanel({
   )
 })
 
-export function CafNeedFollowupCard({
+export const CafNeedFollowupCard = memo(function CafNeedFollowupCard({
   data,
   isLoading = false,
   error,
@@ -195,49 +227,48 @@ export function CafNeedFollowupCard({
   layout?: "wallboard" | "mobile"
 }) {
   const isWallboard = layout === "wallboard"
-  const isCompact = isWallboard
   const visibleGroups = data.groups.filter((group) => group.total > 0 || group.statusTotal > 0)
-
-  const [pagesByStatus, setPagesByStatus] = useState<Record<number, number>>({})
-  const vendorCountsRef = useRef<Record<number, number>>({})
-
-  useEffect(() => {
-    setPagesByStatus((current) => {
-      let next = current
-      for (const group of data.groups) {
-        const prevCount = vendorCountsRef.current[group.statusId]
-        const nextCount = group.vendors.length
-        if (prevCount !== undefined && prevCount !== nextCount) {
-          if (next === current) next = { ...current }
-          next[group.statusId] = 0
-        }
-        vendorCountsRef.current[group.statusId] = nextCount
-      }
-      return next
-    })
-  }, [data.groups])
-
-  const setPageForStatus = useCallback((statusId: number, page: number) => {
-    setPagesByStatus((current) => ({ ...current, [statusId]: page }))
-  }, [])
+  const groupsRef = useRef<HTMLDivElement>(null)
+  const measuredWallboardRows = useWallboardRowsPerPage(
+    groupsRef,
+    visibleGroups.length,
+    isWallboard && !isLoading && !error && data.total > 0
+  )
 
   return (
-    <div className="caf-panel-card caf-panel-card-compact caf-need-followup-card flex h-full min-h-0 w-full flex-col overflow-hidden">
+    <div
+      className={`caf-panel-card caf-panel-card-compact caf-need-followup-card flex h-full min-h-0 w-full flex-col overflow-hidden${
+        isWallboard ? " caf-need-followup-card--wallboard" : ""
+      }`}
+    >
       <div className="caf-panel-header caf-panel-header-compact">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <div className="flex min-w-0 items-center gap-1.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
             <div className="rounded-md bg-rose-500/20 p-0.5">
               <BellRing className="h-3 w-3 text-rose-300" />
             </div>
             <span className="caf-subtitle text-rose-200">Need Follow-up</span>
-            <span className="caf-need-followup-year-badge tabular-nums">{data.splitYear}</span>
+            {isWallboard ? (
+              <div
+                className="caf-need-followup-milestones caf-need-followup-milestones--inline"
+                aria-label="Required AF milestones (all complete)"
+              >
+                {MILESTONE_TAGS.map((tag) => (
+                  <span key={tag} className="caf-need-followup-milestone">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
-          <p
-            className={`truncate text-white/50 ${isCompact ? "text-[7px] leading-tight" : "text-[10px]"}`}
-            title="2026 RFS AF · implementation statuses · AF milestones complete"
-          >
-            RFS {data.splitYear} · Await Impl · TLP Final · Done
-          </p>
+          {!isWallboard ? (
+            <p
+              className="truncate text-white/50 text-[10px]"
+              title="Implementation statuses · AF milestones complete"
+            >
+              Await Impl · TLP Final · Done
+            </p>
+          ) : null}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5">
           <div className="flex items-baseline gap-1 rounded-md bg-rose-500/10 px-1.5 py-px">
@@ -247,20 +278,24 @@ export function CafNeedFollowupCard({
             </span>
           </div>
           {data.statusTotal > 0 ? (
-            <span className="text-[7px] tabular-nums text-white/45">
+            <span
+              className={`tabular-nums text-white/45 ${isWallboard ? "text-[6px] leading-none" : "text-[7px]"}`}
+            >
               {data.shareOfStatusPct}% of {data.statusTotal.toLocaleString()} in scope
             </span>
           ) : null}
         </div>
       </div>
 
-      <div className="caf-need-followup-milestones" aria-label="Required AF milestones (all complete)">
-        {MILESTONE_TAGS.map((tag) => (
-          <span key={tag} className="caf-need-followup-milestone">
-            {tag}
-          </span>
-        ))}
-      </div>
+      {!isWallboard ? (
+        <div className="caf-need-followup-milestones" aria-label="Required AF milestones (all complete)">
+          {MILESTONE_TAGS.map((tag) => (
+            <span key={tag} className="caf-need-followup-milestone">
+              {tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center text-[10px] text-white/60">Loading...</div>
@@ -270,10 +305,11 @@ export function CafNeedFollowupCard({
         </div>
       ) : data.total === 0 ? (
         <div className="flex flex-1 items-center justify-center text-[10px] text-white/50">
-          No CAF items need follow-up for {data.splitYear}
+          No CAF items need follow-up
         </div>
       ) : (
         <div
+          ref={groupsRef}
           className={`caf-need-followup-groups min-h-0 flex-1 ${
             isWallboard ? "caf-need-followup-groups--wallboard" : "caf-need-followup-groups--mobile"
           }`}
@@ -283,12 +319,11 @@ export function CafNeedFollowupCard({
               key={group.statusId}
               group={group}
               layout={layout}
-              page={pagesByStatus[group.statusId] ?? 0}
-              onPageChange={setPageForStatus}
+              wallboardRowsPerPage={measuredWallboardRows}
             />
           ))}
         </div>
       )}
     </div>
   )
-}
+})

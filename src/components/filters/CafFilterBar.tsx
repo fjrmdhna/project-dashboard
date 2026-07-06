@@ -12,7 +12,7 @@ type CafFilterOptions = {
   cafStatus: string[]
   cafType: string[]
   avp: string[]
-  rfsYear: string[]
+  year: string[]
 }
 
 const INITIAL_FILTERS: CafSiteFilters = {}
@@ -40,7 +40,7 @@ export function CafFilterBar({
     cafStatus: [],
     cafType: [],
     avp: [],
-    rfsYear: [],
+    year: [],
   })
   const [loading, setLoading] = useState(true)
 
@@ -60,7 +60,7 @@ export function CafFilterBar({
             cafStatus: payload.data.cafStatus ?? [],
             cafType: payload.data.cafType ?? [],
             avp: payload.data.avp ?? [],
-            rfsYear: payload.data.rfsYear ?? [],
+            year: payload.data.year ?? [],
           })
         }
       } catch {
@@ -85,7 +85,7 @@ export function CafFilterBar({
       (value.caf_status?.length ?? 0) > 0 ||
       (value.caf_type?.length ?? 0) > 0 ||
       (value.avp?.length ?? 0) > 0 ||
-      (value.rfs_year?.length ?? 0) > 0
+      (value.year?.length ?? 0) > 0
     )
   }, [value])
 
@@ -168,10 +168,10 @@ export function CafFilterBar({
         </div>
         <div className="min-w-0">
           <MultiSelect
-            options={options.rfsYear}
-            selected={value.rfs_year ?? []}
-            placeholder="RFS Year"
-            onChange={(selected) => onChange({ ...value, rfs_year: selected })}
+            options={options.year}
+            selected={value.year ?? []}
+            placeholder="Year"
+            onChange={(selected) => onChange({ ...value, year: selected })}
             disabled={loading}
             width="w-full"
           />
