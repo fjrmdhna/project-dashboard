@@ -4,8 +4,17 @@ import { getCacheOrFetch } from "./redis"
 
 export interface ProjectProgress {
   scope: number
+  readiness: number
   activated: number
   progress: number
+}
+
+export type ProgressComputationMode = "activation_only" | "readiness_and_activation"
+
+export interface ProjectProgressOptions {
+  readinessColumn?: string
+  activatedColumn?: string
+  mode?: ProgressComputationMode
 }
 
 export interface ProjectProgressFilters {
@@ -27,17 +36,23 @@ export interface ProjectProgressFilters {
  */
 export async function getProjectProgress(
   tableName: string,
-  filters?: ProjectProgressFilters
+  filters?: ProjectProgressFilters,
+  options?: ProjectProgressOptions
 ): Promise<ProjectProgress> {
   // Generate cache key based on table name and filters
-  const cacheKey = `project-progress:${tableName}:${JSON.stringify(filters || {})}`
+  const normalizedOptions: Required<ProjectProgressOptions> = {
+    readinessColumn: options?.readinessColumn ?? "imp_integ_af",
+    activatedColumn: options?.activatedColumn ?? "rfs_af",
+    mode: options?.mode ?? "activation_only",
+  }
+  const cacheKey = `project-progress:${tableName}:${JSON.stringify(filters || {})}:${JSON.stringify(normalizedOptions)}`
   const CACHE_TTL_SECONDS = 5 * 60 // 5 minutes cache
   
   // Try to get from cache first
   return await getCacheOrFetch(
     cacheKey,
     async () => {
-      return await fetchProjectProgressFromDB(tableName, filters)
+      return await fetchProjectProgressFromDB(tableName, filters, normalizedOptions)
     },
     CACHE_TTL_SECONDS
   )
@@ -45,9 +60,14 @@ export async function getProjectProgress(
 
 async function fetchProjectProgressFromDB(
   tableName: string,
-  filters?: ProjectProgressFilters
+  filters?: ProjectProgressFilters,
+  options?: Required<ProjectProgressOptions>
 ): Promise<ProjectProgress> {
   try {
+    const readinessColumn = options?.readinessColumn ?? "imp_integ_af"
+    const activatedColumn = options?.activatedColumn ?? "rfs_af"
+    const mode = options?.mode ?? "activation_only"
+
     // Build base query untuk scope count
     let scopeQuery = supabase
       .from(tableName)
@@ -55,16 +75,23 @@ async function fetchProjectProgressFromDB(
       .not("system_key", "is", null)
       .neq("system_key", "")
 
+    // Build base query untuk readiness count
+    let readinessQuery = supabase
+      .from(tableName)
+      .select(readinessColumn, { count: "exact", head: true })
+      .not(readinessColumn, "is", null)
+
     // Build base query untuk activated count
     let activatedQuery = supabase
       .from(tableName)
-      .select("rfs_af", { count: "exact", head: true })
-      .not("rfs_af", "is", null)
+      .select(activatedColumn, { count: "exact", head: true })
+      .not(activatedColumn, "is", null)
 
     // Apply exclude filters first
     if (filters?.exclude_program_reports && filters.exclude_program_reports.length > 0) {
       filters.exclude_program_reports.forEach((excludedProgram) => {
         scopeQuery = scopeQuery.neq("program_report", excludedProgram)
+        readinessQuery = readinessQuery.neq("program_report", excludedProgram)
         activatedQuery = activatedQuery.neq("program_report", excludedProgram)
       })
     }
@@ -81,21 +108,25 @@ async function fetchProjectProgressFromDB(
             const searchValue = Array.isArray(value) ? value[0] : value
             if (searchValue) {
               scopeQuery = scopeQuery.ilike(key, `%${searchValue}%`)
+              readinessQuery = readinessQuery.ilike(key, `%${searchValue}%`)
               activatedQuery = activatedQuery.ilike(key, `%${searchValue}%`)
             }
           } else if (key === "wbs_status") {
             const searchValue = Array.isArray(value) ? value[0] : value
             if (searchValue) {
               scopeQuery = scopeQuery.ilike(key, searchValue)
+              readinessQuery = readinessQuery.ilike(key, searchValue)
               activatedQuery = activatedQuery.ilike(key, searchValue)
             }
           } else if (Array.isArray(value) && value.length > 0) {
             // Handle array dengan in()
             scopeQuery = scopeQuery.in(key, value)
+            readinessQuery = readinessQuery.in(key, value)
             activatedQuery = activatedQuery.in(key, value)
           } else if (typeof value === "string") {
             // Handle single value dengan eq()
             scopeQuery = scopeQuery.eq(key, value)
+            readinessQuery = readinessQuery.eq(key, value)
             activatedQuery = activatedQuery.eq(key, value)
           }
         }
@@ -104,25 +135,34 @@ async function fetchProjectProgressFromDB(
 
     // Execute queries
     const { count: scopeCount, error: scopeError } = await scopeQuery
+    const { count: readinessCount, error: readinessError } = await readinessQuery
     const { count: activatedCount, error: activatedError } = await activatedQuery
 
-    if (scopeError || activatedError) {
-      console.error(`Error fetching progress from ${tableName}:`, scopeError || activatedError)
+    if (scopeError || readinessError || activatedError) {
+      console.error(`Error fetching progress from ${tableName}:`, scopeError || readinessError || activatedError)
       // Fallback ke method yang lebih reliable
-      return await getProjectProgressFallback(tableName, filters)
+      return await getProjectProgressFallback(tableName, filters, options)
     }
 
     const scope = scopeCount || 0
+    const readiness = readinessCount || 0
     const activated = activatedCount || 0
 
-    // Hitung progress percentage dengan pembulatan
-    const progress = scope > 0 ? Math.round((activated / scope) * 100) : 0
+    // Hitung progress percentage:
+    // - activation_only: activated/scope
+    // - readiness_and_activation: rata-rata readiness% dan activated%
+    const progress =
+      scope > 0
+        ? mode === "readiness_and_activation"
+          ? Math.round((((readiness / scope) + (activated / scope)) * 50) * 10) / 10
+          : Math.round((activated / scope) * 1000) / 10
+        : 0
 
-    return { scope, activated, progress }
+    return { scope, readiness, activated, progress }
   } catch (error) {
     console.error(`Error in getProjectProgress for ${tableName}:`, error)
     // Fallback ke method yang lebih reliable
-    return await getProjectProgressFallback(tableName, filters)
+    return await getProjectProgressFallback(tableName, filters, options)
   }
 }
 
@@ -132,11 +172,16 @@ async function fetchProjectProgressFromDB(
  */
 async function getProjectProgressFallback(
   tableName: string,
-  filters?: ProjectProgressFilters
+  filters?: ProjectProgressFilters,
+  options?: Required<ProjectProgressOptions>
 ): Promise<ProjectProgress> {
   try {
+    const readinessColumn = options?.readinessColumn ?? "imp_integ_af"
+    const activatedColumn = options?.activatedColumn ?? "rfs_af"
+    const mode = options?.mode ?? "activation_only"
+
     // Select minimal columns yang dibutuhkan
-    const selectColumns = ["system_key", "rfs_af"]
+    const selectColumns = ["system_key", readinessColumn, activatedColumn]
     
     // Add filter columns jika ada
     if (filters) {
@@ -191,11 +236,11 @@ async function getProjectProgressFallback(
 
     if (error) {
       console.error(`Error in fallback for ${tableName}:`, error)
-      return { scope: 0, activated: 0, progress: 0 }
+      return { scope: 0, readiness: 0, activated: 0, progress: 0 }
     }
 
     if (!data || data.length === 0) {
-      return { scope: 0, activated: 0, progress: 0 }
+      return { scope: 0, readiness: 0, activated: 0, progress: 0 }
     }
 
     // Hitung scope (system_key yang tidak null/undefined dan tidak kosong)
@@ -204,17 +249,22 @@ async function getProjectProgressFallback(
       return systemKey != null && systemKey !== "" && typeof systemKey === "string"
     }).length
 
-    // Hitung activated (rfs_af yang tidak null/undefined)
-    // rfs_af adalah timestamp, jadi cukup cek IS NOT NULL
-    const activated = data.filter((row: any) => row.rfs_af != null).length
+    // Hitung readiness + activated dengan kolom yang dikonfigurasi
+    const readiness = data.filter((row: any) => row[readinessColumn] != null).length
+    const activated = data.filter((row: any) => row[activatedColumn] != null).length
 
-    // Hitung progress percentage dengan pembulatan
-    const progress = scope > 0 ? Math.round((activated / scope) * 100) : 0
+    // Hitung progress percentage sesuai mode
+    const progress =
+      scope > 0
+        ? mode === "readiness_and_activation"
+          ? Math.round((((readiness / scope) + (activated / scope)) * 50) * 10) / 10
+          : Math.round((activated / scope) * 1000) / 10
+        : 0
 
-    return { scope, activated, progress }
+    return { scope, readiness, activated, progress }
   } catch (error) {
     console.error(`Error in fallback for ${tableName}:`, error)
-    return { scope: 0, activated: 0, progress: 0 }
+    return { scope: 0, readiness: 0, activated: 0, progress: 0 }
   }
 }
 

@@ -11,6 +11,7 @@ import { HeroHighlight, NavigationAction, ProjectCardData } from "@/types/home"
 import { getProjectProgress } from "@/lib/project-progress"
 import { getCafProgress } from "@/lib/caf-progress"
 import { HERMES_DASHBOARD_HERMES_5G, HERMES_DASHBOARD_NR_2600 } from "@/config/hermes-dashboards"
+import { resolveMilestoneColumns } from "@/lib/hermes-milestone-fields"
 
 const heroHighlight: HeroHighlight = {
   eyebrow: "Explore",
@@ -28,50 +29,74 @@ const navActions: NavigationAction[] = [
   { id: "map", label: "Map", href: "/map", icon: Map },
 ]
 
+function toFiniteNumber(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function clampPercentage(value: number): number {
+  return Math.max(0, Math.min(100, value))
+}
+
+function resolveProgress(
+  result:
+    | {
+        scope?: number | null
+        activated?: number | null
+        progress?: number | null
+      }
+    | null
+    | undefined
+): number {
+  const directProgress = toFiniteNumber(result?.progress)
+  if (directProgress !== null) {
+    return clampPercentage(Math.round(directProgress * 10) / 10)
+  }
+
+  const scope = toFiniteNumber(result?.scope) ?? 0
+  const activated = toFiniteNumber(result?.activated) ?? 0
+
+  if (scope <= 0) return 0
+
+  return clampPercentage(Math.round((activated / scope) * 1000) / 10)
+}
+
 export default async function Home() {
   // OPTIMIZATION: Fetch both progress data in parallel instead of sequential
   // This reduces total loading time significantly
-  let hermesProgress = 0
-  let aopProgress = 0
-  let nr2600Progress = 0
-  let cafProgress = 0
+  const hermesMilestoneColumns = resolveMilestoneColumns(HERMES_DASHBOARD_HERMES_5G.milestoneFields)
+  const nr2600MilestoneColumns = resolveMilestoneColumns(HERMES_DASHBOARD_NR_2600.milestoneFields)
 
   // Use Promise.allSettled to handle errors gracefully without blocking
   const [hermesResult, aopResult, nr2600Result, cafResult] = await Promise.allSettled([
-    getProjectProgress("site_data_5g", HERMES_DASHBOARD_HERMES_5G.progressFilter).catch((error) => {
+    getProjectProgress("site_data_5g", HERMES_DASHBOARD_HERMES_5G.progressFilter, {
+      ...hermesMilestoneColumns,
+      mode: "readiness_and_activation",
+    }).catch((error) => {
       console.error("Error fetching Hermes 5G progress:", error)
-      return { scope: 0, activated: 0, progress: 0 }
+      return { scope: 0, readiness: 0, activated: 0, progress: 0 }
     }),
     getProjectProgress("site_data_aop").catch((error) => {
       console.error("Error fetching AOP progress:", error)
-      return { scope: 0, activated: 0, progress: 0 }
+      return { scope: 0, readiness: 0, activated: 0, progress: 0 }
     }),
-    getProjectProgress("site_data_5g", HERMES_DASHBOARD_NR_2600.progressFilter).catch((error) => {
+    getProjectProgress("site_data_5g", HERMES_DASHBOARD_NR_2600.progressFilter, {
+      ...nr2600MilestoneColumns,
+      mode: "readiness_and_activation",
+    }).catch((error) => {
       console.error("Error fetching NR 2600 progress:", error)
-      return { scope: 0, activated: 0, progress: 0 }
+      return { scope: 0, readiness: 0, activated: 0, progress: 0 }
     }),
     getCafProgress().catch((error) => {
       console.error("Error fetching CAF progress:", error)
-      return { scope: 0, activated: 0, progress: 0 }
+      return { scope: 0, readiness: 0, activated: 0, progress: 0 }
     }),
   ])
 
-  // Extract results safely
-  if (hermesResult.status === "fulfilled") {
-    hermesProgress = hermesResult.value.progress
-  }
-
-  if (aopResult.status === "fulfilled") {
-    aopProgress = aopResult.value.progress
-  }
-
-  if (nr2600Result.status === "fulfilled") {
-    nr2600Progress = nr2600Result.value.progress
-  }
-
-  if (cafResult.status === "fulfilled") {
-    cafProgress = cafResult.value.progress
-  }
+  const hermesProgressData = hermesResult.status === "fulfilled" ? hermesResult.value : null
+  const aopProgressData = aopResult.status === "fulfilled" ? aopResult.value : null
+  const nr2600ProgressData = nr2600Result.status === "fulfilled" ? nr2600Result.value : null
+  const cafProgressData = cafResult.status === "fulfilled" ? cafResult.value : null
 
   // Optimize: Calculate date once instead of 4 times
   const currentDate = new Date().toLocaleDateString("en-US", {
@@ -80,11 +105,14 @@ export default async function Home() {
     year: "numeric",
   })
 
-  // Validate progress values (clamp between 0-100, handle NaN/undefined)
-  const validatedHermesProgress = Math.max(0, Math.min(100, Number.isNaN(hermesProgress) || hermesProgress === undefined ? 0 : hermesProgress))
-  const validatedAopProgress = Math.max(0, Math.min(100, Number.isNaN(aopProgress) || aopProgress === undefined ? 0 : aopProgress))
-  const validatedNr2600Progress = Math.max(0, Math.min(100, Number.isNaN(nr2600Progress) || nr2600Progress === undefined ? 0 : nr2600Progress))
-  const validatedCafProgress = Math.max(0, Math.min(100, Number.isNaN(cafProgress) || cafProgress === undefined ? 0 : cafProgress))
+  // Resolve progress robustly:
+  // - prioritize server-provided progress
+  // - fallback to (activated / scope) * 100 when needed
+  // - clamp and normalize value
+  const validatedHermesProgress = resolveProgress(hermesProgressData)
+  const validatedAopProgress = resolveProgress(aopProgressData)
+  const validatedNr2600Progress = resolveProgress(nr2600ProgressData)
+  const validatedCafProgress = resolveProgress(cafProgressData)
 
   // Build projects array dengan data real untuk Hermes 5G dan AOP
   const projects: ProjectCardData[] = [
