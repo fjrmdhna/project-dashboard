@@ -6,7 +6,7 @@ import { useListPagination } from "@/hooks/useListPagination"
 import type { CafPicPendingData, CafPicPendingGroup, CafPicPendingItem } from "@/lib/caf-pic-pending"
 
 const WALLBOARD_ROWS_PER_PAGE = 4
-const MOBILE_ROWS_PER_PAGE = 6
+const MOBILE_ROWS_PER_PAGE = 5
 
 function wallboardRowsPerPage(itemCount: number): number {
   if (itemCount <= 0) return 1
@@ -100,7 +100,7 @@ const PicPendingGroupPanel = memo(function PicPendingGroupPanel({
 
   return (
     <section
-      className={`caf-pic-pending-group ${isWallboard ? "caf-pic-pending-group--wallboard" : ""}${
+      className={`caf-pic-pending-group ${isWallboard ? "caf-pic-pending-group--wallboard" : "caf-pic-pending-group--mobile"}${
         isWallboard && totalPages > 1 ? " caf-pic-pending-group--paginated" : ""
       }`}
       aria-label={group.statusLabel}
@@ -113,7 +113,7 @@ const PicPendingGroupPanel = memo(function PicPendingGroupPanel({
           </span>
           {!isWallboard ? (
             <span className="caf-pic-pending-group__meta truncate" title={group.statusLabel}>
-              {group.statusLabel}
+              {group.assigneeLabel} · {assignees.length}
             </span>
           ) : null}
         </div>
@@ -126,12 +126,14 @@ const PicPendingGroupPanel = memo(function PicPendingGroupPanel({
         <p className="caf-pic-pending-group__empty">No pending</p>
       ) : (
         <>
-          <p className="caf-pic-pending-group__list-label">
-            {group.assigneeLabel}{" "}
-            <span className="caf-pic-pending-group__assignee-count tabular-nums">
-              ({assignees.length})
-            </span>
-          </p>
+          {isWallboard ? (
+            <p className="caf-pic-pending-group__list-label">
+              {group.assigneeLabel}{" "}
+              <span className="caf-pic-pending-group__assignee-count tabular-nums">
+                ({assignees.length})
+              </span>
+            </p>
+          ) : null}
 
           <div className="caf-pic-pending-group__list-area">
             <ul className="caf-pic-pending-group__list" role="list">
@@ -206,7 +208,6 @@ export const CafPicPendingCard = memo(function CafPicPendingCard({
   layout?: "wallboard" | "mobile"
 }) {
   const isWallboard = layout === "wallboard"
-  const isCompact = isWallboard
   const wallboardGroups = data.groups
   const mobileGroups = data.groups.filter((group) => group.total > 0)
   const stalePct = data.total > 0 ? Math.round((data.over30Days / data.total) * 100) : 0
@@ -214,34 +215,48 @@ export const CafPicPendingCard = memo(function CafPicPendingCard({
 
   return (
     <div
-      className={`caf-panel-card caf-panel-card-compact caf-pic-pending-card flex h-full min-h-0 w-full flex-col overflow-hidden ${
-        isWallboard ? "caf-pic-pending-card--wallboard" : "caf-pic-pending-card--mobile"
+      className={`caf-panel-card caf-panel-card-compact caf-pic-pending-card flex w-full flex-col ${
+        isWallboard
+          ? "caf-pic-pending-card--wallboard h-full min-h-0 overflow-hidden"
+          : "caf-pic-pending-card--mobile"
       }`}
     >
-      <div className="caf-panel-header caf-panel-header-compact">
+      <div className={`caf-panel-header ${isWallboard ? "caf-panel-header-compact" : "caf-panel-header-mobile"}`}>
         <div className="flex min-w-0 flex-col gap-0.5">
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="rounded-md bg-amber-500/20 p-0.5">
-              <UserSearch className="h-3 w-3 text-amber-300" />
+              <UserSearch className={`${isWallboard ? "h-3 w-3" : "h-3.5 w-3.5"} text-amber-300`} />
             </div>
-            <span className="caf-subtitle text-amber-200">PIC Follow-up</span>
+            <span className={`caf-subtitle text-amber-200 ${isWallboard ? "" : "text-sm"}`}>
+              PIC Follow-up
+            </span>
           </div>
           <p
-            className={`truncate text-white/50 ${isCompact ? "text-[7px] leading-tight" : "text-[10px]"}`}
+            className={`truncate text-white/50 ${isWallboard ? "text-[7px] leading-tight" : "text-[11px]"}`}
             title="Staff · TLP review · TLP approval · AVP pending"
           >
             Staff · TLP review · TLP approval · AVP
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5">
-          <div className="flex items-baseline gap-1 rounded-md bg-amber-500/10 px-1.5 py-px">
-            <span className="text-[8px] text-amber-200/70">Pending</span>
-            <span className="text-[11px] font-bold tabular-nums text-amber-300">
+          <div
+            className={`flex items-baseline gap-1 rounded-md bg-amber-500/10 ${
+              isWallboard ? "px-1.5 py-px" : "px-2 py-0.5"
+            }`}
+          >
+            <span className={`text-amber-200/70 ${isWallboard ? "text-[8px]" : "text-[10px]"}`}>
+              Pending
+            </span>
+            <span
+              className={`font-bold tabular-nums text-amber-300 ${
+                isWallboard ? "text-[11px]" : "text-sm"
+              }`}
+            >
               {data.total.toLocaleString()}
             </span>
           </div>
           {groupsToRender.length > 0 ? (
-            <span className="text-[7px] tabular-nums text-white/45">
+            <span className={`tabular-nums text-white/45 ${isWallboard ? "text-[7px]" : "text-[10px]"}`}>
               {isWallboard ? "4 status slots" : `${groupsToRender.length} status groups`}
             </span>
           ) : null}
@@ -261,8 +276,10 @@ export const CafPicPendingCard = memo(function CafPicPendingCard({
       ) : (
         <>
           <div
-            className={`caf-pic-pending-groups min-h-0 flex-1 ${
-              isWallboard ? "caf-pic-pending-groups--wallboard" : "caf-pic-pending-groups--mobile"
+            className={`caf-pic-pending-groups ${
+              isWallboard
+                ? "caf-pic-pending-groups--wallboard min-h-0 flex-1"
+                : "caf-pic-pending-groups--mobile"
             }`}
           >
             {groupsToRender.map((group) => (

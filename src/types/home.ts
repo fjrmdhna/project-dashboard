@@ -13,6 +13,8 @@ export interface ProjectCardData {
   isDummy?: boolean // Flag untuk menandai card sebagai dummy/placeholder data
   /** When true, card is not clickable and shows "Under construction" badge */
   underConstruction?: boolean
+  /** When true, card is excluded from the home page project grid */
+  hidden?: boolean
 }
 
 export interface HeroHighlight {

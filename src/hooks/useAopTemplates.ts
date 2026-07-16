@@ -18,6 +18,8 @@ export interface UseAopTemplatesOptions {
   filterValue: FilterValue
   setFilterValue: React.Dispatch<React.SetStateAction<FilterValue>>
   initialFilter: FilterValue
+  /** Templates API base, e.g. "/api/aop/templates" */
+  templatesEndpoint?: string
 }
 
 export interface UseAopTemplatesReturn {
@@ -55,6 +57,7 @@ export function useAopTemplates({
   filterValue,
   setFilterValue,
   initialFilter,
+  templatesEndpoint = "/api/aop/templates",
 }: UseAopTemplatesOptions): UseAopTemplatesReturn {
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
   const [templateName, setTemplateName] = useState("")
@@ -76,7 +79,7 @@ export function useAopTemplates({
   const fetchTemplates = useCallback(async (_caller?: string) => {
     setTemplatesLoading(true)
     try {
-      const res = await fetch("/api/aop/templates?limit=50")
+      const res = await fetch(`${templatesEndpoint}?limit=50`)
       const json = await res.json()
       if (json.status === "success" && Array.isArray(json.data)) {
         setTemplates(json.data)
@@ -88,7 +91,7 @@ export function useAopTemplates({
     } finally {
       setTemplatesLoading(false)
     }
-  }, [])
+  }, [templatesEndpoint])
 
   useEffect(() => {
     fetchTemplates("mount")
@@ -129,7 +132,7 @@ export function useAopTemplates({
     setTemplateSaveError(null)
     const payload = buildTemplatePayload(filterValue)
     try {
-      const res = await fetch("/api/aop/templates", {
+      const res = await fetch(templatesEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, payload }),
@@ -145,7 +148,7 @@ export function useAopTemplates({
     } catch (e) {
       setTemplateSaveError(e instanceof Error ? e.message : "Failed to save template")
     }
-  }, [filterValue, templateName, fetchTemplates])
+  }, [filterValue, templateName, fetchTemplates, templatesEndpoint])
 
   const handleUpdateTemplate = useCallback(async () => {
     if (!selectedTemplateId || templateUpdating) return
@@ -153,7 +156,7 @@ export function useAopTemplates({
     setTemplateUpdating(true)
     const payload = buildTemplatePayload(filterValue)
     try {
-      const res = await fetch(`/api/aop/templates/${selectedTemplateId}`, {
+      const res = await fetch(`${templatesEndpoint}/${selectedTemplateId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ payload }),
@@ -169,14 +172,14 @@ export function useAopTemplates({
     } finally {
       setTemplateUpdating(false)
     }
-  }, [filterValue, selectedTemplateId, templateUpdating, fetchTemplates])
+  }, [filterValue, selectedTemplateId, templateUpdating, fetchTemplates, templatesEndpoint])
 
   const handleDeleteTemplate = useCallback(async () => {
     const t = deleteConfirmTemplate
     if (!t) return
     setTemplateDeleteError(null)
     try {
-      const res = await fetch(`/api/aop/templates/${t.id}`, { method: "DELETE" })
+      const res = await fetch(`${templatesEndpoint}/${t.id}`, { method: "DELETE" })
       const json = await res.json()
       if (json.status !== "success") {
         setTemplateDeleteError(json.message || "Failed to delete template")
@@ -197,6 +200,7 @@ export function useAopTemplates({
     initialFilter,
     setFilterValue,
     fetchTemplates,
+    templatesEndpoint,
   ])
 
   const selectedTemplateName =

@@ -9,6 +9,15 @@ import {
   CACHE_TTL,
   type FilterParams 
 } from '@/lib/redis'
+import {
+  buildAopSiteDataMemoryCacheKey,
+  getAopSiteDataMemoryCache,
+  setAopSiteDataMemoryCache,
+} from '@/lib/aop-site-data-memory-cache'
+
+const PAGE_SIZE = 1000
+const MAX_PAGES = 100
+const PARALLEL_PAGE_BATCH = 12
 
 // Interface for the response data
 interface SiteDataResponse {
@@ -276,7 +285,55 @@ function calculateStatsFromData(filteredData: any[]) {
   }
 }
 
-// Fetch data from database with pagination
+// Fetch data from database with parallel pagination
+type AopSiteDataQueryFilters = {
+  vendorNames: string[]
+  programReports: string[]
+  circles: string[]
+  siteCategories: string[]
+  q: string
+}
+
+function createSiteDataAopQuery(
+  columns: string,
+  filters: AopSiteDataQueryFilters,
+  options?: { count?: 'exact' }
+) {
+  let query = supabase
+    .from('site_data_aop')
+    .select(columns, options?.count ? { count: 'exact' } : undefined)
+
+  if (filters.vendorNames.length > 0) {
+    query = query.in('vendor_name', filters.vendorNames)
+  }
+
+  if (filters.programReports.length > 0) {
+    query = query.in('program_report', filters.programReports)
+  }
+
+  if (filters.circles.length > 0) {
+    const circleConditions = filters.circles
+      .map((c) => `region_circle.ilike.${c.trim().toLowerCase()}`)
+      .join(',')
+    query = query.or(circleConditions)
+  }
+
+  if (filters.siteCategories.length > 0) {
+    const siteCategoryConditions = filters.siteCategories
+      .map((sc) => `site_category.ilike.${sc.trim().toLowerCase()}`)
+      .join(',')
+    query = query.or(siteCategoryConditions)
+  }
+
+  if (filters.q) {
+    query = query.or(
+      `system_key.ilike.%${filters.q}%,site_id.ilike.%${filters.q}%,site_name.ilike.%${filters.q}%,vendor_name.ilike.%${filters.q}%`
+    )
+  }
+
+  return query
+}
+
 async function fetchDataFromDatabase(
   vendorNames: string[],
   programReports: string[],
@@ -285,86 +342,61 @@ async function fetchDataFromDatabase(
   q: string,
   mode: 'full' | 'minimal' = 'full'
 ): Promise<{ data: any[], totalCount: number }> {
-  let allData: any[] = []
-  let hasMore = true
-  let page = 0
-  const pageSize = 1000
-  const MAX_PAGES = 100
-  let totalCount = 0
-  
   const columns = getColumns(mode)
-
-  // Build base query
-  let baseQuery = supabase
-    .from('site_data_aop')
-    .select(columns, { count: 'exact' })
-
-  // Apply filters
-  if (vendorNames.length > 0) {
-    baseQuery = baseQuery.in('vendor_name', vendorNames)
+  const filters: AopSiteDataQueryFilters = {
+    vendorNames,
+    programReports,
+    circles,
+    siteCategories,
+    q,
   }
 
-  if (programReports.length > 0) {
-    baseQuery = baseQuery.in('program_report', programReports)
-  }
+  const allData: any[] = []
+  let page = 0
+  let hasMore = true
 
-  if (circles.length > 0) {
-    const circleConditions = circles
-      .map(c => {
-        const normalized = c.trim().toLowerCase()
-        return `region_circle.ilike.${normalized}`
-      })
-      .join(',')
-    baseQuery = baseQuery.or(circleConditions)
-  }
-
-  if (siteCategories.length > 0) {
-    const siteCategoryConditions = siteCategories
-      .map(sc => {
-        const normalized = sc.trim().toLowerCase()
-        return `site_category.ilike.${normalized}`
-      })
-      .join(',')
-    baseQuery = baseQuery.or(siteCategoryConditions)
-  }
-
-  if (q) {
-    baseQuery = baseQuery.or(`system_key.ilike.%${q}%,site_id.ilike.%${q}%,site_name.ilike.%${q}%,vendor_name.ilike.%${q}%`)
-  }
-
-  // Fetch all data using pagination
+  // Parallel batch pagination without count: 'exact' (avoids full-table count scan on 88k rows).
   while (hasMore && page < MAX_PAGES) {
-    const from = page * pageSize
-    const to = from + pageSize - 1
+    const batchPageIndices: number[] = []
+    for (let i = 0; i < PARALLEL_PAGE_BATCH && page + i < MAX_PAGES; i++) {
+      batchPageIndices.push(page + i)
+    }
 
-    const query = baseQuery.range(from, to)
-    const { data: pageData, error: pageError, count } = await query
+    const batchResults = await Promise.all(
+      batchPageIndices.map(async (pageIndex) => {
+        const from = pageIndex * PAGE_SIZE
+        const to = from + PAGE_SIZE - 1
+        const { data, error } = await createSiteDataAopQuery(columns, filters).range(from, to)
+        if (error) {
+          if (error.code === 'PGRST116') {
+            return []
+          }
+          throw new Error(`Database error: ${error.message}`)
+        }
+        return data ?? []
+      })
+    )
 
-    if (pageError) {
-      if (pageError.code === 'PGRST116') {
-        return { data: [], totalCount: 0 }
+    for (const pageData of batchResults) {
+      if (pageData.length > 0) {
+        allData.push(...pageData)
       }
-      throw new Error(`Database error: ${pageError.message}`)
+      if (pageData.length < PAGE_SIZE) {
+        hasMore = false
+        break
+      }
     }
 
-    if (count !== null && totalCount === 0) {
-      totalCount = count
-    }
-
-    if (pageData && pageData.length > 0) {
-      allData = [...allData, ...pageData]
-      hasMore = pageData.length === pageSize
-      page++
-    } else {
-      hasMore = false
-    }
+    page += batchPageIndices.length
   }
 
-  if (page >= MAX_PAGES) {
-    console.warn(`[AOP Site Data] Pagination safety limit reached at ${page} pages, fetched ${allData.length} records`)
+  if (page >= MAX_PAGES && hasMore) {
+    console.warn(
+      `[AOP Site Data] Pagination safety limit reached at ${page} pages, fetched ${allData.length} records`
+    )
   }
 
-  return { data: allData, totalCount }
+  return { data: allData, totalCount: allData.length }
 }
 
 // Fetch stats from database function
@@ -466,25 +498,51 @@ export async function GET(request: NextRequest) {
       ? CACHE_KEYS.AOP_SITE_DATA_NOFILTER 
       : CACHE_KEYS.AOP_SITE_DATA(filterHash)
     
-    // Use longer TTL for no-filter data (base data)
-    const cacheTTL = isEmpty ? CACHE_TTL.FULL_DATA : CACHE_TTL.FILTERED_DATA
+    const memoryCacheKey = buildAopSiteDataMemoryCacheKey(mode, filterHash)
+    if (isEmpty) {
+      const memoryCached = getAopSiteDataMemoryCache(memoryCacheKey)
+      if (memoryCached) {
+        console.log(`[AOP Site Data] Memory cache HIT (${memoryCached.count} records)`)
+        return NextResponse.json(
+          {
+            status: 'success',
+            ...memoryCached,
+            timestamp: new Date().toISOString(),
+            cached: true,
+            fetchTime: 0,
+            mode,
+          },
+          {
+            headers: {
+              'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
+            },
+          }
+        )
+      }
+    }
 
     // Try to get STATS from Redis cache first (full data is too large to cache)
     const statsCacheKey = CACHE_KEYS.AOP_STATS(filterHash)
     const cachedStats = await getCache<SiteDataResponse['stats']>(statsCacheKey)
     
-    // We don't cache full data because it's too large (40k+ records = ~20MB)
-    // Instead, we only cache stats which is small
+    // We don't cache full data in Redis because it's too large (40k+ records = ~20MB)
+    // Process-local memory cache handles the hot unfiltered path instead.
 
     // Fetch from database
     console.log(`[AOP Site Data] Fetching from database (mode: ${mode})...`)
     const startTime = Date.now()
 
-    // If we have cached stats, we can skip stats fetch
     let stats: SiteDataResponse['stats']
     let dataResult: { data: any[], totalCount: number }
 
-    if (cachedStats) {
+    if (isEmpty) {
+      // Unfiltered dashboard load: one data fetch, stats derived from the same rows (no RPC race).
+      dataResult = await fetchDataFromDatabase(vendorNames, programReports, circles, siteCategories, q, mode)
+      stats = calculateStatsFromData(dataResult.data)
+      setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch((err) => {
+        console.error('[AOP Site Data] Failed to cache stats:', err)
+      })
+    } else if (cachedStats) {
       console.log(`[AOP Site Data] Using cached stats for filter: ${filterHash}`)
       // Check if cached stats has fatp or patp (might be old cache from before these were added)
       if (cachedStats.fatp === undefined || cachedStats.patp === undefined) {
@@ -560,11 +618,12 @@ export async function GET(request: NextRequest) {
       stats
     }
     
-    // Warn if response size is too large (could cause issues)
-    const responseSizeEstimate = JSON.stringify(responseData).length
-    const responseSizeMB = responseSizeEstimate / 1024 / 1024
-    if (responseSizeMB > 20) {
-      console.warn(`[AOP Site Data] Large response size: ${responseSizeMB.toFixed(2)}MB. Consider pagination or filtering.`)
+    // Warn if response payload is likely too large (avoid full JSON.stringify on 50MB+ bodies)
+    const estimatedResponseSizeMB = (mappedData.length * 620) / 1024 / 1024
+    if (estimatedResponseSizeMB > 20) {
+      console.warn(
+        `[AOP Site Data] Large response size: ~${estimatedResponseSizeMB.toFixed(2)}MB. Consider pagination or filtering.`
+      )
     }
     
     // Response headers (Vercel automatically compresses with gzip for large responses)
@@ -572,7 +631,11 @@ export async function GET(request: NextRequest) {
       'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
     }
 
-    // NOTE: We don't cache full response because data is too large (40k+ records = ~20MB)
+    if (isEmpty) {
+      setAopSiteDataMemoryCache(memoryCacheKey, responseData)
+    }
+
+    // NOTE: We don't cache full response in Redis because data is too large (40k+ records = ~20MB)
     // Vercel KV has 256KB limit per value. We only cache stats above.
 
     return NextResponse.json({

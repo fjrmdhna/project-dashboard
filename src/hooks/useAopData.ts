@@ -487,6 +487,8 @@ export function useAopData(options: UseAopDataOptions = {}): UseAopDataReturn {
       staleTime: 5 * 60 * 1000, // 5 minutes - longer since we're caching all data
       cacheTime: 15 * 60 * 1000, // 15 minutes
       refetchOnMount: false, // Don't refetch on every mount
+      // AOP site-data can take ~80s+ (88k rows, ~50MB) before JSON parse on client
+      requestTimeoutMs: 180_000,
       validateFn: (data) => {
         const typedData = data as { data?: AopSiteData[], stats?: AopDataStats }
         if (!data || !typedData.data || !typedData.stats) {

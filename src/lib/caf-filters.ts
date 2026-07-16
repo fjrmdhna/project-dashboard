@@ -10,6 +10,57 @@ export type CafSiteFilters = {
   year?: string[]
 }
 
+/** Distinct dropdown values for CAF Monitoring filter bar. */
+export type CafFilterOptions = {
+  projects: string[]
+  vendorTlp: string[]
+  vendorRequestor: string[]
+  cafStatus: string[]
+  cafType: string[]
+  avp: string[]
+  year: string[]
+}
+
+export const EMPTY_CAF_FILTER_OPTIONS: CafFilterOptions = {
+  projects: [],
+  vendorTlp: [],
+  vendorRequestor: [],
+  cafStatus: [],
+  cafType: [],
+  avp: [],
+  year: [],
+}
+
+/**
+ * Year pre-selected on first landing (RFS AF calendar year).
+ * Reset clears filters entirely — it does not restore this selection.
+ */
+export const CAF_LANDING_FILTER_YEAR = "2026"
+
+/** Filters applied when the user first opens CAF Monitoring. */
+export function getLandingCafSiteFilters(): CafSiteFilters {
+  return { year: [CAF_LANDING_FILTER_YEAR] }
+}
+
+/** Empty filters — Reset target; shows all rows. */
+export function getClearedCafSiteFilters(): CafSiteFilters {
+  return {}
+}
+
+/** Count non-empty filter groups (for Reset enablement / mobile badge). */
+export function countActiveCafFilterGroups(filters: CafSiteFilters): number {
+  let count = 0
+  if (filters.q?.trim()) count += 1
+  if ((filters.project_name?.length ?? 0) > 0) count += 1
+  if ((filters.caf_status?.length ?? 0) > 0) count += 1
+  if ((filters.vendor_tlp_name?.length ?? 0) > 0) count += 1
+  if ((filters.vendor_requestor_name?.length ?? 0) > 0) count += 1
+  if ((filters.caf_type?.length ?? 0) > 0) count += 1
+  if ((filters.avp?.length ?? 0) > 0) count += 1
+  if ((filters.year?.length ?? 0) > 0) count += 1
+  return count
+}
+
 export type CafFilterableRow = {
   project_name?: string | null
   vendor_tlp_name?: string | null
@@ -160,6 +211,48 @@ export function rowMatchesCafFilters(row: CafFilterableRow, filters: CafSiteFilt
 
 export function hasActiveCafFilters(filters: CafSiteFilters): boolean {
   return Boolean(cafFiltersToQueryString(filters))
+}
+
+/**
+ * Build filter dropdown options from already-loaded site_data rows.
+ * Avoids a second full-table scan via `/api/caf/filters` on the page.
+ */
+export function deriveCafFilterOptionsFromRows(rows: CafFilterableRow[]): CafFilterOptions {
+  const projects = new Set<string>()
+  const vendorTlp = new Set<string>()
+  const vendorRequestor = new Set<string>()
+  const cafStatus = new Set<string>()
+  const cafType = new Set<string>()
+  const avp = new Set<string>()
+  const year = new Set<string>()
+
+  for (const row of rows) {
+    if (isNonEmptyString(row.project_name)) projects.add(String(row.project_name).trim())
+    if (isNonEmptyString(row.vendor_tlp_name)) vendorTlp.add(String(row.vendor_tlp_name).trim())
+    if (isNonEmptyString(row.vendor_requestor_name)) {
+      vendorRequestor.add(String(row.vendor_requestor_name).trim())
+    }
+    if (isNonEmptyString(row.caf_status)) cafStatus.add(String(row.caf_status).trim())
+    if (isNonEmptyString(row.caf_type)) cafType.add(String(row.caf_type).trim())
+    if (isNonEmptyString(row.avp)) avp.add(String(row.avp).trim())
+    const rfsYear = extractRfsYear(row.rfs_af)
+    if (rfsYear) year.add(rfsYear)
+  }
+
+  const sortAsc = (values: Set<string>) =>
+    Array.from(values).sort((a, b) => a.localeCompare(b))
+  const sortYearDesc = (values: Set<string>) =>
+    Array.from(values).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+
+  return {
+    projects: sortAsc(projects),
+    vendorTlp: sortAsc(vendorTlp),
+    vendorRequestor: sortAsc(vendorRequestor),
+    cafStatus: sortAsc(cafStatus),
+    cafType: sortAsc(cafType),
+    avp: sortAsc(avp),
+    year: sortYearDesc(year),
+  }
 }
 
 export function filterCafRows(rows: CafFilterableRow[], filters: CafSiteFilters): CafFilterableRow[] {

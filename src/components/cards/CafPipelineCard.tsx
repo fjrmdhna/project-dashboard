@@ -7,14 +7,23 @@ import {
   type CafStatusCountItem,
 } from "@/lib/caf-status-registry"
 
-function LinearStep({ item }: { item: CafStatusCountItem }) {
+function LinearStep({
+  item,
+  compact = false,
+}: {
+  item: CafStatusCountItem
+  compact?: boolean
+}) {
   const { definition, count, id } = item
   const isEmpty = count === 0
   const accent = definition.color
+  const label = compact ? definition.shortLabel : definition.label
 
   return (
     <div
-      className={`caf-pipeline-step ${isEmpty ? "caf-pipeline-step--empty" : ""}`}
+      className={`caf-pipeline-step ${isEmpty ? "caf-pipeline-step--empty" : ""} ${
+        compact ? "caf-pipeline-step--compact" : ""
+      }`}
       role="listitem"
       style={{ ["--step-accent" as string]: accent }}
       title={`S${id} · ${definition.label}\nPIC: ${definition.picRole}`}
@@ -26,7 +35,7 @@ function LinearStep({ item }: { item: CafStatusCountItem }) {
       >
         {count.toLocaleString()}
       </span>
-      <span className="caf-pipeline-step__label">{definition.label}</span>
+      <span className="caf-pipeline-step__label">{label}</span>
     </div>
   )
 }
@@ -49,7 +58,7 @@ export function CafPipelineCard({
         definition: {
           id: 0,
           label: "Unmapped Status",
-          shortLabel: "Unmapped Status",
+          shortLabel: "Unmapped",
           phase: "legacy",
           color: "#64748B",
           picRole: "—",
@@ -86,7 +95,7 @@ export function CafPipelineCard({
 
         <div className="caf-pipeline-linear__track" role="list" aria-label="CAF status workflow steps 1 to 10">
           {steps.map((item) => (
-            <LinearStep key={item.id} item={item} />
+            <LinearStep key={item.id} item={item} compact={isMobile} />
           ))}
         </div>
       </div>

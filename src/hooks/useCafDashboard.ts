@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useApiCache } from "@/hooks/useApiCache"
-import { filterCafRows, type CafSiteFilters, type CafFilterableRow } from "@/lib/caf-filters"
+import {
+  deriveCafFilterOptionsFromRows,
+  EMPTY_CAF_FILTER_OPTIONS,
+  filterCafRows,
+  type CafSiteFilters,
+  type CafFilterableRow,
+} from "@/lib/caf-filters"
 import { aggregateCafDashboard } from "@/lib/caf-dashboard-aggregate"
 import { createEmptyCafNeedFollowupData } from "@/lib/caf-need-followup"
 import { createEmptyCafPicPendingData } from "@/lib/caf-pic-pending"
@@ -52,6 +58,11 @@ export function useCafDashboard(filters: CafSiteFilters) {
     }
   }, [baseRows])
 
+  const filterOptions = useMemo(() => {
+    if (!baseRows || baseRows.length === 0) return EMPTY_CAF_FILTER_OPTIONS
+    return deriveCafFilterOptionsFromRows(baseRows)
+  }, [baseRows])
+
   const dashboard = useMemo(() => {
     if (!baseRows || baseRows.length === 0) return dashboardCacheRef.current
     const filteredRows = filterCafRows(baseRows, filters)
@@ -67,6 +78,7 @@ export function useCafDashboard(filters: CafSiteFilters) {
 
   return {
     hasData: Boolean(baseRows && baseRows.length > 0),
+    filterOptions,
     totalCaf: matrix?.totalCaf ?? 0,
     inReview: matrix?.inReview ?? 0,
     approved: matrix?.approved ?? 0,

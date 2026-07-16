@@ -1,93 +1,80 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import { RotateCcw } from "lucide-react"
 import { MultiSelect } from "@/components/ui/MultiSelect"
-import type { CafSiteFilters } from "@/lib/caf-filters"
+import {
+  EMPTY_CAF_FILTER_OPTIONS,
+  getLandingCafSiteFilters,
+  hasActiveCafFilters,
+  type CafFilterOptions,
+  type CafSiteFilters,
+} from "@/lib/caf-filters"
 
-type CafFilterOptions = {
-  projects: string[]
-  vendorTlp: string[]
-  vendorRequestor: string[]
-  cafStatus: string[]
-  cafType: string[]
-  avp: string[]
-  year: string[]
+/** Landing filters for CAF Monitoring (Year pre-selected). Reset uses cleared filters. */
+export function getInitialCafFilters(): CafSiteFilters {
+  return getLandingCafSiteFilters()
 }
 
-const INITIAL_FILTERS: CafSiteFilters = {}
-
-export function getInitialCafFilters(): CafSiteFilters {
-  return { ...INITIAL_FILTERS }
+/** Merge selected values into options so chips remain visible. */
+function withSelectedOptions(options: string[], selected: string[]): string[] {
+  if (selected.length === 0) return options
+  const seen = new Set(options)
+  const merged = [...options]
+  for (const value of selected) {
+    const trimmed = String(value ?? "").trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    merged.push(trimmed)
+  }
+  return merged
 }
 
 export function CafFilterBar({
   value,
   onChange,
   onReset,
+  options = EMPTY_CAF_FILTER_OPTIONS,
   variant = "wallboard",
 }: {
   value: CafSiteFilters
   onChange: (v: CafSiteFilters) => void
   onReset: () => void
+  /** Distinct options derived from loaded site_data (preferred over /api/caf/filters). */
+  options?: CafFilterOptions
   /** `stacked` — vertical grid for mobile filter drawer */
   variant?: "wallboard" | "stacked"
 }) {
-  const [options, setOptions] = useState<CafFilterOptions>({
-    projects: [],
-    vendorTlp: [],
-    vendorRequestor: [],
-    cafStatus: [],
-    cafType: [],
-    avp: [],
-    year: [],
-  })
-  const [loading, setLoading] = useState(true)
+  const hasActiveFilters = useMemo(() => hasActiveCafFilters(value), [value])
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function run() {
-      try {
-        setLoading(true)
-        const response = await fetch("/api/caf/filters")
-        const payload = await response.json()
-        if (!cancelled && payload?.status === "success" && payload.data) {
-          setOptions({
-            projects: payload.data.projects ?? [],
-            vendorTlp: payload.data.vendorTlp ?? [],
-            vendorRequestor: payload.data.vendorRequestor ?? [],
-            cafStatus: payload.data.cafStatus ?? [],
-            cafType: payload.data.cafType ?? [],
-            avp: payload.data.avp ?? [],
-            year: payload.data.year ?? [],
-          })
-        }
-      } catch {
-        // Keep dropdowns empty on failure.
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    run()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const hasActiveFilters = useMemo(() => {
-    return (
-      Boolean(value.q?.trim()) ||
-      (value.project_name?.length ?? 0) > 0 ||
-      (value.vendor_tlp_name?.length ?? 0) > 0 ||
-      (value.vendor_requestor_name?.length ?? 0) > 0 ||
-      (value.caf_status?.length ?? 0) > 0 ||
-      (value.caf_type?.length ?? 0) > 0 ||
-      (value.avp?.length ?? 0) > 0 ||
-      (value.year?.length ?? 0) > 0
-    )
-  }, [value])
+  const projectOptions = useMemo(
+    () => withSelectedOptions(options.projects, value.project_name ?? []),
+    [options.projects, value.project_name]
+  )
+  const statusOptions = useMemo(
+    () => withSelectedOptions(options.cafStatus, value.caf_status ?? []),
+    [options.cafStatus, value.caf_status]
+  )
+  const vendorTlpOptions = useMemo(
+    () => withSelectedOptions(options.vendorTlp, value.vendor_tlp_name ?? []),
+    [options.vendorTlp, value.vendor_tlp_name]
+  )
+  const vendorRequestorOptions = useMemo(
+    () => withSelectedOptions(options.vendorRequestor, value.vendor_requestor_name ?? []),
+    [options.vendorRequestor, value.vendor_requestor_name]
+  )
+  const cafTypeOptions = useMemo(
+    () => withSelectedOptions(options.cafType, value.caf_type ?? []),
+    [options.cafType, value.caf_type]
+  )
+  const avpOptions = useMemo(
+    () => withSelectedOptions(options.avp, value.avp ?? []),
+    [options.avp, value.avp]
+  )
+  const yearOptions = useMemo(
+    () => withSelectedOptions(options.year, value.year ?? []),
+    [options.year, value.year]
+  )
 
   const isStacked = variant === "stacked"
 
@@ -108,82 +95,82 @@ export function CafFilterBar({
       >
         <div className="min-w-0">
           <MultiSelect
-            options={options.projects}
+            options={projectOptions}
             selected={value.project_name ?? []}
             placeholder="Project"
             onChange={(selected) => onChange({ ...value, project_name: selected })}
-            disabled={loading}
+            disabled={false}
             width="w-full"
           />
         </div>
         <div className="min-w-0">
           <MultiSelect
-            options={options.cafStatus}
+            options={statusOptions}
             selected={value.caf_status ?? []}
             placeholder="CAF Status"
             onChange={(selected) => onChange({ ...value, caf_status: selected })}
-            disabled={loading}
+            disabled={false}
             width="w-full"
           />
         </div>
         <div className="min-w-0">
           <MultiSelect
-            options={options.vendorTlp}
+            options={vendorTlpOptions}
             selected={value.vendor_tlp_name ?? []}
             placeholder="TLP Vendor"
             onChange={(selected) => onChange({ ...value, vendor_tlp_name: selected })}
-            disabled={loading}
+            disabled={false}
             width="w-full"
           />
         </div>
         <div className="min-w-0">
           <MultiSelect
-            options={options.vendorRequestor}
+            options={vendorRequestorOptions}
             selected={value.vendor_requestor_name ?? []}
             placeholder="RAN Vendor"
             onChange={(selected) => onChange({ ...value, vendor_requestor_name: selected })}
-            disabled={loading}
+            disabled={false}
             width="w-full"
           />
         </div>
         <div className="min-w-0">
           <MultiSelect
-            options={options.cafType}
+            options={cafTypeOptions}
             selected={value.caf_type ?? []}
             placeholder="CAF Type"
             onChange={(selected) => onChange({ ...value, caf_type: selected })}
-            disabled={loading}
+            disabled={false}
             width="w-full"
           />
         </div>
         <div className="min-w-0">
           <MultiSelect
-            options={options.avp}
+            options={avpOptions}
             selected={value.avp ?? []}
             placeholder="AVP"
             onChange={(selected) => onChange({ ...value, avp: selected })}
-            disabled={loading}
+            disabled={false}
             width="w-full"
           />
         </div>
         <div className="min-w-0">
           <MultiSelect
-            options={options.year}
+            options={yearOptions}
             selected={value.year ?? []}
             placeholder="Year"
             onChange={(selected) => onChange({ ...value, year: selected })}
-            disabled={loading}
+            disabled={false}
             width="w-full"
           />
         </div>
         <button
           type="button"
           onClick={onReset}
-          disabled={!hasActiveFilters || loading}
+          disabled={!hasActiveFilters}
           className={`inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-md border px-2.5 text-[11px] font-semibold transition-colors ${
             isStacked ? "col-span-1 w-full sm:col-span-2" : "caf-filter-bar__reset h-6 px-2 text-[10px]"
           } ${
-            hasActiveFilters && !loading
+            hasActiveFilters
               ? "border-white/20 bg-white/10 text-white hover:bg-white/20"
               : "cursor-not-allowed border-white/5 text-white/35"
           }`}

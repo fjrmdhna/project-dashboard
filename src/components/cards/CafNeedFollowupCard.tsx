@@ -12,7 +12,7 @@ import type {
 
 const MILESTONE_TAGS = ["RFS", "Endorse", "PATP"] as const
 
-const MOBILE_ROWS_PER_PAGE = 6
+const MOBILE_ROWS_PER_PAGE = 5
 
 function resolveRowsPerPage(
   isWallboard: boolean,
@@ -121,9 +121,11 @@ const StatusGroupPanel = memo(function StatusGroupPanel({
 
   return (
     <section
-      className={`caf-need-followup-status-group${isWallboard ? " caf-need-followup-status-group--wallboard" : ""}${
-        isWallboard && totalPages > 1 ? " caf-need-followup-status-group--paginated" : ""
-      }`}
+      className={`caf-need-followup-status-group${
+        isWallboard
+          ? " caf-need-followup-status-group--wallboard"
+          : " caf-need-followup-status-group--mobile"
+      }${isWallboard && totalPages > 1 ? " caf-need-followup-status-group--paginated" : ""}`}
       aria-label={group.label}
       style={{ ["--status-accent" as string]: group.color }}
     >
@@ -132,9 +134,10 @@ const StatusGroupPanel = memo(function StatusGroupPanel({
           <span className="caf-need-followup-status-group__title truncate" title={group.label}>
             {group.shortLabel}
           </span>
-          {group.statusTotal > 0 && !isWallboard ? (
-            <span className="caf-need-followup-status-group__meta tabular-nums">
-              {group.shareOfStatusPct}% AF complete
+          {!isWallboard ? (
+            <span className="caf-need-followup-status-group__meta truncate">
+              TLP Vendor · {vendors.length}
+              {group.statusTotal > 0 ? ` · ${group.shareOfStatusPct}% AF` : ""}
             </span>
           ) : null}
         </div>
@@ -147,12 +150,14 @@ const StatusGroupPanel = memo(function StatusGroupPanel({
         <p className="caf-need-followup-status-group__empty">No vendor data</p>
       ) : (
         <div className="caf-need-followup-status-group__body">
-          <p className="caf-need-followup-status-group__list-label">
-            TLP Vendor{" "}
-            <span className="caf-need-followup-status-group__vendor-count tabular-nums">
-              ({vendors.length})
-            </span>
-          </p>
+          {isWallboard ? (
+            <p className="caf-need-followup-status-group__list-label">
+              TLP Vendor{" "}
+              <span className="caf-need-followup-status-group__vendor-count tabular-nums">
+                ({vendors.length})
+              </span>
+            </p>
+          ) : null}
 
           <div className="caf-need-followup-status-group__list-area">
             <ul className="caf-need-followup-status-group__list">
@@ -227,7 +232,9 @@ export const CafNeedFollowupCard = memo(function CafNeedFollowupCard({
   layout?: "wallboard" | "mobile"
 }) {
   const isWallboard = layout === "wallboard"
-  const visibleGroups = data.groups.filter((group) => group.total > 0 || group.statusTotal > 0)
+  const wallboardGroups = data.groups.filter((group) => group.total > 0 || group.statusTotal > 0)
+  const mobileGroups = data.groups.filter((group) => group.total > 0)
+  const visibleGroups = isWallboard ? wallboardGroups : mobileGroups
   const groupsRef = useRef<HTMLDivElement>(null)
   const measuredWallboardRows = useWallboardRowsPerPage(
     groupsRef,
@@ -237,17 +244,21 @@ export const CafNeedFollowupCard = memo(function CafNeedFollowupCard({
 
   return (
     <div
-      className={`caf-panel-card caf-panel-card-compact caf-need-followup-card flex h-full min-h-0 w-full flex-col overflow-hidden${
-        isWallboard ? " caf-need-followup-card--wallboard" : ""
+      className={`caf-panel-card caf-panel-card-compact caf-need-followup-card flex w-full flex-col ${
+        isWallboard
+          ? "caf-need-followup-card--wallboard h-full min-h-0 overflow-hidden"
+          : "caf-need-followup-card--mobile"
       }`}
     >
-      <div className="caf-panel-header caf-panel-header-compact">
+      <div className={`caf-panel-header ${isWallboard ? "caf-panel-header-compact" : "caf-panel-header-mobile"}`}>
         <div className="flex min-w-0 flex-col gap-0.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <div className="rounded-md bg-rose-500/20 p-0.5">
-              <BellRing className="h-3 w-3 text-rose-300" />
+              <BellRing className={`${isWallboard ? "h-3 w-3" : "h-3.5 w-3.5"} text-rose-300`} />
             </div>
-            <span className="caf-subtitle text-rose-200">Need Follow-up</span>
+            <span className={`caf-subtitle text-rose-200 ${isWallboard ? "" : "text-sm"}`}>
+              Need Follow-up
+            </span>
             {isWallboard ? (
               <div
                 className="caf-need-followup-milestones caf-need-followup-milestones--inline"
@@ -263,7 +274,7 @@ export const CafNeedFollowupCard = memo(function CafNeedFollowupCard({
           </div>
           {!isWallboard ? (
             <p
-              className="truncate text-white/50 text-[10px]"
+              className="truncate text-[11px] text-white/50"
               title="Implementation statuses · AF milestones complete"
             >
               Await Impl · TLP Final · Done
@@ -271,15 +282,25 @@ export const CafNeedFollowupCard = memo(function CafNeedFollowupCard({
           ) : null}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5">
-          <div className="flex items-baseline gap-1 rounded-md bg-rose-500/10 px-1.5 py-px">
-            <span className="text-[8px] text-rose-200/70">Total</span>
-            <span className="text-[11px] font-bold tabular-nums text-rose-300">
+          <div
+            className={`flex items-baseline gap-1 rounded-md bg-rose-500/10 ${
+              isWallboard ? "px-1.5 py-px" : "px-2 py-0.5"
+            }`}
+          >
+            <span className={`text-rose-200/70 ${isWallboard ? "text-[8px]" : "text-[10px]"}`}>Total</span>
+            <span
+              className={`font-bold tabular-nums text-rose-300 ${
+                isWallboard ? "text-[11px]" : "text-sm"
+              }`}
+            >
               {data.total.toLocaleString()}
             </span>
           </div>
           {data.statusTotal > 0 ? (
             <span
-              className={`tabular-nums text-white/45 ${isWallboard ? "text-[6px] leading-none" : "text-[7px]"}`}
+              className={`tabular-nums text-white/45 ${
+                isWallboard ? "text-[6px] leading-none" : "text-[10px]"
+              }`}
             >
               {data.shareOfStatusPct}% of {data.statusTotal.toLocaleString()} in scope
             </span>
@@ -310,8 +331,10 @@ export const CafNeedFollowupCard = memo(function CafNeedFollowupCard({
       ) : (
         <div
           ref={groupsRef}
-          className={`caf-need-followup-groups min-h-0 flex-1 ${
-            isWallboard ? "caf-need-followup-groups--wallboard" : "caf-need-followup-groups--mobile"
+          className={`caf-need-followup-groups ${
+            isWallboard
+              ? "caf-need-followup-groups--wallboard min-h-0 flex-1"
+              : "caf-need-followup-groups--mobile"
           }`}
         >
           {visibleGroups.map((group) => (

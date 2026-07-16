@@ -13,6 +13,8 @@ interface UseApiCacheOptions {
   refetchOnMount?: boolean // Refetch when component mounts if data is stale
   refetchInterval?: number // Auto refetch interval in ms
   validateFn?: <T>(data: T) => boolean // Custom validation function - return false to prevent caching
+  /** Max wait for fetchFn before rejecting (default: 60s). Large payloads may need more. */
+  requestTimeoutMs?: number
 }
 
 interface UseApiCacheReturn<T> {
@@ -50,7 +52,8 @@ export function useApiCache<T>(
     cacheTime = 10 * 60 * 1000, // 10 minutes
     refetchOnMount = true,
     refetchInterval,
-    validateFn
+    validateFn,
+    requestTimeoutMs = 60_000,
   } = options
 
   const [data, setData] = useState<T | null>(null)
@@ -231,9 +234,12 @@ export function useApiCache<T>(
     let fetchSucceeded = false
     
     try {
-      // Add timeout to prevent infinite loading (60 seconds max)
+      // Abort fetch if it exceeds requestTimeoutMs (default 60s; large datasets may override)
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout after 60 seconds')), 60000)
+        setTimeout(
+          () => reject(new Error(`Request timeout after ${Math.round(requestTimeoutMs / 1000)} seconds`)),
+          requestTimeoutMs
+        )
       })
       
       const fetchPromise = Promise.race([fetchFn(), timeoutPromise])
@@ -296,7 +302,7 @@ export function useApiCache<T>(
         }
       }
     }
-  }, [cacheKey, fetchFn, getCachedData, isStale, setCachedData])
+  }, [cacheKey, fetchFn, getCachedData, isStale, setCachedData, requestTimeoutMs])
 
   // Manual refetch function
   const refetch = useCallback(async () => {

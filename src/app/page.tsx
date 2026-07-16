@@ -11,6 +11,7 @@ import { HeroHighlight, NavigationAction, ProjectCardData } from "@/types/home"
 import { getProjectProgress } from "@/lib/project-progress"
 import { getCafProgress } from "@/lib/caf-progress"
 import { HERMES_DASHBOARD_HERMES_5G, HERMES_DASHBOARD_NR_2600 } from "@/config/hermes-dashboards"
+import { AOP_DASHBOARD_DEFAULT } from "@/config/aop-dashboards"
 import { resolveMilestoneColumns } from "@/lib/hermes-milestone-fields"
 
 const heroHighlight: HeroHighlight = {
@@ -76,8 +77,8 @@ export default async function Home() {
       console.error("Error fetching Hermes 5G progress:", error)
       return { scope: 0, readiness: 0, activated: 0, progress: 0 }
     }),
-    getProjectProgress("site_data_aop").catch((error) => {
-      console.error("Error fetching AOP progress:", error)
+    getProjectProgress(AOP_DASHBOARD_DEFAULT.progressTable, AOP_DASHBOARD_DEFAULT.progressFilter).catch((error) => {
+      console.error(`Error fetching ${AOP_DASHBOARD_DEFAULT.label} progress:`, error)
       return { scope: 0, readiness: 0, activated: 0, progress: 0 }
     }),
     getProjectProgress("site_data_5g", HERMES_DASHBOARD_NR_2600.progressFilter, {
@@ -135,13 +136,13 @@ export default async function Home() {
       href: "/nr-2600",
     },
     {
-      id: "aop",
-      title: "AOP",
+      id: AOP_DASHBOARD_DEFAULT.id,
+      title: AOP_DASHBOARD_DEFAULT.label,
       category: "RAN",
       date: currentDate,
       progress: validatedAopProgress,
       mood: "primary",
-      href: "/aop",
+      href: AOP_DASHBOARD_DEFAULT.basePath,
     },
     {
       id: "tlp-new-site",
@@ -161,6 +162,7 @@ export default async function Home() {
       mood: "primary",
       href: "#",
       underConstruction: true,
+      hidden: true,
     },
     {
       id: "commercial-atp",
@@ -170,6 +172,7 @@ export default async function Home() {
       progress: 0,
       mood: "primary",
       href: "/commercial-atp",
+      hidden: true,
     },
     {
       id: "caf-monitoring",
@@ -181,6 +184,8 @@ export default async function Home() {
       href: "/caf-monitoring",
     },
   ]
+
+  const visibleProjects = projects.filter((project) => !project.hidden)
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#05050F]">
@@ -218,7 +223,7 @@ export default async function Home() {
             <section className="space-y-4 lg:hidden">
               <SectionHeader title="Ongoing Projects" actionLabel="View all" actionHref="/projects" tone="dark" />
               <div className="grid grid-cols-2 gap-4">
-                {projects.map((project) => (
+                {visibleProjects.map((project) => (
                   <ProjectCard key={project.id} project={project} />
                 ))}
               </div>
@@ -230,7 +235,7 @@ export default async function Home() {
             <section className="space-y-4 rounded-3xl bg-white/5 p-6 shadow-lg shadow-black/20 backdrop-blur">
               <SectionHeader title="Ongoing Projects" actionLabel="View all" actionHref="/projects" tone="dark" />
               <div className="grid grid-cols-2 gap-5">
-                {projects.map((project) => (
+                {visibleProjects.map((project) => (
                   <ProjectCard key={project.id} project={project} />
                 ))}
               </div>

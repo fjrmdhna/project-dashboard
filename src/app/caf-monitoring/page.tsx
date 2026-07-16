@@ -16,20 +16,12 @@ import { CafWallboard } from "@/layouts/CafWallboard"
 import { useCafDashboard } from "@/hooks/useCafDashboard"
 import { useDashboardScrollLayout } from "@/hooks/useDashboardScrollLayout"
 import { CAF_WALLBOARD_PANELS } from "@/config/caf-wallboard-panels"
-import { cafFiltersToQueryString, type CafSiteFilters } from "@/lib/caf-filters"
-
-function countActiveCafFilterGroups(filters: CafSiteFilters): number {
-  let count = 0
-  if (filters.q?.trim()) count += 1
-  if ((filters.project_name?.length ?? 0) > 0) count += 1
-  if ((filters.caf_status?.length ?? 0) > 0) count += 1
-  if ((filters.vendor_tlp_name?.length ?? 0) > 0) count += 1
-  if ((filters.vendor_requestor_name?.length ?? 0) > 0) count += 1
-  if ((filters.caf_type?.length ?? 0) > 0) count += 1
-  if ((filters.avp?.length ?? 0) > 0) count += 1
-  if ((filters.year?.length ?? 0) > 0) count += 1
-  return count
-}
+import {
+  cafFiltersToQueryString,
+  countActiveCafFilterGroups,
+  getClearedCafSiteFilters,
+  type CafSiteFilters,
+} from "@/lib/caf-filters"
 
 export default function CafMonitoringPage() {
   const [filters, setFilters] = useState<CafSiteFilters>(getInitialCafFilters)
@@ -46,6 +38,7 @@ export default function CafMonitoringPage() {
 
   const {
     hasData,
+    filterOptions,
     statusBreakdown,
     funnelTotal,
     statusVendorPending,
@@ -112,7 +105,7 @@ export default function CafMonitoringPage() {
   }, [filters])
 
   const handleFilterReset = useCallback(() => {
-    setFilters(getInitialCafFilters())
+    setFilters(getClearedCafSiteFilters())
   }, [])
 
   const renderMobileCard = (card: ReactNode, minHeight?: number) => {
@@ -133,7 +126,6 @@ export default function CafMonitoringPage() {
       />
     )
   }
-
   const pipelineWallboard = (
     <CafPipelineCard breakdown={statusBreakdown} layout="wallboard" />
   )
@@ -301,6 +293,7 @@ export default function CafMonitoringPage() {
                   value={filters}
                   onChange={setFilters}
                   onReset={handleFilterReset}
+                  options={filterOptions}
                 />
               </div>
             ) : null}
@@ -309,7 +302,7 @@ export default function CafMonitoringPage() {
 
         <section className="caf-mobile-layout__cards px-4 pt-4 pb-8 space-y-4">
           {renderMobileCard(pipelineMobile)}
-          {picPendingMobile ? renderMobileCard(picPendingMobile, 420) : null}
+          {picPendingMobile ? renderMobileCard(picPendingMobile) : null}
           {needFollowupMobile ? renderMobileCard(needFollowupMobile) : null}
           {renderMobileCard(dailyRunrateCardMobile, 220)}
           {statusVendorFollowupCard ? renderMobileCard(statusVendorFollowupCard, 260) : null}
@@ -330,6 +323,7 @@ export default function CafMonitoringPage() {
           value={filters}
           onChange={setFilters}
           onReset={handleFilterReset}
+          options={filterOptions}
         />
       }
       matrixStats={pipelineWallboard}
