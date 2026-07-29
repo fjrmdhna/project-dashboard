@@ -51,7 +51,7 @@ export interface HermesDashboardConfig {
   milestoneFields?: HermesMilestoneFields
   /** Progress curve series columns/labels (e.g. NR 2600 four-line curve) */
   progressCurveFields?: HermesProgressCurveFields
-  /** Filter fields to hide from FilterBar (e.g. NR 2600 has no program_report filter) */
+  /** Filter fields to hide from FilterBar (e.g. Hermes 5G hides program_report) */
   hiddenFilters?: ReadonlyArray<keyof FilterValue>
   /** Daily runrate milestone pair — default activated (Hermes), NR 2600 uses readiness */
   dailyRunrateMilestone?: HermesDailyRunrateMilestone
@@ -121,7 +121,6 @@ export const HERMES_DASHBOARD_NR_2600: HermesDashboardConfig = {
   progressFilter: NR_2600_PROGRAM_REPORT_SCOPE,
   milestoneFields: NR_2600_MILESTONE_FIELDS,
   progressCurveFields: NR_2600_PROGRESS_CURVE_FIELDS,
-  hiddenFilters: ["program_report"],
   dailyRunrateMilestone: "readiness",
   dailyRunrateTitle: "Daily Readiness Runrate – Last 7 Days",
   cityMilestoneCard: NR_2600_MOS_BY_CITY_CARD,

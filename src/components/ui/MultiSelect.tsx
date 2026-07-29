@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react"
 import { createPortal, flushSync } from "react-dom"
 import { Check, ChevronDown, X } from "lucide-react"
 
@@ -16,6 +16,39 @@ export interface MultiSelectProps {
   staticLabel?: boolean
   /** When true, treat option selection as case-insensitive (e.g. "Active" matches "active"). Use for fields like WBS Status where API may return different casing. */
   caseInsensitiveMatch?: boolean
+}
+
+/** Native title tooltip only when text is visually truncated (scrollWidth > clientWidth). */
+function useTruncationTitle(text: string) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [isTruncated, setIsTruncated] = useState(false)
+
+  const measure = useCallback(() => {
+    const el = ref.current
+    if (!el) {
+      setIsTruncated(false)
+      return
+    }
+    setIsTruncated(el.scrollWidth > el.clientWidth + 1)
+  }, [])
+
+  useLayoutEffect(() => {
+    measure()
+  }, [text, measure])
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === "undefined") return
+
+    const observer = new ResizeObserver(() => measure())
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [measure])
+
+  return {
+    ref,
+    title: isTruncated ? text : undefined,
+  } as const
 }
 
 export function MultiSelect({
@@ -142,6 +175,8 @@ export function MultiSelect({
       : selected.length === 1
         ? selected[0]
         : `${selected.length} selected`
+
+  const { ref: labelRef, title: labelTitle } = useTruncationTitle(label)
   
   // Determine button width based on placeholder
   const getButtonWidth = () => {
@@ -233,7 +268,7 @@ export function MultiSelect({
               <div className="flex-shrink-0 w-3.5 h-3.5 border rounded flex items-center justify-center border-white/20">
                 {isOptionSelected(option) && <Check className="h-2.5 w-2.5 text-blue-500" />}
               </div>
-              <span className="responsive-text-sm text-white truncate">{option}</span>
+              <TruncatedOptionText text={option} />
             </button>
             ))
           })()}
@@ -248,15 +283,29 @@ export function MultiSelect({
       <button
         ref={buttonRef}
         type="button"
+        title={labelTitle}
         className={`bg-white/5 rounded-md h-6 px-1.5 inline-flex items-center justify-between text-white min-w-0 ${getButtonWidth()}`}
         onClick={handleToggle}
         disabled={disabled}
       >
-        <span className="truncate min-w-0 text-xs text-left">{label}</span>
+        <span ref={labelRef} className="truncate min-w-0 text-xs text-left">{label}</span>
         <ChevronDown className="h-3 w-3 opacity-70 flex-shrink-0" />
       </button>
 
       {open && isMounted && createPortal(<Menu />, document.body)}
     </div>
+  )
+}
+
+function TruncatedOptionText({ text }: { text: string }) {
+  const { ref, title } = useTruncationTitle(text)
+  return (
+    <span
+      ref={ref}
+      className="responsive-text-sm text-white truncate"
+      title={title}
+    >
+      {text}
+    </span>
   )
 } 

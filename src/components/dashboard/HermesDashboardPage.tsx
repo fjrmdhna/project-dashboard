@@ -80,7 +80,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
   const filterOptionsEndpoint = getHermesFilterOptionsEndpoint(config)
   const hideProgramReport = hiddenFilters.includes("program_report")
 
-  // Clear persisted program filter when this dashboard hides it (e.g. NR 2600)
+  // Clear persisted program filter when this dashboard hides it (e.g. Hermes 5G)
   useEffect(() => {
     if (!hideProgramReport || !filterContext.isHydrated) return
     if (filterContext.programFilter !== "all") {

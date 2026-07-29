@@ -122,6 +122,8 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
   const isFilterHidden = (key: keyof FilterValue) => hiddenFilterSet.has(key)
   // State lokal untuk search input (sebelum debounce)
   const [searchInput, setSearchInput] = useState(value.q)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [isSearchExpanded, setIsSearchExpanded] = useState(() => Boolean(value.q))
   
   // Initialize options from cache immediately if available (even if stale) to keep dropdowns interactive
   const cachedOnMount = FILTER_OPTIONS_CACHE.get(cacheKey)
@@ -362,6 +364,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
   // Handler untuk reset semua filter
   const handleReset = () => {
     setSearchInput("")
+    setIsSearchExpanded(false)
     onReset?.()
     onChange({ q: "", vendor_name: [], program_report: [], imp_ttp: [], nano_cluster: [], status: [], region: [], year: [], circle: [], site_category: [], ran_score: [], pm_indosat: [], wbs_status: [], priority_congest_urgent: [], trial_gb_factory: [] })
   }
@@ -370,6 +373,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
   const removeFilter = (type: keyof FilterValue, item?: string) => {
     if (type === 'q') {
       setSearchInput("")
+      setIsSearchExpanded(false)
       onChange({ ...value, q: "" })
     } else if (item && Array.isArray(value[type])) {
       onChange({
@@ -409,10 +413,24 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
 
   // Single-row layout for Hermes (variant default + singleRow): one compact row, no scroll, fits viewport
   const isHermesSingleRow = variant === "default" && singleRow
+  const showExpandedSearch = isSearchExpanded || Boolean(searchInput)
+
+  const expandSearch = useCallback(() => {
+    setIsSearchExpanded(true)
+    requestAnimationFrame(() => searchInputRef.current?.focus())
+  }, [])
+
+  const collapseSearchIfEmpty = useCallback(() => {
+    if (!searchInput.trim()) {
+      setIsSearchExpanded(false)
+    }
+  }, [searchInput])
 
   // Use inline grid columns — dynamic Tailwind arbitrary values (repeat(N,...)) are not generated at build time
   const singleRowGridStyle: CSSProperties = {
-    gridTemplateColumns: `minmax(0, 1.4fr) repeat(${singleRowFilterCount}, minmax(0, 1fr)) auto`,
+    gridTemplateColumns: showExpandedSearch
+      ? `minmax(0, 1.4fr) repeat(${singleRowFilterCount}, minmax(0, 1fr)) auto`
+      : `auto repeat(${singleRowFilterCount}, minmax(0, 1fr)) auto`,
   }
 
   const rowGridClass =
@@ -427,26 +445,45 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
           className="grid gap-1.5 w-full items-center text-xs"
           style={singleRowGridStyle}
         >
-          <div className="min-w-0 relative">
-            <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search by site..."
-              className="w-full min-w-0 bg-white/5 rounded-md h-6 pl-5 pr-5 text-xs text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => setSearchInput("")}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-                aria-label="Clear search"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
+          {showExpandedSearch ? (
+            <div className="min-w-0 relative">
+              <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onBlur={collapseSearchIfEmpty}
+                placeholder="Search by site..."
+                aria-label="Search by site"
+                className="w-full min-w-0 bg-white/5 rounded-md h-6 pl-5 pr-5 text-xs text-white placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-white/20"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setSearchInput("")
+                    searchInputRef.current?.focus()
+                  }}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={expandSearch}
+              className="inline-flex items-center justify-center rounded-md h-6 w-6 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
+              aria-label="Open search"
+              title="Search by site"
+            >
+              <Search className="h-3 w-3" />
+            </button>
+          )}
           <div className="min-w-0">
             <MultiSelect options={options.vendors} selected={value.vendor_name} placeholder="Vendor" onChange={handleVendorChange} disabled={false} width="w-full" staticLabel />
           </div>
