@@ -20,11 +20,10 @@ export const HERMES_5G_PROGRAM_REPORT_SCOPE: HermesDashboardDataScope = {
   wbs_status: HERMES_DASHBOARD_ACTIVE_WBS_STATUS,
 }
 
-/** NR 2600: program_report contains "13k" and wbs_status is Active */
+/** NR 2600: include every WBS status whose program_report contains "13k" */
 export const NR_2600_PROGRAM_REPORT_SCOPE: HermesDashboardDataScope = {
   program_report: "13k",
   program_report_match: "contains",
-  wbs_status: HERMES_DASHBOARD_ACTIVE_WBS_STATUS,
 }
 
 export interface HermesDashboardConfig {
@@ -116,7 +115,7 @@ export const HERMES_DASHBOARD_NR_2600: HermesDashboardConfig = {
   basePath: "/nr-2600",
   filterStorageKey: "nr-2600-filter-state",
   exportPrefix: "nr-2600",
-  mapCacheKey: "nr-2600-map-13k-active-v1",
+  mapCacheKey: "nr-2600-map-13k-all-status-v2",
   dataScope: NR_2600_PROGRAM_REPORT_SCOPE,
   progressFilter: NR_2600_PROGRAM_REPORT_SCOPE,
   milestoneFields: NR_2600_MILESTONE_FIELDS,
