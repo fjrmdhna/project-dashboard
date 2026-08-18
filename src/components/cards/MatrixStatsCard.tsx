@@ -3,6 +3,9 @@
 import { useMemo } from "react"
 import { BarChart3 } from "lucide-react"
 import {
+  createExtraMilestoneCounts,
+  getExtraMatrixMilestones,
+  incrementExtraMilestoneCounts,
   isMilestoneAchieved,
   resolveMilestoneColumns,
   type HermesMilestoneFields,
@@ -29,6 +32,7 @@ export interface Row {
   patp_accepted_af?: string | null
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
+  activation_700_af?: string | null
   vendor_name?: string | null
   program_report?: string | null
   imp_ttp?: string | null
@@ -75,6 +79,7 @@ export interface MatrixStatsCardProps {
     hotnews?: number
     endorse?: number
     pac?: number
+    extraMilestones?: Record<string, number>
   }
 }
 
@@ -169,13 +174,7 @@ const AOP_METRIC_CONFIG = [
   { key: "pac", label: "PAC" }
 ] as const
 
-type MetricKey =
-  | (typeof DEFAULT_METRIC_CONFIG)[number]["key"]
-  | (typeof AOP_METRIC_CONFIG)[number]["key"]
-  | (typeof TLP_METRIC_CONFIG)[number]["key"]
-  | (typeof CAF_METRIC_CONFIG)[number]["key"]
-
-type MetricMap = Partial<Record<MetricKey, number>>
+type MetricMap = Partial<Record<string, number>>
 
 function MetricItem({
   label,
@@ -244,6 +243,7 @@ function normalizeSiteStatus(value: string | null | undefined): string {
 
 export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layout = "default", milestoneFields, stats: providedStats }: MatrixStatsCardProps) {
   const { readinessColumn, activatedColumn } = resolveMilestoneColumns(milestoneFields)
+  const extraMilestones = getExtraMatrixMilestones(milestoneFields)
 
   const stats = useMemo(() => {
     const countReadiness = (data: Row[]) =>
@@ -251,6 +251,12 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
 
     const countActivated = (data: Row[]) =>
       data.filter((row) => isMilestoneAchieved(row, activatedColumn)).length
+
+    const countExtraMilestones = (data: Row[]) => {
+      const counts = createExtraMilestoneCounts(extraMilestones)
+      for (const row of data) incrementExtraMilestoneCounts(row, extraMilestones, counts)
+      return counts
+    }
 
     if (variant === "caf" && providedStats) {
       return {
@@ -351,7 +357,8 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
         patp: providedStats.patp ?? patpCount ?? rows.filter(row => row.patp_accepted_af).length,
         hotnews: providedStats.hotnews ?? rows.filter(row => row.hotnews_af).length,
         endorse: providedStats.endorse ?? rows.filter(row => row.endorse_af).length,
-        pac: providedStats.pac ?? rows.filter(row => row.pac_accepted_af).length
+        pac: providedStats.pac ?? rows.filter(row => row.pac_accepted_af).length,
+        extraMilestones: providedStats.extraMilestones ?? countExtraMilestones(rows),
       }
     }
     
@@ -416,10 +423,11 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
       patp,
       hotnews,
       endorse,
-      pac
+      pac,
+      extraMilestones: countExtraMilestones(rows),
     }
     }
-  }, [rows, patpCount, variant, providedStats, readinessColumn, activatedColumn])
+  }, [rows, patpCount, variant, providedStats, readinessColumn, activatedColumn, extraMilestones])
 
   const metricConfig = useMemo(() => {
     const base =
@@ -430,13 +438,26 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
           : variant === "caf"
             ? CAF_METRIC_CONFIG
             : DEFAULT_METRIC_CONFIG
-    if (!milestoneFields || variant !== "default") return base
-    return base.map((metric) => {
+    if (!milestoneFields || variant !== "default") return [...base]
+    const withLabels = base.map((metric) => {
       if (metric.key === "readiness") return { ...metric, label: milestoneFields.readinessLabel }
       if (metric.key === "activated") return { ...metric, label: milestoneFields.activatedLabel }
       return metric
     })
-  }, [variant, milestoneFields])
+    if (extraMilestones.length === 0) return withLabels
+
+    const extraItems = extraMilestones.map((milestone) => ({
+      key: milestone.key,
+      label: milestone.label,
+    }))
+    const activatedIndex = withLabels.findIndex((metric) => metric.key === "activated")
+    const insertAt = activatedIndex >= 0 ? activatedIndex + 1 : withLabels.length
+    return [
+      ...withLabels.slice(0, insertAt),
+      ...extraItems,
+      ...withLabels.slice(insertAt),
+    ]
+  }, [variant, milestoneFields, extraMilestones])
 
   const metrics: MetricMap =
     variant === "caf"
@@ -486,6 +507,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
             hotnews: stats.hotnews,
             endorse: stats.endorse,
             pac: stats.pac,
+            ...stats.extraMilestones,
           }
 
   const isCafMobile = variant === "caf" && layout === "mobile"

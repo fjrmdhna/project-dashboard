@@ -1,3 +1,10 @@
+/** Extra Matrix Statistics milestone inserted after Activated */
+export interface HermesExtraMatrixMilestone {
+  key: string
+  column: string
+  label: string
+}
+
 export interface HermesMilestoneFields {
   /** DB column for readiness count (e.g. readiness_2600_af) */
   readinessColumn: string
@@ -11,6 +18,14 @@ export interface HermesMilestoneFields {
   readinessCardTitle: string
   /** Activation chart header badge */
   activatedCardTitle: string
+  /** Optional extra matrix metrics shown after Activated (NR 2600 → Activated 700) */
+  extraMatrixMilestones?: readonly HermesExtraMatrixMilestone[]
+}
+
+export const NR_2600_ACTIVATED_700_MILESTONE: HermesExtraMatrixMilestone = {
+  key: "activated700",
+  column: "activation_700_af",
+  label: "ACTIVATED 700",
 }
 
 export const NR_2600_MILESTONE_FIELDS: HermesMilestoneFields = {
@@ -20,6 +35,7 @@ export const NR_2600_MILESTONE_FIELDS: HermesMilestoneFields = {
   activatedLabel: "ACTIVATED 2600",
   readinessCardTitle: "2600 Readiness by City",
   activatedCardTitle: "2600 Activation by City",
+  extraMatrixMilestones: [NR_2600_ACTIVATED_700_MILESTONE],
 }
 
 /** Metric key for pre-aggregated city bar charts */
@@ -86,4 +102,28 @@ export function resolveMilestoneColumns(
 export function isMilestoneAchieved(row: object, column: string): boolean {
   const value = (row as Record<string, unknown>)[column]
   return value != null && String(value).trim() !== ""
+}
+
+export function getExtraMatrixMilestones(
+  milestoneFields?: HermesMilestoneFields
+): readonly HermesExtraMatrixMilestone[] {
+  return milestoneFields?.extraMatrixMilestones ?? []
+}
+
+export function createExtraMilestoneCounts(
+  extras: readonly HermesExtraMatrixMilestone[]
+): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const extra of extras) counts[extra.key] = 0
+  return counts
+}
+
+export function incrementExtraMilestoneCounts(
+  row: object,
+  extras: readonly HermesExtraMatrixMilestone[],
+  counts: Record<string, number>
+): void {
+  for (const extra of extras) {
+    if (isMilestoneAchieved(row, extra.column)) counts[extra.key]++
+  }
 }

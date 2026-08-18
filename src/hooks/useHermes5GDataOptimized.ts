@@ -14,6 +14,9 @@ import {
 } from '@/lib/hermes-dashboard-scope'
 import { getHermesSiteDataEndpoint } from '@/config/hermes-dashboards'
 import {
+  createExtraMilestoneCounts,
+  getExtraMatrixMilestones,
+  incrementExtraMilestoneCounts,
   isMilestoneAchieved,
   resolveMilestoneColumns,
   type HermesMilestoneFields,
@@ -46,6 +49,7 @@ export interface Hermes5GSiteData extends MatrixRow {
   issue_category?: string | null
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
+  activation_700_af?: string | null
   wbs_status?: string | null
 }
 
@@ -64,6 +68,7 @@ export interface Hermes5GDataStats {
   pac: number
   patp: number
   nanoClusters: number
+  extraMilestones: Record<string, number>
 }
 
 // Daily runrate item for chart
@@ -150,7 +155,8 @@ const EMPTY_STATS: Hermes5GDataStats = {
   endorse: 0,
   pac: 0,
   patp: 0,
-  nanoClusters: 0
+  nanoClusters: 0,
+  extraMilestones: {},
 }
 
 // Normalize site_category for filter matching (consistent with AOP: New Site / Expansion)
@@ -506,6 +512,8 @@ function aggregateDataSinglePassWithStats(
   dailyRunrateMilestone: HermesDailyRunrateMilestone = "activated",
 ): Hermes5GAggregationResult {
   const { readinessColumn, activatedColumn } = resolveMilestoneColumns(milestoneFields)
+  const extraMilestoneDefs = getExtraMatrixMilestones(milestoneFields)
+  const extraMilestones = createExtraMilestoneCounts(extraMilestoneDefs)
   const dailyRunrateSeries = resolveDailyRunrateSeries(progressCurveFields, dailyRunrateMilestone)
   const byCity = new Map<string, { total: number; ready: number; activated: number; mos: number }>()
   const byNanoCluster = new Map<string, { total: number; ready: number; activated: number }>()
@@ -544,6 +552,7 @@ function aggregateDataSinglePassWithStats(
     if (row.ic_000040_af) install++
     if (isMilestoneAchieved(row, readinessColumn)) readiness++
     if (isMilestoneAchieved(row, activatedColumn)) activated++
+    incrementExtraMilestoneCounts(row, extraMilestoneDefs, extraMilestones)
     if (row.ready_for_acpt_date) rfa++
     if (row.rfc_approved) rfc++
     if (row.fatp_accepted_af) fatp++
@@ -682,7 +691,8 @@ function aggregateDataSinglePassWithStats(
       endorse,
       pac,
       patp,
-      nanoClusters: uniqueClusters.size
+      nanoClusters: uniqueClusters.size,
+      extraMilestones,
     }
   }
 }
@@ -726,7 +736,8 @@ function calculateStatsFromFilteredData(data: Hermes5GSiteData[]): Hermes5GDataS
     endorse,
     pac,
     patp,
-    nanoClusters: uniqueClusters.size
+    nanoClusters: uniqueClusters.size,
+    extraMilestones: {},
   }
 }
 
@@ -788,6 +799,13 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
         // Invalidate stale cache missing wbs_status when dashboard scope requires it
         if (dataScope?.wbs_status && typedData.data.length > 0 && typedData.data[0].wbs_status == null) {
           return false
+        }
+        const extraColumns = getExtraMatrixMilestones(milestoneFields)
+        if (extraColumns.length > 0 && typedData.data.length > 0) {
+          const sample = typedData.data[0] as unknown as Record<string, unknown>
+          if (extraColumns.some((milestone) => !(milestone.column in sample))) {
+            return false
+          }
         }
         return true
       }

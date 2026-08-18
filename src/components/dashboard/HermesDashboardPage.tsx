@@ -498,7 +498,8 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
         fatp: hermesStats.fatp,
         hotnews: hermesStats.hotnews,
         endorse: hermesStats.endorse,
-        pac: hermesStats.pac
+        pac: hermesStats.pac,
+        extraMilestones: hermesStats.extraMilestones,
       } : undefined}
     />
   )
