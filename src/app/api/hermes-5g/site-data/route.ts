@@ -68,6 +68,7 @@ const MINIMAL_COLUMNS = [
   'patp_accepted_af',  // PATP stats
   'readiness_2600_af', // NR 2600 readiness milestone
   'activation_2600_af', // NR 2600 activation milestone
+  'readiness_700_af', // NR 2600 readiness 700 milestone
   'activation_700_af', // NR 2600 activated 700 milestone
   'issue_category',    // TopIssue - client-side calculation
 ]
@@ -141,6 +142,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       patp_accepted_af: row.patp_accepted_af || null,
       readiness_2600_af: row.readiness_2600_af || null,
       activation_2600_af: row.activation_2600_af || null,
+      readiness_700_af: row.readiness_700_af || null,
       activation_700_af: row.activation_700_af || null,
       issue_category: row.issue_category || null,
     }))

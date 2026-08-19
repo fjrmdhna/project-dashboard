@@ -49,6 +49,7 @@ export interface Hermes5GSiteData extends MatrixRow {
   issue_category?: string | null
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
+  readiness_700_af?: string | null
   activation_700_af?: string | null
   wbs_status?: string | null
 }

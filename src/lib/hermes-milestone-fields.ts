@@ -18,8 +18,14 @@ export interface HermesMilestoneFields {
   readinessCardTitle: string
   /** Activation chart header badge */
   activatedCardTitle: string
-  /** Optional extra matrix metrics shown after Activated (NR 2600 → Activated 700) */
+  /** Optional extra matrix metrics shown after Activated (NR 2600 → Readiness 700, Activated 700) */
   extraMatrixMilestones?: readonly HermesExtraMatrixMilestone[]
+}
+
+export const NR_2600_READINESS_700_MILESTONE: HermesExtraMatrixMilestone = {
+  key: "readiness700",
+  column: "readiness_700_af",
+  label: "READINESS 700",
 }
 
 export const NR_2600_ACTIVATED_700_MILESTONE: HermesExtraMatrixMilestone = {
@@ -35,7 +41,7 @@ export const NR_2600_MILESTONE_FIELDS: HermesMilestoneFields = {
   activatedLabel: "ACTIVATED 2600",
   readinessCardTitle: "2600 Readiness by City",
   activatedCardTitle: "2600 Activation by City",
-  extraMatrixMilestones: [NR_2600_ACTIVATED_700_MILESTONE],
+  extraMatrixMilestones: [NR_2600_READINESS_700_MILESTONE, NR_2600_ACTIVATED_700_MILESTONE],
 }
 
 /** Metric key for pre-aggregated city bar charts */
