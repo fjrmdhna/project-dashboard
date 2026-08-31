@@ -14,6 +14,8 @@ export interface HermesMilestoneFields {
   readinessLabel: string
   /** Matrix stats label for activated milestone */
   activatedLabel: string
+  /** Matrix stats label for RFC milestone (NR 2600 → SSV Released) */
+  rfcLabel?: string
   /** Readiness chart header badge */
   readinessCardTitle: string
   /** Activation chart header badge */
@@ -39,6 +41,7 @@ export const NR_2600_MILESTONE_FIELDS: HermesMilestoneFields = {
   activatedColumn: "activation_2600_af",
   readinessLabel: "READINESS 2600",
   activatedLabel: "ACTIVATED 2600",
+  rfcLabel: "SSV Released",
   readinessCardTitle: "2600 Readiness by City",
   activatedCardTitle: "2600 Activation by City",
   extraMatrixMilestones: [NR_2600_READINESS_700_MILESTONE, NR_2600_ACTIVATED_700_MILESTONE],

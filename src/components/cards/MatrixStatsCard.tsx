@@ -443,6 +443,9 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
     const withLabels = base.map((metric) => {
       if (metric.key === "readiness") return { ...metric, label: milestoneFields.readinessLabel }
       if (metric.key === "activated") return { ...metric, label: milestoneFields.activatedLabel }
+      if (metric.key === "rfc" && milestoneFields.rfcLabel) {
+        return { ...metric, label: milestoneFields.rfcLabel }
+      }
       return metric
     })
     if (extraMilestones.length === 0) return withLabels
