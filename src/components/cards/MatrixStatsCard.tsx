@@ -3,9 +3,8 @@
 import { useMemo } from "react"
 import { BarChart3 } from "lucide-react"
 import {
-  createExtraMilestoneCounts,
+  countExtraMilestones,
   getExtraMatrixMilestones,
-  incrementExtraMilestoneCounts,
   isMilestoneAchieved,
   resolveMilestoneColumns,
   type HermesMilestoneFields,
@@ -32,8 +31,7 @@ export interface Row {
   patp_accepted_af?: string | null
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
-  readiness_700_af?: string | null
-  activation_700_af?: string | null
+  ftr_submit?: string | null
   vendor_name?: string | null
   program_report?: string | null
   imp_ttp?: string | null
@@ -48,6 +46,8 @@ export interface MatrixStatsCardProps {
   /** `mobile` — stacked pipeline layout for narrow viewports (CAF variant only) */
   layout?: "default" | "mobile"
   milestoneFields?: HermesMilestoneFields
+  /** Supplemental rows for scoped extra milestones (e.g. NR700 on NR dashboard) */
+  supplementalRows?: Row[]
   stats?: {
     totalSites?: number
     // CAF variant stats
@@ -242,7 +242,7 @@ function normalizeSiteStatus(value: string | null | undefined): string {
   return normalized
 }
 
-export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layout = "default", milestoneFields, stats: providedStats }: MatrixStatsCardProps) {
+export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layout = "default", milestoneFields, supplementalRows = [], stats: providedStats }: MatrixStatsCardProps) {
   const { readinessColumn, activatedColumn } = resolveMilestoneColumns(milestoneFields)
   const extraMilestones = getExtraMatrixMilestones(milestoneFields)
 
@@ -253,11 +253,8 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
     const countActivated = (data: Row[]) =>
       data.filter((row) => isMilestoneAchieved(row, activatedColumn)).length
 
-    const countExtraMilestones = (data: Row[]) => {
-      const counts = createExtraMilestoneCounts(extraMilestones)
-      for (const row of data) incrementExtraMilestoneCounts(row, extraMilestones, counts)
-      return counts
-    }
+    const countExtraMilestoneStats = (data: Row[]) =>
+      countExtraMilestones(extraMilestones, data, supplementalRows)
 
     if (variant === "caf" && providedStats) {
       return {
@@ -359,7 +356,7 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
         hotnews: providedStats.hotnews ?? rows.filter(row => row.hotnews_af).length,
         endorse: providedStats.endorse ?? rows.filter(row => row.endorse_af).length,
         pac: providedStats.pac ?? rows.filter(row => row.pac_accepted_af).length,
-        extraMilestones: providedStats.extraMilestones ?? countExtraMilestones(rows),
+        extraMilestones: providedStats.extraMilestones ?? countExtraMilestoneStats(rows),
       }
     }
     
@@ -425,10 +422,10 @@ export function MatrixStatsCard({ rows, patpCount = 0, variant = "default", layo
       hotnews,
       endorse,
       pac,
-      extraMilestones: countExtraMilestones(rows),
+      extraMilestones: countExtraMilestoneStats(rows),
     }
     }
-  }, [rows, patpCount, variant, providedStats, readinessColumn, activatedColumn, extraMilestones])
+  }, [rows, supplementalRows, patpCount, variant, providedStats, readinessColumn, activatedColumn, extraMilestones])
 
   const metricConfig = useMemo(() => {
     const base =

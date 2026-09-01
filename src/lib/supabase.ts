@@ -34,8 +34,7 @@ export interface SiteData5G {
   patp_accepted_af?: string
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
-  readiness_700_af?: string | null
-  activation_700_af?: string | null
+  ftr_submit?: string | null
   site_id?: string
   site_name?: string
   lat?: number | null
@@ -162,8 +161,7 @@ export async function getSiteData5G(
     'patp_accepted_af',  // PATP stats
     'readiness_2600_af',   // NR 2600 readiness milestone
     'activation_2600_af',  // NR 2600 activation milestone
-    'readiness_700_af',    // NR 2600 readiness 700 milestone
-    'activation_700_af',   // NR 2600 activated 700 milestone
+    'ftr_submit',          // NR 2600 FTR milestone
     'site_id',
     'site_name',
     'lat',

@@ -3,6 +3,8 @@ export interface HermesExtraMatrixMilestone {
   key: string
   column: string
   label: string
+  /** When set, only rows with this exact program_report are counted */
+  programReport?: string
 }
 
 export interface HermesMilestoneFields {
@@ -20,20 +22,28 @@ export interface HermesMilestoneFields {
   readinessCardTitle: string
   /** Activation chart header badge */
   activatedCardTitle: string
-  /** Optional extra matrix metrics shown after Activated (NR 2600 → Readiness 700, Activated 700) */
+  /** Optional extra matrix metrics shown after Activated (NR 2600 → FTR, Readiness 700, Activated 700) */
   extraMatrixMilestones?: readonly HermesExtraMatrixMilestone[]
+}
+
+export const NR_2600_FTR_MILESTONE: HermesExtraMatrixMilestone = {
+  key: "ftr",
+  column: "ftr_submit",
+  label: "FTR",
 }
 
 export const NR_2600_READINESS_700_MILESTONE: HermesExtraMatrixMilestone = {
   key: "readiness700",
-  column: "readiness_700_af",
+  column: "ic_000040_af",
   label: "READINESS 700",
+  programReport: "NR700",
 }
 
 export const NR_2600_ACTIVATED_700_MILESTONE: HermesExtraMatrixMilestone = {
   key: "activated700",
-  column: "activation_700_af",
+  column: "rfs_af",
   label: "ACTIVATED 700",
+  programReport: "NR700",
 }
 
 export const NR_2600_MILESTONE_FIELDS: HermesMilestoneFields = {
@@ -44,7 +54,11 @@ export const NR_2600_MILESTONE_FIELDS: HermesMilestoneFields = {
   rfcLabel: "SSV Released",
   readinessCardTitle: "2600 Readiness by City",
   activatedCardTitle: "2600 Activation by City",
-  extraMatrixMilestones: [NR_2600_READINESS_700_MILESTONE, NR_2600_ACTIVATED_700_MILESTONE],
+  extraMatrixMilestones: [
+    NR_2600_FTR_MILESTONE,
+    NR_2600_READINESS_700_MILESTONE,
+    NR_2600_ACTIVATED_700_MILESTONE,
+  ],
 }
 
 /** Metric key for pre-aggregated city bar charts */
@@ -113,6 +127,14 @@ export function isMilestoneAchieved(row: object, column: string): boolean {
   return value != null && String(value).trim() !== ""
 }
 
+export function matchesExtraMilestoneRow(row: object, extra: HermesExtraMatrixMilestone): boolean {
+  if (extra.programReport) {
+    const programReport = (row as { program_report?: string | null }).program_report
+    if (programReport !== extra.programReport) return false
+  }
+  return isMilestoneAchieved(row, extra.column)
+}
+
 export function getExtraMatrixMilestones(
   milestoneFields?: HermesMilestoneFields
 ): readonly HermesExtraMatrixMilestone[] {
@@ -133,6 +155,25 @@ export function incrementExtraMilestoneCounts(
   counts: Record<string, number>
 ): void {
   for (const extra of extras) {
-    if (isMilestoneAchieved(row, extra.column)) counts[extra.key]++
+    if (matchesExtraMilestoneRow(row, extra)) counts[extra.key]++
   }
+}
+
+export function countExtraMilestones(
+  extras: readonly HermesExtraMatrixMilestone[],
+  defaultRows: readonly object[],
+  supplementalRows: readonly object[] = []
+): Record<string, number> {
+  const counts = createExtraMilestoneCounts(extras)
+  const scopedExtras = extras.filter((extra) => extra.programReport)
+  const defaultExtras = extras.filter((extra) => !extra.programReport)
+
+  for (const row of defaultRows) {
+    incrementExtraMilestoneCounts(row, defaultExtras, counts)
+  }
+  for (const row of supplementalRows) {
+    incrementExtraMilestoneCounts(row, scopedExtras, counts)
+  }
+
+  return counts
 }

@@ -153,7 +153,8 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
 
   // Fetch data from API menggunakan debounced filter with stable references
   const { 
-    data: hermesData, 
+    data: hermesData,
+    supplementalData: hermesSupplementalData,
     stats: hermesStats, 
     aggregated: hermesAggregated, 
     loading: hermesLoading, 
@@ -169,6 +170,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
     siteCategories: [], // Hermes uses RAN Score filter instead of Site Category
     search: stableSearch,
     dataScope: config.dataScope,
+    supplementalDataScopes: config.supplementalDataScopes,
     milestoneFields: config.milestoneFields,
     progressCurveFields: config.progressCurveFields,
     dailyRunrateMilestone: config.dailyRunrateMilestone,
@@ -177,6 +179,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
   // Use deferred value for rows only (heavy visual component)
   const deferredAggregated = useDeferredValue(hermesAggregated)
   const rows = useDeferredValue(hermesData || [])
+  const supplementalRows = useDeferredValue(hermesSupplementalData || [])
   const isStaleData = rows !== hermesData
 
   // Get top issues and daily runrate from aggregated data (client-side)
@@ -483,6 +486,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
   const matrixStats = (
     <MatrixStatsCard 
       rows={rows} 
+      supplementalRows={supplementalRows}
       patpCount={hermesStats?.patp || 0}
       milestoneFields={config.milestoneFields}
       stats={hermesStats ? {

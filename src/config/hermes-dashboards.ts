@@ -26,6 +26,11 @@ export const NR_2600_PROGRAM_REPORT_SCOPE: HermesDashboardDataScope = {
   program_report_match: "contains",
 }
 
+/** Supplemental scope for NR 700 matrix milestones (not part of main 13k scope) */
+export const NR_2600_SUPPLEMENTAL_PROGRAM_REPORT_SCOPES: readonly HermesDashboardDataScope[] = [
+  { program_report: "NR700" },
+]
+
 export interface HermesDashboardConfig {
   id: string
   /** Short label shown in loading screen, e.g. "Hermes 5G" */
@@ -46,6 +51,8 @@ export interface HermesDashboardConfig {
   progressFilter?: ProjectProgressFilters
   /** Mandatory data scope — always applied, not exposed in FilterBar */
   dataScope?: HermesDashboardDataScope
+  /** Optional supplemental scopes fetched for scoped matrix milestones only */
+  supplementalDataScopes?: readonly HermesDashboardDataScope[]
   /** NR-specific milestone columns/labels for matrix + readiness/activated cards */
   milestoneFields?: HermesMilestoneFields
   /** Progress curve series columns/labels (e.g. NR 2600 four-line curve) */
@@ -87,9 +94,18 @@ export function getHermesMapDataEndpoint(config: HermesDashboardConfig): string 
 /** Build site-data API URL with optional dashboard scope (smaller payload for scoped dashboards) */
 export function getHermesSiteDataEndpoint(
   dataScope?: HermesDashboardDataScope,
-  mode: "minimal" | "full" = "minimal"
+  mode: "minimal" | "full" = "minimal",
+  supplementalDataScopes?: readonly HermesDashboardDataScope[]
 ): string {
   const params = appendDataScopeToSearchParams(new URLSearchParams({ mode }), dataScope)
+
+  supplementalDataScopes?.forEach((scope) => {
+    const programReport = Array.isArray(scope.program_report)
+      ? scope.program_report[0]
+      : scope.program_report
+    if (programReport) params.append("supplemental_program_report", programReport)
+  })
+
   return `/api/hermes-5g/site-data?${params.toString()}`
 }
 
@@ -117,6 +133,7 @@ export const HERMES_DASHBOARD_NR_2600: HermesDashboardConfig = {
   exportPrefix: "nr-2600",
   mapCacheKey: "nr-2600-map-13k-all-status-v2",
   dataScope: NR_2600_PROGRAM_REPORT_SCOPE,
+  supplementalDataScopes: NR_2600_SUPPLEMENTAL_PROGRAM_REPORT_SCOPES,
   progressFilter: NR_2600_PROGRAM_REPORT_SCOPE,
   milestoneFields: NR_2600_MILESTONE_FIELDS,
   progressCurveFields: NR_2600_PROGRESS_CURVE_FIELDS,

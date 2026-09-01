@@ -16,6 +16,7 @@ import {
 // Interface for the response data
 interface SiteDataResponse {
   data: any[]
+  supplementalData?: any[]
   count: number
   totalCount: number
   stats: {
@@ -68,8 +69,7 @@ const MINIMAL_COLUMNS = [
   'patp_accepted_af',  // PATP stats
   'readiness_2600_af', // NR 2600 readiness milestone
   'activation_2600_af', // NR 2600 activation milestone
-  'readiness_700_af', // NR 2600 readiness 700 milestone
-  'activation_700_af', // NR 2600 activated 700 milestone
+  'ftr_submit', // NR 2600 FTR milestone
   'issue_category',    // TopIssue - client-side calculation
 ]
 
@@ -142,8 +142,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       patp_accepted_af: row.patp_accepted_af || null,
       readiness_2600_af: row.readiness_2600_af || null,
       activation_2600_af: row.activation_2600_af || null,
-      readiness_700_af: row.readiness_700_af || null,
-      activation_700_af: row.activation_700_af || null,
+      ftr_submit: row.ftr_submit || null,
       issue_category: row.issue_category || null,
     }))
   }
@@ -227,6 +226,19 @@ async function fetchDataFromDatabase(
   return { data: data || [], totalCount: count || 0 }
 }
 
+async function fetchSupplementalDataFromDatabase(
+  supplementalProgramReports: string[]
+): Promise<any[]> {
+  if (supplementalProgramReports.length === 0) return []
+
+  const rows: any[] = []
+  for (const programReport of supplementalProgramReports) {
+    const { data } = await getSiteData5G({ program_report: [programReport] }, {})
+    if (data?.length) rows.push(...data)
+  }
+  return rows
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -237,7 +249,15 @@ export async function GET(request: NextRequest) {
     const impTtps = searchParams.getAll('imp_ttp') || []
     const nanoClusters = searchParams.getAll('nano_cluster') || []
     const dataScope = parseDataScopeFromSearchParams(searchParams)
+    const supplementalProgramReports = searchParams
+      .getAll("supplemental_program_report")
+      .map((value) => value.trim())
+      .filter(Boolean)
     const scopeKey = getDataScopeCacheKey(dataScope)
+    const supplementalScopeKey =
+      supplementalProgramReports.length > 0
+        ? supplementalProgramReports.map((value) => `pr:eq:${value}`).join("|")
+        : "none"
 
     // Mode: 'minimal' for dashboard (smaller payload), 'full' for detailed views
     const mode = (searchParams.get('mode') || 'minimal') as 'full' | 'minimal'
@@ -259,11 +279,14 @@ export async function GET(request: NextRequest) {
     const statsCacheKey = `hermes-stats-${scopeKey}-${filterHash}`
 
     console.log(
-      `[Hermes Site Data] Fetching from database (mode: ${mode}, scope: ${scopeKey})...`
+      `[Hermes Site Data] Fetching from database (mode: ${mode}, scope: ${scopeKey}, supplemental: ${supplementalScopeKey})...`
     )
     const startTime = Date.now()
 
-    const dataResult = await fetchDataFromDatabase(dataScope)
+    const [dataResult, supplementalRows] = await Promise.all([
+      fetchDataFromDatabase(dataScope),
+      fetchSupplementalDataFromDatabase(supplementalProgramReports),
+    ])
     const stats = calculateStatsFromData(dataResult.data)
 
     setCache(statsCacheKey, stats, CACHE_TTL.STATS).catch(err => {
@@ -274,13 +297,19 @@ export async function GET(request: NextRequest) {
 
     // Map data to frontend format with mode
     const mappedData = mapDataToFrontend(filteredData, mode)
+    const mappedSupplementalData =
+      supplementalRows.length > 0 ? mapDataToFrontend(supplementalRows, mode) : undefined
 
     const fetchTime = Date.now() - startTime
-    console.log(`[Hermes Site Data] Database fetch completed in ${fetchTime}ms, ${mappedData.length} records`)
+    console.log(
+      `[Hermes Site Data] Database fetch completed in ${fetchTime}ms, ${mappedData.length} records` +
+        (mappedSupplementalData ? ` + ${mappedSupplementalData.length} supplemental` : "")
+    )
 
     // Prepare response data (NOT cached because too large)
     const responseData: SiteDataResponse = {
       data: mappedData,
+      supplementalData: mappedSupplementalData,
       count: mappedData.length,
       totalCount,
       stats

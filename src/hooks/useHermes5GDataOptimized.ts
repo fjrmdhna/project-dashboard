@@ -14,6 +14,7 @@ import {
 } from '@/lib/hermes-dashboard-scope'
 import { getHermesSiteDataEndpoint } from '@/config/hermes-dashboards'
 import {
+  countExtraMilestones,
   createExtraMilestoneCounts,
   getExtraMatrixMilestones,
   incrementExtraMilestoneCounts,
@@ -49,8 +50,7 @@ export interface Hermes5GSiteData extends MatrixRow {
   issue_category?: string | null
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
-  readiness_700_af?: string | null
-  activation_700_af?: string | null
+  ftr_submit?: string | null
   wbs_status?: string | null
 }
 
@@ -112,6 +112,7 @@ export interface Hermes5GAggregatedData {
 
 export interface UseHermes5GDataReturn {
   data: Hermes5GSiteData[]
+  supplementalData: Hermes5GSiteData[]
   stats: Hermes5GDataStats
   aggregated: Hermes5GAggregatedData | null
   loading: boolean
@@ -133,6 +134,8 @@ export interface UseHermes5GDataOptions {
   autoFetch?: boolean
   /** Mandatory program_report scope (dashboard-level, e.g. NR 2600 → 13k only) */
   dataScope?: HermesDashboardDataScope
+  /** Supplemental scopes for matrix milestones outside the main dashboard scope */
+  supplementalDataScopes?: readonly HermesDashboardDataScope[]
   /** Optional milestone column mapping (e.g. NR 2600 readiness/activation) */
   milestoneFields?: HermesMilestoneFields
   /** Optional progress curve / daily runrate column mapping (e.g. NR 2600) */
@@ -511,9 +514,12 @@ function aggregateDataSinglePassWithStats(
   milestoneFields?: HermesMilestoneFields,
   progressCurveFields?: HermesProgressCurveFields,
   dailyRunrateMilestone: HermesDailyRunrateMilestone = "activated",
+  supplementalData: Hermes5GSiteData[] = [],
 ): Hermes5GAggregationResult {
   const { readinessColumn, activatedColumn } = resolveMilestoneColumns(milestoneFields)
   const extraMilestoneDefs = getExtraMatrixMilestones(milestoneFields)
+  const scopedExtraMilestones = extraMilestoneDefs.filter((extra) => extra.programReport)
+  const defaultExtraMilestones = extraMilestoneDefs.filter((extra) => !extra.programReport)
   const extraMilestones = createExtraMilestoneCounts(extraMilestoneDefs)
   const dailyRunrateSeries = resolveDailyRunrateSeries(progressCurveFields, dailyRunrateMilestone)
   const byCity = new Map<string, { total: number; ready: number; activated: number; mos: number }>()
@@ -553,7 +559,7 @@ function aggregateDataSinglePassWithStats(
     if (row.ic_000040_af) install++
     if (isMilestoneAchieved(row, readinessColumn)) readiness++
     if (isMilestoneAchieved(row, activatedColumn)) activated++
-    incrementExtraMilestoneCounts(row, extraMilestoneDefs, extraMilestones)
+    incrementExtraMilestoneCounts(row, defaultExtraMilestones, extraMilestones)
     if (row.ready_for_acpt_date) rfa++
     if (row.rfc_approved) rfc++
     if (row.fatp_accepted_af) fatp++
@@ -641,6 +647,10 @@ function aggregateDataSinglePassWithStats(
         totalIssueCount++
       }
     }
+  }
+
+  for (const row of supplementalData) {
+    incrementExtraMilestoneCounts(row, scopedExtraMilestones, extraMilestones)
   }
 
   const dailyRunrate: DailyRunrateItem[] = last7Days.map(({ dateKey, formatted }) => ({
@@ -755,19 +765,25 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
     siteCategories = [],
     search = '',
     dataScope,
+    supplementalDataScopes,
     milestoneFields,
     progressCurveFields,
     dailyRunrateMilestone = "activated",
   } = options
 
+  const supplementalScopeKey =
+    supplementalDataScopes && supplementalDataScopes.length > 0
+      ? supplementalDataScopes.map((scope) => getDataScopeCacheKey(scope)).join("|")
+      : "none"
+
   // Scoped dashboards fetch a smaller server-filtered dataset; unscoped pages keep the full cache.
-  const cacheKey = `hermes-site-data-${getDataScopeCacheKey(dataScope)}-v3`
+  const cacheKey = `hermes-site-data-${getDataScopeCacheKey(dataScope)}-${supplementalScopeKey}-v4`
 
   // Track if this is initial load vs filter change
   const hasLoadedOnceRef = useRef(false)
 
   const fetchFn = useCallback(async () => {
-    const url = getHermesSiteDataEndpoint(dataScope, 'minimal')
+    const url = getHermesSiteDataEndpoint(dataScope, 'minimal', supplementalDataScopes)
     const response = await fetchWithRetry(url, {}, 3)
     const result = await response.json()
 
@@ -775,14 +791,19 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       hasLoadedOnceRef.current = true
       return {
         data: result.data || [],
+        supplementalData: result.supplementalData || [],
         stats: result.stats || EMPTY_STATS
       }
     }
     throw new Error(result.message || 'Failed to fetch Hermes data')
-  }, [dataScope])
+  }, [dataScope, supplementalDataScopes])
 
   // Use useApiCache untuk base data (tanpa filter)
-  const { data: baseData, loading: baseLoading, error, refetch: cacheRefetch } = useApiCache<{ data: Hermes5GSiteData[], stats: Hermes5GDataStats }>(
+  const { data: baseData, loading: baseLoading, error, refetch: cacheRefetch } = useApiCache<{
+    data: Hermes5GSiteData[]
+    supplementalData: Hermes5GSiteData[]
+    stats: Hermes5GDataStats
+  }>(
     cacheKey,
     fetchFn,
     {
@@ -790,11 +811,18 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       cacheTime: 15 * 60 * 1000, // 15 minutes
       refetchOnMount: false, // Don't refetch on every mount
       validateFn: (data) => {
-        const typedData = data as { data?: Hermes5GSiteData[], stats?: Hermes5GDataStats }
+        const typedData = data as {
+          data?: Hermes5GSiteData[]
+          supplementalData?: Hermes5GSiteData[]
+          stats?: Hermes5GDataStats
+        }
         if (!data || !typedData.data || !typedData.stats) {
           return false
         }
         if (!Array.isArray(typedData.data) || typeof typedData.stats !== 'object') {
+          return false
+        }
+        if (!Array.isArray(typedData.supplementalData)) {
           return false
         }
         // Invalidate stale cache missing wbs_status when dashboard scope requires it
@@ -814,9 +842,14 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
   )
 
   // CLIENT-SIDE FILTERING + AGGREGATION - All done in single pass!
-  const { filteredData, filteredStats, aggregated } = useMemo(() => {
+  const { filteredData, filteredSupplementalData, filteredStats, aggregated } = useMemo(() => {
     if (!baseData?.data || baseData.data.length === 0) {
-      return { filteredData: [], filteredStats: EMPTY_STATS, aggregated: null }
+      return {
+        filteredData: [],
+        filteredSupplementalData: [],
+        filteredStats: EMPTY_STATS,
+        aggregated: null,
+      }
     }
 
     const serverScoped = Boolean(dataScope?.program_report || dataScope?.wbs_status)
@@ -832,11 +865,29 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       ? filterDataClientSide(scopedData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search)
       : scopedData
 
+    const supplementalScoped = baseData.supplementalData ?? []
+    const supplementalToUse = hasFilters
+      ? filterDataClientSide(
+          supplementalScoped,
+          vendorNames,
+          [],
+          impTtps,
+          nanoClusters,
+          ranScores,
+          years,
+          regions,
+          circles,
+          siteCategories,
+          search
+        )
+      : supplementalScoped
+
     const aggregationResult = aggregateDataSinglePassWithStats(
       dataToUse,
       milestoneFields,
       progressCurveFields,
       dailyRunrateMilestone,
+      supplementalToUse,
     )
     const useAggregatedStats =
       hasFilters ||
@@ -848,6 +899,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
 
     return {
       filteredData: dataToUse,
+      filteredSupplementalData: supplementalToUse,
       filteredStats: stats,
       aggregated: agg
     }
@@ -863,6 +915,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
 
   return {
     data: filteredData,
+    supplementalData: filteredSupplementalData,
     stats: filteredStats,
     aggregated,
     loading,
