@@ -22,7 +22,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 // Debug overlays removed for production-like view
 
 import type { HermesDashboardConfig } from "@/config/hermes-dashboards"
-import { getHermesFilterOptionsEndpoint } from "@/config/hermes-dashboards"
+import { appendHermesExportScopeParams, getHermesFilterOptionsEndpoint } from "@/config/hermes-dashboards"
 import { resolveDailyRunrateSeries } from "@/lib/hermes-progress-curve-fields"
 
 const DashboardLoadingScreen = ({ label, message }: { label: string; message: string }) => (
@@ -338,19 +338,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
       })
     }
 
-    if (config.dataScope?.program_report && config.dataScope.program_report_match === "contains") {
-      const needle = Array.isArray(config.dataScope.program_report)
-        ? config.dataScope.program_report[0]
-        : config.dataScope.program_report
-      if (needle) params.set("program_report_contains", needle)
-    }
-
-    if (config.dataScope?.wbs_status) {
-      const wbsStatuses = Array.isArray(config.dataScope.wbs_status)
-        ? config.dataScope.wbs_status
-        : [config.dataScope.wbs_status]
-      wbsStatuses.forEach((value) => params.append("wbs_status", value))
-    }
+    appendHermesExportScopeParams(params, config)
 
     filter.imp_ttp.forEach((value) => {
       params.append('imp_ttp', value)
@@ -430,7 +418,9 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
 
       setExportStatus({
         type: 'success',
-        message: 'Activation data downloaded successfully.'
+        message: config.milestoneFields
+          ? 'Export downloaded with Matrix Summary, 13k data, and NR700 data.'
+          : 'Activation data downloaded successfully.'
       })
     } catch (error) {
       console.error(`Failed to export ${config.label} data`, error)

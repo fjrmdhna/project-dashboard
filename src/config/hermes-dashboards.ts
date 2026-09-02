@@ -109,6 +109,46 @@ export function getHermesSiteDataEndpoint(
   return `/api/hermes-5g/site-data?${params.toString()}`
 }
 
+export function appendSupplementalScopesToSearchParams(
+  params: URLSearchParams,
+  supplementalDataScopes?: readonly HermesDashboardDataScope[]
+): URLSearchParams {
+  supplementalDataScopes?.forEach((scope) => {
+    const programReport = Array.isArray(scope.program_report)
+      ? scope.program_report[0]
+      : scope.program_report
+    if (programReport) params.append("supplemental_program_report", programReport)
+  })
+  return params
+}
+
+export function appendHermesExportScopeParams(
+  params: URLSearchParams,
+  config: Pick<HermesDashboardConfig, "dataScope" | "supplementalDataScopes" | "milestoneFields" | "id">
+): URLSearchParams {
+  if (config.dataScope?.program_report && config.dataScope.program_report_match === "contains") {
+    const needle = Array.isArray(config.dataScope.program_report)
+      ? config.dataScope.program_report[0]
+      : config.dataScope.program_report
+    if (needle) params.set("program_report_contains", needle)
+  }
+
+  if (config.dataScope?.wbs_status) {
+    const wbsStatuses = Array.isArray(config.dataScope.wbs_status)
+      ? config.dataScope.wbs_status
+      : [config.dataScope.wbs_status]
+    wbsStatuses.forEach((value) => params.append("wbs_status", value))
+  }
+
+  appendSupplementalScopesToSearchParams(params, config.supplementalDataScopes)
+
+  if (config.milestoneFields) {
+    params.set("matrix_export", config.id)
+  }
+
+  return params
+}
+
 export const HERMES_DASHBOARD_HERMES_5G: HermesDashboardConfig = {
   id: "hermes-5g",
   label: "Hermes 5G",

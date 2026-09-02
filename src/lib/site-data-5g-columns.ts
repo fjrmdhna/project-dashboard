@@ -62,7 +62,10 @@ export const SITE_DATA_5G_SELECT_COLUMNS = [
   'caf_approved',
   'mos_af',
   'cluster_acceptance_af',
-  'ic_000040_af'
+  'ic_000040_af',
+  'readiness_2600_af',
+  'activation_2600_af',
+  'ftr_submit',
 ] as const;
 
 export const SITE_DATA_5G_HEADERS = [
@@ -129,7 +132,10 @@ export const SITE_DATA_5G_HEADERS = [
   'caf_approved',
   'mos_af',
   'cluster_acceptance_af',
-  'ic_000040_af'
+  'ic_000040_af',
+  'readiness_2600_af',
+  'activation_2600_af',
+  'ftr_submit',
 ] as const;
 
 export type SiteData5GHeader = typeof SITE_DATA_5G_HEADERS[number];
