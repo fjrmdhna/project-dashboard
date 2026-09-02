@@ -22,7 +22,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 // Debug overlays removed for production-like view
 
 import type { HermesDashboardConfig } from "@/config/hermes-dashboards"
-import { appendHermesExportScopeParams, getHermesFilterOptionsEndpoint } from "@/config/hermes-dashboards"
+import { appendHermesExportScopeParams, appendHermesFilterParams, getHermesFilterOptionsEndpoint } from "@/config/hermes-dashboards"
 import { resolveDailyRunrateSeries } from "@/lib/hermes-progress-curve-fields"
 
 const DashboardLoadingScreen = ({ label, message }: { label: string; message: string }) => (
@@ -324,41 +324,19 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
     const params = new URLSearchParams()
     params.set('type', 'activation')
 
-    if (filter.q) {
-      params.set('q', filter.q)
-    }
+    const allProgramReports = [
+      ...new Set(
+        [...(hermesData ?? []), ...(hermesSupplementalData ?? [])]
+          .map((row) => row.program_report)
+          .filter((value): value is string => Boolean(value))
+      ),
+    ]
 
-    filter.vendor_name.forEach((value) => {
-      params.append('vendor_name', value)
+    appendHermesFilterParams(params, debouncedFilterValue, {
+      hideProgramReport,
+      allProgramReports,
     })
-
-    if (!hideProgramReport) {
-      filter.program_report.forEach((value) => {
-        params.append('program_report', value)
-      })
-    }
-
     appendHermesExportScopeParams(params, config)
-
-    filter.imp_ttp.forEach((value) => {
-      params.append('imp_ttp', value)
-    })
-
-    filter.nano_cluster.forEach((value) => {
-      params.append('nano_cluster', value)
-    })
-
-    filter.circle?.forEach((value) => {
-      params.append('region_circle', value) // Using region_circle parameter name for API compatibility
-    })
-
-    filter.year?.forEach((value) => {
-      params.append('year', value)
-    })
-
-    filter.ran_score?.forEach((value) => {
-      params.append('ran_score', value)
-    })
 
     return params
   }

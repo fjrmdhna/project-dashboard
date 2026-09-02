@@ -32,6 +32,8 @@ export interface Row {
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
   ftr_submit?: string | null
+  site_id?: string | null
+  site_name?: string | null
   vendor_name?: string | null
   program_report?: string | null
   imp_ttp?: string | null

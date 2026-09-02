@@ -6,6 +6,11 @@ import { SITE_DATA_5G_SELECT_COLUMNS, SITE_DATA_5G_HEADERS } from '@/lib/site-da
 import { computeHermesMatrixExportStats } from '@/lib/hermes-matrix-export-stats'
 import { HERMES_DASHBOARD_NR_2600 } from '@/config/hermes-dashboards'
 import type { HermesMilestoneFields } from '@/lib/hermes-milestone-fields'
+import {
+  applyHermesSharedFilters,
+  parseHermesSharedFilterParams,
+  type HermesFilterQuery,
+} from '@/lib/hermes-shared-filters'
 
 const EXPORT_ROW_LIMIT = 50000
 
@@ -15,111 +20,25 @@ const MATRIX_EXPORT_MILESTONE_FIELDS: Record<string, HermesMilestoneFields | und
   'nr-2600': HERMES_DASHBOARD_NR_2600.milestoneFields,
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ExportQuery = any
-
-type SharedFilterOptions = {
-  skipProgramReportFilters?: boolean
-}
-
-function applySharedFilters(
-  query: ExportQuery,
-  searchParams: URLSearchParams,
-  options: SharedFilterOptions = {}
-): ExportQuery {
-  const vendorNames = searchParams.getAll('vendor_name')
-  const impTtps = searchParams.getAll('imp_ttp')
-  const nanoClusters = searchParams.getAll('nano_cluster')
-  const regionCircles = searchParams.getAll('region_circle')
-  const ranScores = searchParams.getAll('ran_score')
-  const years = searchParams.getAll('year')
-  const search = searchParams.get('q')
-
-  if (!options.skipProgramReportFilters) {
-    const programReports = searchParams.getAll('program_report')
-    if (programReports.length > 0) {
-      query = query.in('program_report', programReports)
-    }
-
-    const programReportContains = searchParams.get('program_report_contains')
-    if (programReportContains?.trim()) {
-      query = query.ilike('program_report', `%${programReportContains.trim()}%`)
-    }
-  }
-
-  const wbsStatuses = searchParams.getAll('wbs_status').map((value) => value.trim()).filter(Boolean)
-  if (wbsStatuses.length === 1) {
-    query = query.ilike('wbs_status', wbsStatuses[0])
-  } else if (wbsStatuses.length > 1) {
-    query = query.or(wbsStatuses.map((value) => `wbs_status.ilike.${value}`).join(','))
-  }
-
-  if (vendorNames.length > 0) {
-    query = query.in('vendor_name', vendorNames)
-  }
-
-  if (impTtps.length > 0) {
-    query = query.in('imp_ttp', impTtps)
-  }
-
-  if (nanoClusters.length > 0) {
-    query = query.in('nano_cluster', nanoClusters)
-  }
-
-  if (regionCircles.length > 0) {
-    const normalizeCircle = (value: string): string =>
-      value.trim().toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())
-
-    const circleConditions = regionCircles
-      .map((circle) => `region_circle.ilike.%${normalizeCircle(circle)}%`)
-      .join(',')
-    query = query.or(circleConditions)
-  }
-
-  if (years.length > 0) {
-    query = query.in('year', years)
-  }
-
-  if (ranScores.length > 0) {
-    const hasNewSite = ranScores.some((score) => score.trim() === 'New Site')
-    const hasExpansion = ranScores.some((score) => score.trim() === 'Expansion')
-    if (hasNewSite && !hasExpansion) {
-      query = query.ilike('program_report', '%new%site%')
-    } else if (hasExpansion && !hasNewSite) {
-      query = query.or('program_report.is.null,program_report.not.ilike.%new%site%')
-    }
-  }
-
-  if (search && search.trim().length > 0) {
-    const like = `%${search.trim()}%`
-    query = query.or(
-      [
-        `system_key.ilike.${like}`,
-        `site_id.ilike.${like}`,
-        `site_name.ilike.${like}`,
-        `vendor_name.ilike.${like}`,
-      ].join(',')
-    )
-  }
-
-  return query
-}
-
 function buildFilterQuery(searchParams: URLSearchParams) {
-  let query = supabase
+  const query = supabase
     .from('site_data_5g')
-    .select(SITE_DATA_5G_SELECT_COLUMNS.join(','))
+    .select(SITE_DATA_5G_SELECT_COLUMNS.join(',')) as unknown as HermesFilterQuery
 
-  return applySharedFilters(query, searchParams)
+  return applyHermesSharedFilters(query, parseHermesSharedFilterParams(searchParams))
 }
 
 function buildSupplementalFilterQuery(searchParams: URLSearchParams, programReport: string) {
-  let query = supabase
+  const query = supabase
     .from('site_data_5g')
     .select(SITE_DATA_5G_SELECT_COLUMNS.join(','))
-    .eq('program_report', programReport)
+    .eq('program_report', programReport) as unknown as HermesFilterQuery
 
-  return applySharedFilters(query, searchParams, { skipProgramReportFilters: true })
+  return applyHermesSharedFilters(
+    query,
+    parseHermesSharedFilterParams(searchParams),
+    { skipProgramReportFilters: true }
+  )
 }
 
 function formatDateValue(value: unknown): unknown {
@@ -243,7 +162,7 @@ export async function GET(request: NextRequest) {
     const matrixExportId = searchParams.get('matrix_export') || ''
     const milestoneFields = MATRIX_EXPORT_MILESTONE_FIELDS[matrixExportId]
 
-    let mainQuery = buildFilterQuery(searchParams).range(0, EXPORT_ROW_LIMIT - 1)
+    const mainQuery = buildFilterQuery(searchParams).range(0, EXPORT_ROW_LIMIT - 1)
     const supplementalQueries = supplementalProgramReports.map((programReport) =>
       buildSupplementalFilterQuery(searchParams, programReport).range(0, EXPORT_ROW_LIMIT - 1)
     )

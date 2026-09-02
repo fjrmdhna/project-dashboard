@@ -71,6 +71,8 @@ const MINIMAL_COLUMNS = [
   'activation_2600_af', // NR 2600 activation milestone
   'ftr_submit', // NR 2600 FTR milestone
   'issue_category',    // TopIssue - client-side calculation
+  'site_id',           // Search filter (shared with export)
+  'site_name',         // Search filter (shared with export)
 ]
 
 // Full columns for detailed views
@@ -144,6 +146,8 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       activation_2600_af: row.activation_2600_af || null,
       ftr_submit: row.ftr_submit || null,
       issue_category: row.issue_category || null,
+      site_id: row.site_id || null,
+      site_name: row.site_name || null,
     }))
   }
   

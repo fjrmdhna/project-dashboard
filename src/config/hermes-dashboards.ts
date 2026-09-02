@@ -1,5 +1,6 @@
 import type { ProjectProgressFilters } from "@/lib/project-progress"
 import type { FilterValue } from "@/components/filters/FilterBar"
+import { expandProgramReportFilterValues } from "@/lib/hermes-program-mapping"
 import {
   HERMES_DASHBOARD_ACTIVE_WBS_STATUS,
   type HermesDashboardDataScope,
@@ -145,6 +146,63 @@ export function appendHermesExportScopeParams(
   if (config.milestoneFields) {
     params.set("matrix_export", config.id)
   }
+
+  return params
+}
+
+export type HermesExportFilterParamsOptions = {
+  hideProgramReport?: boolean
+  /** Known program_report values in the current dashboard dataset (for display-name expansion). */
+  allProgramReports?: string[]
+}
+
+/** Append user-facing dashboard filters to export query params (matches debounced UI filters). */
+export function appendHermesFilterParams(
+  params: URLSearchParams,
+  filter: Pick<
+    FilterValue,
+    "q" | "vendor_name" | "program_report" | "imp_ttp" | "nano_cluster" | "circle" | "year" | "ran_score"
+  >,
+  options: HermesExportFilterParamsOptions = {}
+): URLSearchParams {
+  if (filter.q?.trim()) {
+    params.set("q", filter.q.trim())
+  }
+
+  filter.vendor_name.forEach((value) => {
+    params.append("vendor_name", value)
+  })
+
+  if (!options.hideProgramReport && filter.program_report.length > 0) {
+    const programReports =
+      options.allProgramReports && options.allProgramReports.length > 0
+        ? expandProgramReportFilterValues(filter.program_report, options.allProgramReports)
+        : filter.program_report
+
+    programReports.forEach((value) => {
+      params.append("program_report", value)
+    })
+  }
+
+  filter.imp_ttp.forEach((value) => {
+    params.append("imp_ttp", value)
+  })
+
+  filter.nano_cluster.forEach((value) => {
+    params.append("nano_cluster", value)
+  })
+
+  filter.circle?.forEach((value) => {
+    params.append("region_circle", value)
+  })
+
+  filter.year?.forEach((value) => {
+    params.append("year", value)
+  })
+
+  filter.ran_score?.forEach((value) => {
+    params.append("ran_score", value)
+  })
 
   return params
 }

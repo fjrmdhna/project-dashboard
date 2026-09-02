@@ -30,6 +30,10 @@ import {
   type HermesProgressCurveFields,
 } from '@/lib/hermes-progress-curve-fields'
 import { getValidNanoClusterName } from '@/lib/nano-cluster'
+import {
+  matchesHermesCircleFilter,
+  matchesHermesDashboardSearch,
+} from '@/lib/hermes-shared-filters'
 
 export interface Hermes5GSiteData extends MatrixRow {
   rfc_approved?: string | null
@@ -51,6 +55,8 @@ export interface Hermes5GSiteData extends MatrixRow {
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
   ftr_submit?: string | null
+  site_id?: string | null
+  site_name?: string | null
   wbs_status?: string | null
 }
 
@@ -195,8 +201,6 @@ function filterDataClientSide(
   
   if (!hasFilters) return data
   
-  const searchLower = search.toLowerCase()
-
   // Precompute lookup structures (avoid O(k) scans per-row)
   const vendorSet = vendorNames.length > 0 ? new Set(vendorNames) : null
   const impTtpSet = impTtps.length > 0 ? new Set(impTtps) : null
@@ -205,14 +209,6 @@ function filterDataClientSide(
   // Hermes RAN Score filter: options are normalized ("New Site" | "Expansion"); match row by normalizing its ran_score
   const ranScoreFilterSet =
     ranScores.length > 0 ? new Set(ranScores) : null
-
-  const normalizeCircle = (value: string): string => {
-    if (!value) return ''
-    return value.trim().toLowerCase().replace(/\b\w/g, char => char.toUpperCase())
-  }
-
-  const normalizedFilterCircles =
-    circles.length > 0 ? circles.map(c => normalizeCircle(c)) : []
 
   const normalizedFilterSiteCategories =
     siteCategories.length > 0 ? siteCategories.map(sc => normalizeSiteCategoryForFilter(sc)) : []
@@ -297,12 +293,8 @@ function filterDataClientSide(
     }
     
     // Circle filter (from region_circle) - takes priority over deprecated region filter
-    // Normalize both filter values and row values to Title Case for consistent matching
-    if (normalizedFilterCircles.length > 0) {
-      const normalizedRowCircle = normalizeCircle(row.region_circle || '')
-      const matchesCircle = normalizedFilterCircles.some(c => normalizedRowCircle === c || normalizedRowCircle.includes(c))
-      
-      if (!matchesCircle) {
+    if (circles.length > 0) {
+      if (!matchesHermesCircleFilter(row.region_circle, circles)) {
         rejectedByRegion++
         return false
       }
@@ -321,16 +313,9 @@ function filterDataClientSide(
       }
     }
     
-    // Search filter
-    if (searchLower) {
-      const searchFields = [
-        row.system_key,
-        row.vendor_name,
-        row.program_report
-      ].filter(Boolean).map(s => (s || '').toLowerCase())
-      
-      const matchesSearch = searchFields.some(field => field.includes(searchLower))
-      if (!matchesSearch) {
+    // Search filter (shared fields with Excel export API)
+    if (search.trim()) {
+      if (!matchesHermesDashboardSearch(row, search)) {
         rejectedBySearch++
         return false
       }

@@ -187,3 +187,22 @@ export function isProgramReportMapped(programReport: string | null | undefined):
 export function getUnmappedProgramReports(allProgramReports: string[]): string[] {
   return allProgramReports.filter(pr => !isProgramReportMapped(pr))
 }
+
+/** Expand filter dropdown values (display names or raw program_report) for export/API queries. */
+export function expandProgramReportFilterValues(
+  filterValues: string[],
+  allProgramReports: string[]
+): string[] {
+  const expanded = new Set<string>()
+
+  for (const filterValue of filterValues) {
+    const matched = getProgramReportsForDisplayName(filterValue, allProgramReports)
+    if (matched.length > 0) {
+      matched.forEach((programReport) => expanded.add(programReport))
+    } else {
+      expanded.add(filterValue)
+    }
+  }
+
+  return Array.from(expanded)
+}
