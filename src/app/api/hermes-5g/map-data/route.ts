@@ -25,6 +25,7 @@ interface MapPoint {
   region_circle?: string | null
   year?: string | null
   ran_score?: string | null
+  ran_scope?: string | null
 }
 
 /** Filterable row for sites with invalid coordinates (client applies same filter and counts). */
@@ -39,6 +40,7 @@ export interface InvalidCoordinateRow {
   region_circle?: string | null
   year?: string | null
   ran_score?: string | null
+  ran_scope?: string | null
   lat?: string | number | null
   long?: string | number | null
 }
@@ -130,6 +132,7 @@ export async function GET(request: NextRequest) {
           region_circle: row.region_circle ?? null,
           year: row.year ?? null,
           ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null),
+          ran_scope: typeof row.ran_scope === 'string' ? row.ran_scope.trim() || null : null,
           lat: row.lat != null ? row.lat : null,
           long: row.long != null ? row.long : null,
         })
@@ -154,6 +157,7 @@ export async function GET(request: NextRequest) {
         region_circle: row.region_circle ?? null,
         year: row.year ?? null,
         ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null),
+        ran_scope: typeof row.ran_scope === 'string' ? row.ran_scope.trim() || null : null,
       })
     }
 

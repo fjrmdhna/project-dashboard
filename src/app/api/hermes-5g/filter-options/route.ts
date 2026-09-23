@@ -5,6 +5,10 @@ import {
   getDataScopeCacheKey,
   parseDataScopeFromSearchParams,
 } from '@/lib/hermes-dashboard-scope'
+import {
+  hermesFilterOptionsCacheKey,
+  parseHermesRanFilterMode,
+} from '@/lib/hermes-ran-scope-filter'
 
 type CachedHermesFilterOptions = {
   data: {
@@ -23,19 +27,14 @@ type CachedHermesFilterOptions = {
 
 const FILTER_OPTIONS_CACHE_TTL_SECONDS = 300
 
-function getFilterOptionsCacheKey(scopeKey: string): string {
-  return scopeKey === 'all'
-    ? 'hermes:filter-options:v1'
-    : `hermes:filter-options:v1:${scopeKey}`
-}
-
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const forceRefresh = searchParams.get('refresh') === 'true'
     const dataScope = parseDataScopeFromSearchParams(searchParams)
+    const ranFilterMode = parseHermesRanFilterMode(searchParams.get('ran_filter'))
     const scopeKey = getDataScopeCacheKey(dataScope)
-    const cacheKey = getFilterOptionsCacheKey(scopeKey)
+    const cacheKey = hermesFilterOptionsCacheKey(scopeKey, ranFilterMode)
 
     if (!forceRefresh) {
       const cached = await getCache<CachedHermesFilterOptions>(cacheKey)
@@ -53,7 +52,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const result = await getFilterOptions({ forceRefresh, dataScope })
+    const result = await getFilterOptions({ forceRefresh, dataScope, ranFilterMode })
     
     if (result.status === 'error') {
       return NextResponse.json(

@@ -8,6 +8,10 @@ import { format, subDays } from 'date-fns'
 import { getProgramReportsForDisplayName, getDisplayNameForProgramReport } from '@/lib/hermes-program-mapping'
 import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-5g-utils'
 import {
+  matchesRanScopeFilter,
+  type HermesRanFilterMode,
+} from '@/lib/hermes-ran-scope-filter'
+import {
   filterRowsByDataScope,
   getDataScopeCacheKey,
   type HermesDashboardDataScope,
@@ -42,6 +46,7 @@ export interface Hermes5GSiteData extends MatrixRow {
   imp_ttp?: string | null
   nano_cluster?: string | null
   ran_score?: string | null
+  ran_scope?: string | null
   site_category?: string | null
   mocn_activation_forecast?: string | null  // Baseline for ProgressCurve
   rfs_bf?: string | null                    // Legacy baseline
@@ -148,6 +153,8 @@ export interface UseHermes5GDataOptions {
   progressCurveFields?: HermesProgressCurveFields
   /** Daily runrate milestone pair — readiness vs activated */
   dailyRunrateMilestone?: HermesDailyRunrateMilestone
+  /** "scope" matches ran_scope exactly. Default keeps Hermes RAN Score. */
+  ranFilterMode?: HermesRanFilterMode
 }
 
 // Default empty stats
@@ -190,7 +197,8 @@ function filterDataClientSide(
   regions: string[], // Deprecated: kept for backward compatibility
   circles: string[], // New: circles from region_circle
   siteCategories: string[],
-  search: string
+  search: string,
+  ranFilterMode: HermesRanFilterMode = "score"
 ): Hermes5GSiteData[] {
   if (!data || data.length === 0) return []
   
@@ -274,10 +282,12 @@ function filterDataClientSide(
       return false
     }
     
-    // RAN Score filter: normalize row value to "New Site" | "Expansion" and match against filter
     if (ranScoreFilterSet) {
-      const normalizedRowRanScore = normalizeRanScoreForHermesFilter(row.ran_score)
-      if (!ranScoreFilterSet.has(normalizedRowRanScore)) {
+      const matches =
+        ranFilterMode === "scope"
+          ? matchesRanScopeFilter(row.ran_scope, ranScoreFilterSet)
+          : ranScoreFilterSet.has(normalizeRanScoreForHermesFilter(row.ran_score))
+      if (!matches) {
         rejectedByRanScore++
         return false
       }
@@ -754,6 +764,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
     milestoneFields,
     progressCurveFields,
     dailyRunrateMilestone = "activated",
+    ranFilterMode = "score",
   } = options
 
   const supplementalScopeKey =
@@ -762,7 +773,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       : "none"
 
   // Scoped dashboards fetch a smaller server-filtered dataset; unscoped pages keep the full cache.
-  const cacheKey = `hermes-site-data-${getDataScopeCacheKey(dataScope)}-${supplementalScopeKey}-v4`
+  const cacheKey = `hermes-site-data-${getDataScopeCacheKey(dataScope)}-${supplementalScopeKey}-${ranFilterMode}-v5`
 
   // Track if this is initial load vs filter change
   const hasLoadedOnceRef = useRef(false)
@@ -814,6 +825,9 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
         if (dataScope?.wbs_status && typedData.data.length > 0 && typedData.data[0].wbs_status == null) {
           return false
         }
+        if (ranFilterMode === "scope" && typedData.data.length > 0 && !("ran_scope" in typedData.data[0])) {
+          return false
+        }
         const extraColumns = getExtraMatrixMilestones(milestoneFields)
         if (extraColumns.length > 0 && typedData.data.length > 0) {
           const sample = typedData.data[0] as unknown as Record<string, unknown>
@@ -847,7 +861,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
                        ranScores.length > 0 || years.length > 0 || regions.length > 0 || circles.length > 0 || siteCategories.length > 0 || search.length > 0
 
     const dataToUse = hasFilters
-      ? filterDataClientSide(scopedData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search)
+      ? filterDataClientSide(scopedData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search, ranFilterMode)
       : scopedData
 
     const supplementalScoped = baseData.supplementalData ?? []
@@ -863,7 +877,8 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
           regions,
           circles,
           siteCategories,
-          search
+          search,
+          ranFilterMode
         )
       : supplementalScoped
 
@@ -888,7 +903,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       filteredStats: stats,
       aggregated: agg
     }
-  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search, dataScope, milestoneFields, progressCurveFields, dailyRunrateMilestone])
+  }, [baseData, vendorNames, programReports, impTtps, nanoClusters, ranScores, years, regions, circles, siteCategories, search, dataScope, milestoneFields, progressCurveFields, dailyRunrateMilestone, ranFilterMode])
 
   // Refetch function
   const refetch = useCallback(async () => {

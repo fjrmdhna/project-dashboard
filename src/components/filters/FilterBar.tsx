@@ -40,6 +40,8 @@ export interface FilterBarProps {
   endpoint?: string
   /** Filter fields to omit from UI and active-filter chips (dashboard-specific) */
   hiddenFilters?: ReadonlyArray<keyof FilterValue>
+  /** Label for the RAN dropdown. NR 2600 uses "RAN Scope"; other Hermes pages keep "RAN Score". */
+  ranFilterLabel?: string
 }
 
 // Tipe data filter options
@@ -115,11 +117,13 @@ const truncateText = (text: string | undefined | null, maxLength: number = 20): 
   return text.substring(0, maxLength - 3) + '...';
 }
 
-export function FilterBar({ value, onChange, onReset, variant = "default", singleRow = false, endpoint = "/api/filters", hiddenFilters = [] }: FilterBarProps) {
+export function FilterBar({ value, onChange, onReset, variant = "default", singleRow = false, endpoint = "/api/filters", hiddenFilters = [], ranFilterLabel = "RAN Score" }: FilterBarProps) {
   const [, startTransition] = useTransition()
   const cacheKey = `${variant}:${endpoint}`
   const hiddenFilterSet = new Set(hiddenFilters)
   const isFilterHidden = (key: keyof FilterValue) => hiddenFilterSet.has(key)
+  const ranChipPrefix = ranFilterLabel === "RAN Scope" ? "Scope" : "RS"
+  const ranMenuMinWidth = ranFilterLabel === "RAN Scope" ? 260 : 200
   // State lokal untuk search input (sebelum debounce)
   const [searchInput, setSearchInput] = useState(value.q)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -505,7 +509,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
             <MultiSelect options={options.years || []} selected={value.year || []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel />
           </div>
           <div className="min-w-0">
-            <MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel />
+            <MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder={ranFilterLabel} onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel menuMinWidth={ranMenuMinWidth} />
           </div>
           <div className="flex justify-end min-w-0">
             <button
@@ -592,7 +596,7 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
             ) : (
               <>
                 <div className={cellClass}><MultiSelect options={options.years || []} selected={value.year || []} placeholder="Year" onChange={handleYearChange} disabled={false} width="w-full" staticLabel /></div>
-                <div className={cellClass}><MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder="RAN Score" onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel /></div>
+                <div className={cellClass}><MultiSelect options={options.ranScores || []} selected={value.ran_score ?? []} placeholder={ranFilterLabel} onChange={handleRanScoreChange} disabled={false} width="w-full" staticLabel menuMinWidth={ranMenuMinWidth} /></div>
                 <div className={`${cellClass} hidden sm:flex sm:col-start-6 justify-end`}>
                   <button
                     onClick={handleReset}
@@ -743,9 +747,9 @@ export function FilterBar({ value, onChange, onReset, variant = "default", singl
             <div
               key={`ran-score-${ranScore}`}
               className="bg-rose-500/20 text-rose-300 rounded-full px-1 py-0.5 flex items-center gap-0.5"
-              title={`RAN Score: ${ranScore}`}
+              title={`${ranFilterLabel}: ${ranScore}`}
             >
-              <span>RS: {truncateText(ranScore, 12)}</span>
+              <span>{ranChipPrefix}: {truncateText(ranScore, 18)}</span>
               <X
                 className="h-2 w-2 cursor-pointer"
                 onClick={() => removeFilter('ran_score', ranScore)}

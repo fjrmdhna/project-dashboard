@@ -13,6 +13,7 @@ import type {
   HermesProgressCurveFields,
 } from "@/lib/hermes-progress-curve-fields"
 import { NR_2600_PROGRESS_CURVE_FIELDS } from "@/lib/hermes-progress-curve-fields"
+import type { HermesRanFilterMode } from "@/lib/hermes-ran-scope-filter"
 
 /** Hermes 5G: program_report contains "10k" and wbs_status is Active */
 export const HERMES_5G_PROGRAM_REPORT_SCOPE: HermesDashboardDataScope = {
@@ -68,13 +69,20 @@ export interface HermesDashboardConfig {
   cityMilestoneCard?: HermesCityMilestoneCardConfig
   /** When true, hide activation-by-city and show readiness in the lower left slot */
   hideActivatedCityCard?: boolean
+  /**
+   * RAN filter source.
+   * "score" (default): New Site / Expansion derived from program_report.
+   * "scope": exact values from the ran_scope column (NR 2600).
+   */
+  ranFilterMode?: HermesRanFilterMode
 }
 
 /** Build filter-options API URL; scoped dashboards append scope query params */
 export function getHermesFilterOptionsEndpoint(config: HermesDashboardConfig): string {
-  if (!config.dataScope) return "/api/filters"
-
   const params = appendDataScopeToSearchParams(new URLSearchParams(), config.dataScope)
+  if (config.ranFilterMode === "scope") {
+    params.set("ran_filter", "scope")
+  }
   const qs = params.toString()
   return qs ? `/api/filters?${qs}` : "/api/filters"
 }
@@ -154,6 +162,8 @@ export type HermesExportFilterParamsOptions = {
   hideProgramReport?: boolean
   /** Known program_report values in the current dashboard dataset (for display-name expansion). */
   allProgramReports?: string[]
+  /** NR 2600 sends the RAN dropdown as ran_scope instead of derived RAN Score. */
+  ranFilterMode?: HermesRanFilterMode
 }
 
 /** Append user-facing dashboard filters to export query params (matches debounced UI filters). */
@@ -200,9 +210,15 @@ export function appendHermesFilterParams(
     params.append("year", value)
   })
 
-  filter.ran_score?.forEach((value) => {
-    params.append("ran_score", value)
-  })
+  if (options.ranFilterMode === "scope") {
+    filter.ran_score?.forEach((value) => {
+      params.append("ran_scope", value)
+    })
+  } else {
+    filter.ran_score?.forEach((value) => {
+      params.append("ran_score", value)
+    })
+  }
 
   return params
 }
@@ -227,9 +243,9 @@ export const HERMES_DASHBOARD_NR_2600: HermesDashboardConfig = {
   dashboardTitle: "Dashboard NR 2600",
   mapTitle: "NR 2600 Progress Map",
   basePath: "/nr-2600",
-  filterStorageKey: "nr-2600-filter-state",
+  filterStorageKey: "nr-2600-filter-state-v2",
   exportPrefix: "nr-2600",
-  mapCacheKey: "nr-2600-map-13k-all-status-v2",
+  mapCacheKey: "nr-2600-map-13k-all-status-v3",
   dataScope: NR_2600_PROGRAM_REPORT_SCOPE,
   supplementalDataScopes: NR_2600_SUPPLEMENTAL_PROGRAM_REPORT_SCOPES,
   progressFilter: NR_2600_PROGRAM_REPORT_SCOPE,
@@ -239,4 +255,5 @@ export const HERMES_DASHBOARD_NR_2600: HermesDashboardConfig = {
   dailyRunrateTitle: "Daily Readiness Runrate – Last 7 Days",
   cityMilestoneCard: NR_2600_MOS_BY_CITY_CARD,
   hideActivatedCityCard: true,
+  ranFilterMode: "scope",
 }

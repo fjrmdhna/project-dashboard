@@ -10,6 +10,7 @@ import {
   getDataScopeCacheKey,
   type HermesDashboardDataScope,
 } from './hermes-dashboard-scope';
+import { collectDistinctRanScopes, type HermesRanFilterMode } from './hermes-ran-scope-filter';
 
 // Helper function to normalize circle values to Title Case (consistent with AOP)
 const formatCircleValue = (value: string): string =>
@@ -368,11 +369,16 @@ const FILTER_OPTIONS_CACHE_TTL_MS = 5 * 60 * 1000
 const filterOptionsCache = new Map<string, { fetchedAt: number; value: FilterOptionsResponse }>()
 
 export async function getFilterOptions(
-  options: { forceRefresh?: boolean; dataScope?: HermesDashboardDataScope } = {}
+  options: {
+    forceRefresh?: boolean
+    dataScope?: HermesDashboardDataScope
+    ranFilterMode?: HermesRanFilterMode
+  } = {}
 ): Promise<FilterOptionsResponse> {
   try {
     const now = Date.now()
-    const cacheKey = getDataScopeCacheKey(options.dataScope)
+    const ranFilterMode = options.ranFilterMode ?? "score"
+    const cacheKey = `${getDataScopeCacheKey(options.dataScope)}:${ranFilterMode}`
     const cached = filterOptionsCache.get(cacheKey)
     if (!options.forceRefresh && cached && (now - cached.fetchedAt) < FILTER_OPTIONS_CACHE_TTL_MS) {
       return cached.value
@@ -435,10 +441,16 @@ export async function getFilterOptions(
         .neq('year', '')
     );
     
-    // RAN Score filter options: derived from program_report ("new site" → New Site, else → Expansion)
-    const { data: programReportsForRanScore, error: ranScoresError } = await withDashboardScope(
-      supabase.from('site_data_5g').select('program_report')
-    );
+    // RAN Score: derived from program_report. RAN Scope (NR 2600): distinct ran_scope values.
+    const ranOptionsQuery =
+      ranFilterMode === "scope"
+        ? supabase
+            .from("site_data_5g")
+            .select("ran_scope")
+            .not("ran_scope", "is", null)
+            .neq("ran_scope", "")
+        : supabase.from("site_data_5g").select("program_report")
+    const { data: ranOptionsData, error: ranScoresError } = await withDashboardScope(ranOptionsQuery)
     
     // Get unique site categories from site_category
     const { data: siteCategoriesData, error: siteCategoriesError } = await withDashboardScope(
@@ -503,13 +515,18 @@ export async function getFilterOptions(
     })
     const normalizedSiteCategories = Array.from(siteCategoriesMap.values()).sort()
 
-    // Normalize program_report for Hermes RAN Score: "new site" → "New Site", else → "Expansion"
-    const ranScoresSet = new Set<'New Site' | 'Expansion'>()
-    ;(programReportsForRanScore || []).forEach((row) => {
-      const raw = row.program_report
-      ranScoresSet.add(normalizeRanScoreForHermesFilter(raw))
-    })
-    const ranScoresNormalized = Array.from(ranScoresSet).sort() // ["Expansion", "New Site"]
+    const ranScoresNormalized =
+      ranFilterMode === "scope"
+        ? collectDistinctRanScopes(ranOptionsData as Array<{ ran_scope?: string | null }> | null)
+        : Array.from(
+            ((ranOptionsData ?? []) as Array<{ program_report?: string | null }>).reduce(
+              (scores, row) => {
+                scores.add(normalizeRanScoreForHermesFilter(row.program_report))
+                return scores
+              },
+              new Set<"New Site" | "Expansion">()
+            )
+          ).sort()
     
     const data: FilterOptionsData = {
       vendors: [...new Set(vendorsData?.map(row => row.vendor_name) || [])].sort(),

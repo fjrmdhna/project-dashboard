@@ -1,4 +1,5 @@
 import { applyRanScoreFilterByProgramReport } from '@/lib/hermes-ran-score-filter'
+import { applyRanScopeFilter } from '@/lib/hermes-ran-scope-filter'
 
 /** Search fields shared by dashboard client filter and Excel export API. */
 export const HERMES_DASHBOARD_SEARCH_FIELDS = [
@@ -76,6 +77,7 @@ export function applyHermesSharedFilters(
     nanoClusters?: string[]
     regionCircles?: string[]
     ranScores?: string[]
+    ranScopes?: string[]
     years?: string[]
     search?: string | null
     programReports?: string[]
@@ -127,7 +129,12 @@ export function applyHermesSharedFilters(
     nextQuery = nextQuery.in('year', params.years)
   }
 
-  nextQuery = applyRanScoreFilterByProgramReport(nextQuery, params.ranScores)
+  const ranScopes = (params.ranScopes ?? []).map((value) => value.trim()).filter(Boolean)
+  if (ranScopes.length > 0) {
+    nextQuery = applyRanScopeFilter(nextQuery, ranScopes)
+  } else {
+    nextQuery = applyRanScoreFilterByProgramReport(nextQuery, params.ranScores)
+  }
 
   const search = params.search?.trim()
   if (search) {
@@ -144,6 +151,7 @@ export function parseHermesSharedFilterParams(searchParams: URLSearchParams) {
     nanoClusters: searchParams.getAll('nano_cluster'),
     regionCircles: searchParams.getAll('region_circle'),
     ranScores: searchParams.getAll('ran_score'),
+    ranScopes: searchParams.getAll('ran_scope'),
     years: searchParams.getAll('year'),
     search: searchParams.get('q'),
     programReports: searchParams.getAll('program_report'),

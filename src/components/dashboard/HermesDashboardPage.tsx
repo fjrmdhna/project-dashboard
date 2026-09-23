@@ -174,6 +174,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
     milestoneFields: config.milestoneFields,
     progressCurveFields: config.progressCurveFields,
     dailyRunrateMilestone: config.dailyRunrateMilestone,
+    ranFilterMode: config.ranFilterMode,
   })
   
   // Use deferred value for rows only (heavy visual component)
@@ -335,6 +336,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
     appendHermesFilterParams(params, debouncedFilterValue, {
       hideProgramReport,
       allProgramReports,
+      ranFilterMode: config.ranFilterMode,
     })
     appendHermesExportScopeParams(params, config)
 
@@ -446,6 +448,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
         singleRow
         endpoint={filterOptionsEndpoint}
         hiddenFilters={hiddenFilters}
+        ranFilterLabel={config.ranFilterMode === "scope" ? "RAN Scope" : "RAN Score"}
       />
     </div>
   )
@@ -675,6 +678,7 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
                   singleRow
                   endpoint={filterOptionsEndpoint}
                   hiddenFilters={hiddenFilters}
+                  ranFilterLabel={config.ranFilterMode === "scope" ? "RAN Scope" : "RAN Score"}
                 />
               </div>
             )}

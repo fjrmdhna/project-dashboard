@@ -50,6 +50,7 @@ const MINIMAL_COLUMNS = [
   'region',            // Region filter (deprecated)
   'region_circle',     // Circle filter
   'site_category',     // Site category filter
+  'ran_scope',         // NR 2600 RAN Scope filter
   'ic_000040_af',      // Install stats
   'imp_integ_af',      // Readiness - VendorLeaderboard
   'mocn_activation_forecast', // Baseline - ProgressCurve
@@ -120,6 +121,7 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       imp_ttp: row.imp_ttp || null,
       nano_cluster: row.nano_cluster || null,
       ran_score: normalizeRanScoreForHermesFilter(row.program_report ?? null),
+      ran_scope: typeof row.ran_scope === 'string' ? row.ran_scope.trim() || null : null,
       year: row.year || null,
       region: row.region || null,
       region_circle: row.region_circle || null,

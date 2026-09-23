@@ -16,6 +16,8 @@ export interface MultiSelectProps {
   staticLabel?: boolean
   /** When true, treat option selection as case-insensitive (e.g. "Active" matches "active"). Use for fields like WBS Status where API may return different casing. */
   caseInsensitiveMatch?: boolean
+  /** Minimum dropdown width in pixels so long option labels stay readable. */
+  menuMinWidth?: number
 }
 
 /** Native title tooltip only when text is visually truncated (scrollWidth > clientWidth). */
@@ -60,7 +62,8 @@ export function MultiSelect({
   disabled = false,
   width = "auto",
   staticLabel = false,
-  caseInsensitiveMatch = false
+  caseInsensitiveMatch = false,
+  menuMinWidth = 200,
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -79,7 +82,7 @@ export function MultiSelect({
   const updateMenuPosition = () => {
     if (!buttonRef.current) return
     const rect = buttonRef.current.getBoundingClientRect()
-    const desiredWidth = Math.max(200, rect.width)
+    const desiredWidth = Math.max(menuMinWidth, rect.width)
     const viewportWidth = window.innerWidth
     const spaceOnRight = viewportWidth - rect.left - desiredWidth
 

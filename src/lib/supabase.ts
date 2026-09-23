@@ -16,6 +16,7 @@ export interface SiteData5G {
   imp_ttp?: string
   nano_cluster?: string
   ran_score?: string | null
+  ran_scope?: string | null
   issue_category?: string | null
   caf_approved?: string
   mos_af?: string
@@ -170,6 +171,7 @@ export async function getSiteData5G(
     'region',      // Region filter (deprecated)
     'region_circle', // Circle filter
     'site_category', // Site category filter
+    'ran_scope',     // NR 2600 RAN Scope filter
     'wbs_status',    // Dashboard scope filter (Active only)
   ].join(',')
 

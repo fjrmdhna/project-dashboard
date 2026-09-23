@@ -23,6 +23,7 @@ import { useFilter } from '@/contexts/FilterContext'
 import { FilterBar, FilterValue } from '@/components/filters/FilterBar'
 import { getProgramReportsForDisplayName } from '@/lib/hermes-program-mapping'
 import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-5g-utils'
+import { matchesRanScopeFilter } from '@/lib/hermes-ran-scope-filter'
 
 /** Row shape for filtering invalid-coordinate sites (same filterable fields as map points). */
 interface InvalidCoordinateRow {
@@ -36,6 +37,7 @@ interface InvalidCoordinateRow {
   region_circle?: string | null
   year?: string | null
   ran_score?: string | null
+  ran_scope?: string | null
   lat?: string | number | null
   long?: string | number | null
 }
@@ -229,7 +231,8 @@ export function HermesDashboardMapPage({ config }: { config: HermesDashboardConf
       currentFilter.ran_score?.length
         ? new Set(currentFilter.ran_score) : null
 
-    type FilterableRow = { id: string; status: string; vendorName?: string | null; programReport?: string | null; impTtp?: string | null; nanoCluster?: string | null; region?: string | null; region_circle?: string | null; year?: string | null; ran_score?: string | null }
+    const useRanScope = config.ranFilterMode === "scope"
+    type FilterableRow = { id: string; status: string; vendorName?: string | null; programReport?: string | null; impTtp?: string | null; nanoCluster?: string | null; region?: string | null; region_circle?: string | null; year?: string | null; ran_score?: string | null; ran_scope?: string | null }
     const matchesFilter = (p: FilterableRow, includeStatus = true) => {
       if (vendorSet && !vendorSet.has(p.vendorName ?? '')) return false
       if (programSet && !programSet.has(p.programReport ?? '')) return false
@@ -242,8 +245,10 @@ export function HermesDashboardMapPage({ config }: { config: HermesDashboardConf
         if (!pCircle || !circleSet.has(pCircle)) return false
       }
       if (ranScoreSet) {
-        const normalizedRanScore = normalizeRanScoreForHermesFilter(p.ran_score)
-        if (!ranScoreSet.has(normalizedRanScore)) return false
+        const matches = useRanScope
+          ? matchesRanScopeFilter(p.ran_scope, ranScoreSet)
+          : ranScoreSet.has(normalizeRanScoreForHermesFilter(p.ran_score))
+        if (!matches) return false
       }
       if (includeStatus && statusSet && !statusSet.has(p.status)) return false
       if (q) {
@@ -279,7 +284,7 @@ export function HermesDashboardMapPage({ config }: { config: HermesDashboardConf
       invalidCoordinatesFiltered: filteredInvalidCount,
       filteredInvalidRows
     }
-  }, [cachedMapResponse, currentFilter, hideProgramReport, config.dataScope])
+  }, [cachedMapResponse, currentFilter, hideProgramReport, config.dataScope, config.ranFilterMode])
 
   // Use filter-aware invalid count when API provides invalidCoordinateRows; otherwise fallback to API total
   const invalidCoordinates =
@@ -326,7 +331,9 @@ export function HermesDashboardMapPage({ config }: { config: HermesDashboardConf
         Region: row.region ?? '',
         Circle: row.region_circle ?? '',
         Year: row.year ?? '',
-        'RAN Score': row.ran_score ?? '',
+        ...(config.ranFilterMode === 'scope'
+          ? { 'RAN Scope': row.ran_scope ?? '' }
+          : { 'RAN Score': row.ran_score ?? '' }),
         Lat: formatCoord(row.lat),
         Long: formatCoord(row.long),
         Note: 'Invalid coordinates'
@@ -342,7 +349,7 @@ export function HermesDashboardMapPage({ config }: { config: HermesDashboardConf
     } finally {
       setIsExportingInvalid(false)
     }
-  }, [filteredInvalidRows, isExportingInvalid])
+  }, [filteredInvalidRows, isExportingInvalid, config.ranFilterMode, config.exportPrefix])
 
   const headerTitle = config.mapTitle
 
@@ -446,6 +453,7 @@ export function HermesDashboardMapPage({ config }: { config: HermesDashboardConf
             singleRow
             endpoint={filterOptionsEndpoint}
             hiddenFilters={hiddenFilters}
+            ranFilterLabel={config.ranFilterMode === "scope" ? "RAN Scope" : "RAN Score"}
           />
         </div>
 
