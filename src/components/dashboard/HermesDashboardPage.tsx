@@ -12,6 +12,7 @@ import ProgressCurveLineChart from "@/components/charts/ProgressCurveLineChart"
 import { TopIssueCard } from "@/components/cards/TopIssueCard"
 import { DailyRunrateCard } from "@/components/cards/DailyRunrateCard"
 import { VendorLeaderboardCard } from "@/components/cards/VendorLeaderboardCard"
+import { CityActivationCard } from "@/components/cards/CityActivationCard"
 import { NanoClusterListCard } from "@/components/cards/NewFeatureCard"
 import { ProgramHeader } from "@/components/dashboard/ProgramHeader"
 import { useFilter } from "@/contexts/FilterContext"
@@ -568,11 +569,13 @@ export function HermesDashboardPage({ config }: { config: HermesDashboardConfig 
     />
   )
 
-  // Nano Cluster List component
-  const newFeatureCard = (
-    <NanoClusterListCard 
+  const newFeatureCard = config.showCityActivationList ? (
+    <CityActivationCard
       rows={rows}
+      activatedColumn={config.milestoneFields?.activatedColumn ?? "activation_2600_af"}
     />
+  ) : (
+    <NanoClusterListCard rows={rows} />
   )
 
   // Vendor Leaderboard component - OPTIMIZED: Use pre-aggregated data

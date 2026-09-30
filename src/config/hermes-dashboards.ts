@@ -69,6 +69,8 @@ export interface HermesDashboardConfig {
   cityMilestoneCard?: HermesCityMilestoneCardConfig
   /** When true, hide activation-by-city and show readiness in the lower left slot */
   hideActivatedCityCard?: boolean
+  /** When true, the circle-list slot shows city activation from imp_ttp (same source as the City filter). */
+  showCityActivationList?: boolean
   /**
    * RAN filter source.
    * "score" (default): New Site / Expansion derived from program_report.
@@ -256,4 +258,5 @@ export const HERMES_DASHBOARD_NR_2600: HermesDashboardConfig = {
   cityMilestoneCard: NR_2600_MOS_BY_CITY_CARD,
   hideActivatedCityCard: true,
   ranFilterMode: "scope",
+  showCityActivationList: true,
 }
