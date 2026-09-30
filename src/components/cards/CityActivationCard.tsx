@@ -6,7 +6,6 @@ import { isMilestoneAchieved } from "@/lib/hermes-milestone-fields"
 
 interface CityActivationRow {
   imp_ttp?: string | null
-  [column: string]: unknown
 }
 
 interface CityActivationCardProps {
