@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+pass.txt
 
 # debug
 npm-debug.log*
@@ -51,3 +52,6 @@ PRN
 AUX
 COM[1-9]
 LPT[1-9]
+ 
+# sanitation collector secrets 
+.sanitation.env 
