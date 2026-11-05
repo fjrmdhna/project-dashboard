@@ -3,8 +3,12 @@ import { EXCLUDED_PROGRAM_REPORTS, filterExcludedProgramReports, shouldExcludePr
 import { normalizeRanScoreForHermesFilter, applyRanScoreFilterByProgramReport } from './hermes-ran-score-filter'
 import { isMilestoneAchieved, resolveMilestoneColumns } from './hermes-milestone-fields'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://opecotutdvtahsccpqzr.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wZWNvdHV0ZHZ0YWhzY2NwcXpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU1NDU4OTcsImV4cCI6MjA1MTEyMTg5N30.sptjTg-0L1lCep8S_wriw3ixm_sXiTAFX-JiPOQFAEU'
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 

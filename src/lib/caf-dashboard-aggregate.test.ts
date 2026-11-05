@@ -80,7 +80,7 @@ describe("caf-dashboard-aggregate", () => {
 
     expect(dashboard.milestoneAlignment.totalCaf).toBe(3)
     expect(dashboard.milestoneAlignment.missingRfs).toBe(1)
-    expect(dashboard.milestoneAlignment.missingEndorse).toBe(2)
+    expect(dashboard.milestoneAlignment.missingEndorse).toBe(1)
     expect(dashboard.milestoneAlignment.missingPatp).toBe(2)
     expect(dashboard.milestoneAlignment.allComplete).toBe(1)
   })

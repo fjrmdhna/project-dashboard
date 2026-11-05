@@ -14,6 +14,10 @@ import { HERMES_DASHBOARD_HERMES_5G, HERMES_DASHBOARD_NR_2600 } from "@/config/h
 import { AOP_DASHBOARD_DEFAULT } from "@/config/aop-dashboards"
 import { resolveMilestoneColumns } from "@/lib/hermes-milestone-fields"
 
+// Home progress is live DB data — never serve a build-time prerender snapshot.
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const heroHighlight: HeroHighlight = {
   eyebrow: "Explore",
   title: "View site locations on map",

@@ -1,27 +1,42 @@
 import { NextResponse } from 'next/server'
 
-/**
- * Validate API Key from request
- * Supports both header (X-API-Key) and query parameter (apiKey)
- */
-export function validateApiKey(request: Request): { valid: boolean; error?: string } {
-  // Get API key from environment variable
-  const validApiKey = process.env.TLP_API_KEY || process.env.API_KEY
+function isProduction(): boolean {
+  return process.env.NODE_ENV === 'production'
+}
 
-  // If no API key is configured, allow access (for development)
+function readProvidedApiKey(request: Request): string | null {
+  const headerApiKey = request.headers.get('X-API-Key') || request.headers.get('x-api-key')
+  const url = new URL(request.url)
+  const queryApiKey = url.searchParams.get('apiKey') || url.searchParams.get('api_key')
+  return headerApiKey || queryApiKey || null
+}
+
+/**
+ * Validate API key against one or more env var names (first non-empty wins).
+ * Production: fail-closed if no env key is configured.
+ * Development: warn and allow if no env key (local convenience only).
+ */
+export function validateApiKey(
+  request: Request,
+  envVarNames: string | string[] = ['TLP_API_KEY', 'API_KEY']
+): { valid: boolean; error?: string } {
+  const names = Array.isArray(envVarNames) ? envVarNames : [envVarNames]
+  const validApiKey = names.map((name) => process.env[name]).find((value) => Boolean(value?.trim()))
+
   if (!validApiKey) {
-    console.warn('⚠️  API key not configured. Allowing access without authentication.')
+    if (isProduction()) {
+      return {
+        valid: false,
+        error: `API key not configured on server (${names.join(' / ')}).`,
+      }
+    }
+    console.warn(
+      `[api-auth] No API key env configured (${names.join(', ')}). Allowing access in non-production.`
+    )
     return { valid: true }
   }
 
-  // Try to get API key from header first
-  const headerApiKey = request.headers.get('X-API-Key') || request.headers.get('x-api-key')
-
-  // Try to get API key from query parameter
-  const url = new URL(request.url)
-  const queryApiKey = url.searchParams.get('apiKey') || url.searchParams.get('api_key')
-
-  const providedApiKey = headerApiKey || queryApiKey
+  const providedApiKey = readProvidedApiKey(request)
 
   if (!providedApiKey) {
     return {
@@ -41,15 +56,19 @@ export function validateApiKey(request: Request): { valid: boolean; error?: stri
 }
 
 /**
- * Middleware function to validate API key and return error response if invalid
+ * Return 401 JSON response when API key is invalid; otherwise null.
  */
-export function requireApiKey(request: Request): NextResponse | null {
-  const validation = validateApiKey(request)
+export function requireApiKey(
+  request: Request,
+  envVarNames: string | string[] = ['TLP_API_KEY', 'API_KEY']
+): NextResponse | null {
+  const validation = validateApiKey(request, envVarNames)
 
   if (!validation.valid) {
     return NextResponse.json(
       {
         status: 'error',
+        success: false,
         message: 'Unauthorized',
         error: validation.error,
         timestamp: new Date().toISOString(),
@@ -60,4 +79,3 @@ export function requireApiKey(request: Request): NextResponse | null {
 
   return null
 }
-

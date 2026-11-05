@@ -1,0 +1,94 @@
+# Best-practice Cloud Build → Artifact Registry → Cloud Run
+# Usage:
+#   gcloud builds submit --region=asia-southeast2 --config=cloudbuild.yaml \
+#     --gcs-source-staging-dir=gs://run-sources-.../project-dashboard/source \
+#     --service-account=projects/.../serviceAccounts/sa-...-cbld@....iam.gserviceaccount.com \
+#     --substitutions=_NEXT_PUBLIC_SUPABASE_URL=...,_NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+
+substitutions:
+  _SERVICE: project-dashboard
+  _REGION: asia-southeast2
+  _AR_REPO: cloud-run-source-deploy
+  _CLOUD_RUN_SA: sa-aip-prd-el-u045-ca-crn@aip-el-u045-ca-prd-ee7e.iam.gserviceaccount.com
+  _NEXT_PUBLIC_SUPABASE_URL: ''
+  _NEXT_PUBLIC_SUPABASE_ANON_KEY: ''
+  _SUPABASE_SERVICE_ROLE_KEY: ''
+  _UPSTASH_REDIS_REST_URL: ''
+  _UPSTASH_REDIS_REST_TOKEN: ''
+
+# Prefer Cloud Run SA for builds (matches successful org deploys; default Compute SA is disabled).
+# Note: manual `gcloud builds submit` may still hit VPC-SC on GCS fetch.
+# Prefer: bash scripts/deploy-gcp.sh  (Cloud Run --source)
+serviceAccount: projects/aip-el-u045-ca-prd-ee7e/serviceAccounts/sa-aip-prd-el-u045-ca-crn@aip-el-u045-ca-prd-ee7e.iam.gserviceaccount.com
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}:${BUILD_ID}
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}:latest
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}
+      - --build-arg=NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}:${BUILD_ID}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}:latest
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        IMAGE="${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}:${BUILD_ID}"
+
+        ENV_VARS="NODE_ENV=production"
+        ENV_VARS+=",NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}"
+        ENV_VARS+=",NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}"
+
+        if [[ -n "${_SUPABASE_SERVICE_ROLE_KEY}" ]]; then
+          ENV_VARS+=",SUPABASE_SERVICE_ROLE_KEY=${_SUPABASE_SERVICE_ROLE_KEY}"
+        fi
+        if [[ -n "${_UPSTASH_REDIS_REST_URL}" && -n "${_UPSTASH_REDIS_REST_TOKEN}" ]]; then
+          ENV_VARS+=",UPSTASH_REDIS_REST_URL=${_UPSTASH_REDIS_REST_URL}"
+          ENV_VARS+=",UPSTASH_REDIS_REST_TOKEN=${_UPSTASH_REDIS_REST_TOKEN}"
+        fi
+
+        gcloud run deploy "${_SERVICE}" \
+          --project="${PROJECT_ID}" \
+          --image="$${IMAGE}" \
+          --region="${_REGION}" \
+          --platform=managed \
+          --service-account="${_CLOUD_RUN_SA}" \
+          --port=8080 \
+          --cpu=1 \
+          --memory=1Gi \
+          --min-instances=0 \
+          --max-instances=10 \
+          --concurrency=80 \
+          --timeout=300 \
+          --cpu-boost \
+          --ingress=all \
+          --set-env-vars="$${ENV_VARS}"
+
+        # Public access (may be blocked by org policy / missing setIamPolicy)
+        gcloud run services add-iam-policy-binding "${_SERVICE}" \
+          --project="${PROJECT_ID}" \
+          --region="${_REGION}" \
+          --member="allUsers" \
+          --role="roles/run.invoker" || echo "WARN: could not grant allUsers invoker (org policy or IAM)."

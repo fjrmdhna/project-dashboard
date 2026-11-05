@@ -45,8 +45,20 @@ if [ ! -d "$APP_DIR/.git" ]; then
 else
   echo "==> Syncing repository to origin/${BRANCH}"
   git -C "$APP_DIR" fetch --prune origin
-  git -C "$APP_DIR" checkout "$BRANCH"
-  git -C "$APP_DIR" reset --hard "origin/${BRANCH}"
+  TARGET="origin/${BRANCH}"
+  if [ -n "${DEPLOY_SHA:-}" ]; then
+    [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+      echo "ERROR: DEPLOY_SHA must be a full 40-character commit SHA."
+      exit 1
+    }
+    git -C "$APP_DIR" merge-base --is-ancestor "$DEPLOY_SHA" "origin/${BRANCH}" || {
+      echo "ERROR: DEPLOY_SHA is not part of origin/${BRANCH}."
+      exit 1
+    }
+    TARGET="$DEPLOY_SHA"
+  fi
+  git -C "$APP_DIR" checkout -B "$BRANCH" "$TARGET"
+  git -C "$APP_DIR" reset --hard "$TARGET"
 fi
 
 cd "$APP_DIR"
@@ -98,8 +110,13 @@ if [ "$PORT_BUSY" -eq 1 ]; then
   fi
 fi
 
-echo "==> Building and starting containers"
-compose up -d --build --remove-orphans
+APP_IMAGE="${APP_IMAGE:-project-dashboard-app:${DEPLOY_SHA:-local}}"
+export APP_IMAGE
+PREVIOUS_IMAGE="$(docker inspect --format '{{.Config.Image}}' project_dashboard_app 2>/dev/null || true)"
+
+echo "==> Building app image: $APP_IMAGE"
+compose build app
+compose up -d --no-deps --no-build app
 
 echo "==> Waiting for health: $HEALTH_URL"
 ok=0
@@ -116,6 +133,10 @@ if [ "$ok" -ne 1 ]; then
   echo "ERROR: App did not become healthy within timeout."
   compose ps || true
   compose logs --tail=80 app || true
+  if [ -n "$PREVIOUS_IMAGE" ]; then
+    echo "==> Rolling back to $PREVIOUS_IMAGE"
+    APP_IMAGE="$PREVIOUS_IMAGE" compose up -d --no-deps --no-build app || true
+  fi
   exit 1
 fi
 
