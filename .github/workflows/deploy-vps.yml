@@ -1,16 +1,9 @@
-# CD: push/main or manual → SSH into VPS → git sync + docker compose redeploy
 name: Deploy VPS
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - "screenshots/**"
-      - ".cursor/**"
-      - "e2e/**"
-      - "test-results/**"
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
   workflow_dispatch:
 
 concurrency:
@@ -22,88 +15,76 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy to VPS (Docker Compose)
+    name: Deploy tested commit to VPS
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    environment: production
+    environment: Production
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ secrets.VPS_PORT }}
+      VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+      VPS_HEALTH_URL: ${{ secrets.VPS_HEALTH_URL }}
 
     steps:
-      - name: Validate required secrets
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      - name: Validate deployment configuration
+        shell: bash
         run: |
+          set -euo pipefail
           missing=0
-          for name in VPS_HOST VPS_USER VPS_SSH_PRIVATE_KEY; do
-            if [ -z "${!name}" ]; then
+          for name in VPS_HOST VPS_USER VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            if [ -z "${!name:-}" ]; then
               echo "::error::Missing secret: $name"
               missing=1
             fi
           done
-          if [ "$missing" -ne 0 ]; then
-            echo "Add secrets: GitHub → Settings → Secrets and variables → Actions"
-            echo "On VPS: bash scripts/setup-github-deploy-key.sh"
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::Invalid deployment SHA: $DEPLOY_SHA"
             exit 1
-          fi
+          }
+          exit "$missing"
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/deploy_key"
+          chmod 644 "$HOME/.ssh/known_hosts"
 
       - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          command_timeout: 40m
-          script_stop: true
-          script: |
-            set -euo pipefail
-            APP_DIR='${{ secrets.VPS_APP_DIR }}'
-            if [ -z "$APP_DIR" ]; then
-              APP_DIR=/opt/project-dashboard
-            fi
-            export APP_DIR
-            export BRANCH=main
-            export CI=1
-            export SKIP_UFW=1
-
-            if [ ! -d "$APP_DIR/.git" ]; then
-              echo "ERROR: $APP_DIR is not a git checkout."
-              echo "Bootstrap once on the server: bash scripts/deploy-vps.sh"
-              exit 1
-            fi
-
-            if [ ! -f "$APP_DIR/.env" ]; then
-              echo "ERROR: missing $APP_DIR/.env on server (do not commit .env)."
-              exit 1
-            fi
-
-            cd "$APP_DIR"
-            bash scripts/deploy-vps.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          port="${VPS_PORT:-22}"
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -p "$port" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            "$VPS_USER@$VPS_HOST" \
+            sudo /usr/local/sbin/deploy-project-dashboard "$DEPLOY_SHA"
 
       - name: Public health check
-        env:
-          VPS_HEALTH_URL: ${{ secrets.VPS_HEALTH_URL }}
+        if: ${{ env.VPS_HEALTH_URL != '' }}
+        shell: bash
         run: |
-          if [ -z "${VPS_HEALTH_URL:-}" ]; then
-            echo "Skipping public health check (VPS_HEALTH_URL not set)."
-            exit 0
-          fi
-          echo "Checking $VPS_HEALTH_URL"
-          ok=0
-          for i in $(seq 1 24); do
-            code=$(curl -fsS -o /tmp/health.json -w "%{http_code}" "$VPS_HEALTH_URL" || true)
-            if [ "$code" = "200" ]; then
-              echo "Health OK"
-              cat /tmp/health.json || true
-              echo
-              ok=1
-              break
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            if curl --fail --silent --show-error --max-time 15 "$VPS_HEALTH_URL" >/dev/null; then
+              echo "Production health check passed."
+              exit 0
             fi
-            echo "attempt $i -> HTTP ${code:-000}"
+            echo "Health attempt $attempt failed; retrying..."
             sleep 5
           done
-          if [ "$ok" -ne 1 ]; then
-            echo "::error::Public health check failed"
-            exit 1
-          fi
+          echo "::error::Public health check failed"
+          exit 1

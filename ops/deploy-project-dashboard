@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly APP_DIR=/opt/project-dashboard
+readonly REPO_URL=https://github.com/fjrmdhna/project-dashboard.git
+readonly BRANCH=main
+
+sha="${1:-}"
+[[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "Usage: deploy-project-dashboard <40-character-commit-sha>" >&2
+  exit 64
+}
+
+exec 9>/run/lock/project-dashboard-deploy.lock
+flock -n 9 || {
+  echo "Another project-dashboard deployment is running." >&2
+  exit 75
+}
+
+cd "$APP_DIR"
+git fetch --prune origin "$BRANCH"
+git merge-base --is-ancestor "$sha" "origin/$BRANCH" || {
+  echo "Refusing SHA outside origin/$BRANCH: $sha" >&2
+  exit 65
+}
+
+env \
+  APP_DIR="$APP_DIR" \
+  REPO_URL="$REPO_URL" \
+  BRANCH="$BRANCH" \
+  DEPLOY_SHA="$sha" \
+  CI=1 \
+  SKIP_UFW=1 \
+  bash scripts/deploy-vps.sh

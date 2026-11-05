@@ -1,9 +1,11 @@
 /**
- * Opsi 1: Upload Excel ke Supabase Storage dulu, lalu panggil API ini dengan filePath.
- * Menghindari limit body 4.5MB Vercel — request body hanya { filePath }.
- * Requires: SUPABASE_SERVICE_ROLE_KEY, bucket hermes-5g-uploads.
+ * Process Excel from local uploads volume (or legacy Supabase Storage path).
+ * Preferred: place file under UPLOADS_DIR / hermes-5g-uploads / {filePath}
+ * Requires: NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY for DB upsert via PostgREST.
  */
 import { NextResponse } from 'next/server'
+import { promises as fs } from 'fs'
+import path from 'path'
 
 export const maxDuration = 60
 import * as XLSX from 'xlsx'
@@ -93,11 +95,25 @@ function parseExcel(buffer: Buffer): Record<string, unknown>[] {
   return out
 }
 
-function getSupabaseService() {
+function getDbClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('SUPABASE_SERVICE_ROLE_KEY and NEXT_PUBLIC_SUPABASE_URL required')
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) throw new Error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required')
   return createClient(url, key)
+}
+
+function uploadsRoot() {
+  return process.env.UPLOADS_DIR || path.join(process.cwd(), 'data', 'uploads')
+}
+
+async function readUploadFile(filePath: string): Promise<Buffer> {
+  const safe = path.normalize(filePath).replace(/^(\.\.(\/|\\|$))+/, '')
+  const full = path.join(uploadsRoot(), BUCKET, safe)
+  const root = path.join(uploadsRoot(), BUCKET)
+  if (!full.startsWith(root)) {
+    throw new Error('Invalid filePath')
+  }
+  return fs.readFile(full)
 }
 
 export async function POST(request: Request) {
@@ -106,26 +122,25 @@ export async function POST(request: Request) {
     const filePath = typeof body?.filePath === 'string' ? body.filePath.trim() : ''
     if (!filePath) {
       return NextResponse.json(
-        { success: false, message: 'Body must be JSON with filePath: string (path in bucket hermes-5g-uploads)' },
+        { success: false, message: 'Body must be JSON with filePath: string (path under hermes-5g-uploads)' },
         { status: 400 }
       )
     }
 
-    const supabase = getSupabaseService()
-
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from(BUCKET)
-      .download(filePath)
-
-    if (downloadError) {
+    let buffer: Buffer
+    try {
+      buffer = await readUploadFile(filePath)
+    } catch (e) {
       return NextResponse.json(
-        { success: false, message: `Storage download failed: ${downloadError.message}. Ensure bucket "${BUCKET}" exists and filePath is correct.` },
+        {
+          success: false,
+          message: `Local file read failed: ${e instanceof Error ? e.message : String(e)}. Place file under UPLOADS_DIR/${BUCKET}/`,
+        },
         { status: 400 }
       )
     }
 
-    const arrayBuffer = await fileData.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    const supabase = getDbClient()
 
     let rows: Record<string, unknown>[]
     try {

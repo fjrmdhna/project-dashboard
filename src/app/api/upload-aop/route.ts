@@ -1,95 +1,52 @@
 import { NextResponse } from 'next/server'
 import { requireApiKey } from '@/lib/api-auth'
 import { mapAopExcelRow } from '@/lib/aop-excel-mapper'
+import { EXCEL_UPLOAD_BATCH_SIZE, validateSystemKeyRow } from '@/lib/excel-upload-utils'
+import { getServerSupabase } from '@/lib/server-supabase'
 import {
-  EXCEL_ALLOWED_MIME_TYPES,
-  EXCEL_UPLOAD_BATCH_SIZE,
-  EXCEL_UPLOAD_MAX_BYTES,
-  parseExcelWithSecondRowHeader,
-  validateSystemKeyRow,
-} from '@/lib/excel-upload-utils'
-import { supabase } from '@/lib/supabase'
+  deleteStaleRowsBySystemKey,
+  systemKeySetFromRows,
+} from '@/lib/supabase-site-sync'
+import {
+  parseExcelSkipFirstRow,
+  readExcelUploadFile,
+  upsertChunks,
+} from '@/lib/upload-gateway-utils'
 
-export const maxDuration = 60
+export const dynamic = 'force-dynamic'
+export const maxDuration = 300
 
-interface UploadResult {
-  success: boolean
-  totalRows: number
-  insertedCount: number
-  skippedCount: number
-  errors: Array<{ row: number; error: string }>
-  message: string
-}
+const PROGRAM_REPORT_10K = '10k'
+const PRIORITY_LEBARAN = 'lebaran'
 
-async function upsertBatch(rows: Record<string, unknown>[]) {
-  const { data, error } = await supabase
-    .from('site_data_aop')
-    .upsert(rows, { onConflict: 'system_key', ignoreDuplicates: false })
-    .select('system_key')
-
-  if (error) throw error
-  return data?.length ?? 0
+function shouldKeepAopRow(row: Record<string, unknown>): boolean {
+  const programReport = String(row.program_report ?? '').toLowerCase()
+  const priorityCongest = String(row.priority_congest_urgent ?? '').toLowerCase()
+  const pm = row.pm_indosat
+  const hasPmIndosat = pm != null && String(pm).trim() !== ''
+  const has10k = programReport.includes(PROGRAM_REPORT_10K)
+  const hasLebaran = priorityCongest.includes(PRIORITY_LEBARAN)
+  return !has10k || hasLebaran || hasPmIndosat
 }
 
 export async function POST(request: Request) {
-  const contentLengthHeader = request.headers.get('content-length')
-
   try {
-    const authError = requireApiKey(request)
+    const authError = requireApiKey(request, ['PMIS_AOP_API_KEY', 'TLP_API_KEY', 'API_KEY'])
     if (authError) return authError
 
-    const contentLength = Number(contentLengthHeader ?? '0')
-    if (contentLength > EXCEL_UPLOAD_MAX_BYTES) {
-      return NextResponse.json(
-        {
-          status: 'error',
-          message: `File size exceeds maximum limit of ${EXCEL_UPLOAD_MAX_BYTES / 1024 / 1024}MB`,
-        },
-        { status: 413 }
-      )
-    }
+    const fileResult = await readExcelUploadFile(request)
+    if ('error' in fileResult) return fileResult.error
 
-    const formData = await request.formData()
-    const file = formData.get('file')
-
-    if (!(file instanceof File)) {
-      return NextResponse.json(
-        { status: 'error', message: 'No file provided. Use multipart field "file".' },
-        { status: 400 }
-      )
-    }
-
-    if (file.type && !EXCEL_ALLOWED_MIME_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        {
-          status: 'error',
-          message: 'Invalid file type. Please upload an Excel file (.xlsx, .xls, .xlsm)',
-        },
-        { status: 400 }
-      )
-    }
-
-    if (file.size > EXCEL_UPLOAD_MAX_BYTES) {
-      return NextResponse.json(
-        {
-          status: 'error',
-          message: `File size exceeds maximum limit of ${EXCEL_UPLOAD_MAX_BYTES / 1024 / 1024}MB`,
-        },
-        { status: 413 }
-      )
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const rawRows = parseExcelWithSecondRowHeader(buffer)
-
+    // Match swap_progress convention: skip first sheet row (header on row 2).
+    const rawRows = parseExcelSkipFirstRow(fileResult.buffer)
     if (rawRows.length === 0) {
       return NextResponse.json(
-        { status: 'error', message: 'Excel file is empty or has no data rows' },
+        { success: false, error: 'Excel file is empty or has no data rows' },
         { status: 400 }
       )
     }
 
-    const processedRows: Record<string, unknown>[] = []
+    const mappedRows: Record<string, unknown>[] = []
     const errors: Array<{ row: number; error: string }> = []
 
     for (let i = 0; i < rawRows.length; i++) {
@@ -99,65 +56,72 @@ export async function POST(request: Request) {
         errors.push({ row: excelRowNumber, error: 'Missing or empty system_key' })
         continue
       }
-
       const validation = validateSystemKeyRow(mapped)
       if (!validation.valid) {
         errors.push({ row: excelRowNumber, error: validation.error ?? 'Validation failed' })
         continue
       }
-
-      processedRows.push(mapped)
+      mappedRows.push(mapped)
     }
 
-    if (processedRows.length === 0) {
+    const originalCount = mappedRows.length
+    const filteredData = mappedRows.filter(shouldKeepAopRow)
+    const excludedCount = originalCount - filteredData.length
+
+    if (filteredData.length === 0) {
       return NextResponse.json(
         {
-          status: 'error',
-          message: 'No valid data rows found after validation',
+          success: false,
+          error: 'No valid data rows found after validation',
           errors,
+          excludedRows: excludedCount,
         },
         { status: 400 }
       )
     }
 
-    let insertedCount = 0
-    for (let i = 0; i < processedRows.length; i += EXCEL_UPLOAD_BATCH_SIZE) {
-      const batch = processedRows.slice(i, i + EXCEL_UPLOAD_BATCH_SIZE)
-      try {
-        insertedCount += await upsertBatch(batch)
-      } catch (error) {
-        errors.push({
-          row: i + 3,
-          error: error instanceof Error ? error.message : 'Batch upsert failed',
-        })
+    console.log(
+      `[upload-aop] file=${fileResult.file.name} rows=${filteredData.length} excluded=${excludedCount}`
+    )
+
+    const supabase = getServerSupabase()
+    const uploaded = await upsertChunks(supabase, 'site_data_aop', filteredData, {
+      chunkSize: EXCEL_UPLOAD_BATCH_SIZE,
+      concurrency: 5,
+    })
+
+    let deletedCount = 0
+    let staleSyncError: { message: string } | null = null
+    if (filteredData.length >= 100) {
+      const currentKeys = systemKeySetFromRows(filteredData)
+      const sync = await deleteStaleRowsBySystemKey(supabase, 'site_data_aop', currentKeys)
+      deletedCount = sync.deletedCount
+      staleSyncError = sync.error
+      if (staleSyncError) {
+        console.error('[upload-aop] Stale row sync failed:', staleSyncError.message)
       }
     }
 
-    const result: UploadResult = {
-      success: errors.length === 0,
-      totalRows: rawRows.length,
-      insertedCount,
-      skippedCount: rawRows.length - processedRows.length,
-      errors,
-      message:
-        errors.length === 0
-          ? `Successfully uploaded ${insertedCount} rows to site_data_aop`
-          : `Uploaded ${insertedCount} rows with ${errors.length} errors`,
-    }
-
     return NextResponse.json({
-      status: result.success ? 'success' : 'partial_success',
-      ...result,
-      timestamp: new Date().toISOString(),
+      success: errors.length === 0 && !staleSyncError,
+      message: 'Upload successful',
+      totalRows: filteredData.length,
+      insertedCount: uploaded,
+      excludedRows: excludedCount,
+      originalRows: originalCount,
+      deletedRows: deletedCount,
+      skippedCount: rawRows.length - mappedRows.length,
+      errors,
+      staleSyncError: staleSyncError?.message ?? null,
+      uploadedAt: new Date().toISOString(),
     })
   } catch (error) {
     console.error('[upload-aop] Error:', error)
     return NextResponse.json(
       {
-        status: 'error',
-        message: 'Failed to upload AOP Excel file',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
+        success: false,
+        error: 'Upload failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     )

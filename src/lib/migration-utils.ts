@@ -2,10 +2,12 @@ import { createClient } from '@supabase/supabase-js';
 import { Pool } from 'pg';
 
 // Supabase Client
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://opecotutdvtahsccpqzr.supabase.co',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9wZWNvdHV0ZHZ0YWhzY2NwcXpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU1NDU4OTcsImV4cCI6MjA1MTEyMTg5N30.sptjTg-0L1lCep8S_wriw3ixm_sXiTAFX-JiPOQFAEU'
-);
+const migrationSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const migrationSupabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+if (!migrationSupabaseUrl || !migrationSupabaseKey) {
+  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
+}
+export const supabase = createClient(migrationSupabaseUrl, migrationSupabaseKey);
 
 // PostgreSQL Pool
 export const postgresPool = new Pool({

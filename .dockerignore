@@ -1,15 +1,56 @@
+# Dependencies & build output
 node_modules
-npm-debug.log
 .next
+out
+build
+coverage
+dist
+
+# Git / IDE / local tooling
 .git
 .gitignore
+.cursor
+.cursorignore
+.vscode
+.idea
+.playwright-mcp
+.vercel
+
+# Env & secrets (never bake into image)
+.env
+.env.*
+!.env.example
+pass.txt
+*.pem
+
+# Docs, tests, screenshots (not needed at runtime)
 README.md
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-Dockerfile*
-docker-compose*
-.dockerignore
-scripts/
-*.log 
+*.md
+docs
+e2e
+test-results
+screenshots
+playwright.config.ts
+vitest.config.*
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+
+# Local compose / deploy helpers (Dockerfile itself must NOT be ignored)
+docker-compose*.yml
+Dockerfile.dev
+scripts
+supabase
+temp_*
+migration_temp
+database
+*.log
+debug-*.log
+npm-debug.log*
+.pnpm-debug.log*
+
+# Large local data dumps
+supabase_site_data.json
+supabase_site_data_5g.json
+*.xlsx
+*.xls

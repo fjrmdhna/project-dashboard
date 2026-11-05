@@ -12,6 +12,10 @@ import {
   CACHE_TTL,
   type FilterParams
 } from '@/lib/redis'
+import { memoryGet, memorySet } from '@/lib/memory-cache'
+
+/** Keep large site-data payloads in process memory (Redis/KV cannot hold ~20MB). */
+const SITE_DATA_MEMORY_TTL_SECONDS = 5 * 60
 
 // Interface for the response data
 interface SiteDataResponse {
@@ -283,11 +287,32 @@ export async function GET(request: NextRequest) {
 
     const filterHash = getFilterHash(filterParams)
     const statsCacheKey = `hermes-stats-${scopeKey}-${filterHash}`
+    const memoryCacheKey = `hermes-site-data:${mode}:${scopeKey}:${supplementalScopeKey}:${filterHash}`
+
+    const startTime = Date.now()
+    const memoryHit = memoryGet<SiteDataResponse & { timestamp: string }>(memoryCacheKey)
+    if (memoryHit) {
+      console.log(
+        `[Hermes Site Data] Memory cache HIT (mode: ${mode}, scope: ${scopeKey}, supplemental: ${supplementalScopeKey})`
+      )
+      return NextResponse.json({
+        status: 'success',
+        ...memoryHit,
+        cached: true,
+        cacheSource: 'memory',
+        fetchTime: Date.now() - startTime,
+        mode,
+        scope: scopeKey
+      }, {
+        headers: {
+          'Cache-Control': 'private, max-age=60, stale-while-revalidate=120'
+        }
+      })
+    }
 
     console.log(
       `[Hermes Site Data] Fetching from database (mode: ${mode}, scope: ${scopeKey}, supplemental: ${supplementalScopeKey})...`
     )
-    const startTime = Date.now()
 
     const [dataResult, supplementalRows] = await Promise.all([
       fetchDataFromDatabase(dataScope),
@@ -312,7 +337,7 @@ export async function GET(request: NextRequest) {
         (mappedSupplementalData ? ` + ${mappedSupplementalData.length} supplemental` : "")
     )
 
-    // Prepare response data (NOT cached because too large)
+    // Redis/KV cannot hold ~20MB payloads; keep full response in process memory.
     const responseData: SiteDataResponse = {
       data: mappedData,
       supplementalData: mappedSupplementalData,
@@ -320,21 +345,21 @@ export async function GET(request: NextRequest) {
       totalCount,
       stats
     }
-
-    // NOTE: We don't cache full response because data is too large (40k+ records = ~20MB)
-    // Vercel KV has 256KB limit per value. We only cache stats above.
+    const timestamp = new Date().toISOString()
+    memorySet(memoryCacheKey, { ...responseData, timestamp }, SITE_DATA_MEMORY_TTL_SECONDS)
 
     return NextResponse.json({
       status: 'success',
       ...responseData,
-      timestamp: new Date().toISOString(),
+      timestamp,
       cached: false,
+      cacheSource: 'database',
       fetchTime,
       mode,
       scope: scopeKey
     }, {
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
+        'Cache-Control': 'private, max-age=60, stale-while-revalidate=120'
       }
     })
   } catch (error) {
