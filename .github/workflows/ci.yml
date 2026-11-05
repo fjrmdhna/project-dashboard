@@ -29,7 +29,19 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate docker compose file
-        run: docker compose -f docker-compose.yml config --quiet
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          cat > .env <<EOF
+          POSTGRES_DB=project_dashboard
+          POSTGRES_USER=project_user
+          POSTGRES_PASSWORD=ci-only
+          PGRST_JWT_SECRET=ci-only
+          NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+          NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+          EOF
+          docker compose -f docker-compose.yml config --quiet
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
