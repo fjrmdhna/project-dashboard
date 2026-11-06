@@ -4,7 +4,7 @@ import { Suspense, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { DateFilter, type DateSelection } from '@/components/sanitation/DateFilter'
-import { GrMini, PatpFusionMini } from '@/components/sanitation/GrPipeline'
+import { PatpFusionMini } from '@/components/sanitation/GrPipeline'
 import { ModuleCard, fmt, type ModuleCardTone } from '@/components/sanitation/ModuleCard'
 import { StatusBreakdown } from '@/components/sanitation/StatusBreakdown'
 import { VendorFilter } from '@/components/sanitation/VendorFilter'
@@ -12,6 +12,7 @@ import {
   PRESET_LABEL,
   aggregate,
   isISODate,
+  formatIdr,
   isPreset,
   modulesWithTransactions,
   presetRange,
@@ -166,11 +167,11 @@ function Report() {
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50 text-slate-900 lg:h-dvh lg:overflow-hidden">
       <header className="z-20 shrink-0 border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-2 px-4 py-2">
-          <h1 className="text-base font-extrabold sm:text-lg">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-2 px-4 py-2 md:flex-nowrap">
+          <h1 className="min-w-0 text-base font-extrabold md:truncate sm:text-lg" title={`${scope} Transactions on PMIS ${periodText}`}>
             {scope} Transactions on PMIS {periodText}
           </h1>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 md:flex-nowrap">
             {snap && <VendorFilter options={options} selected={selected} onChange={setSelected} />}
             {snap && (
               <DateFilter value={selection} min={snap.since} max={today} label={rangeLabel} onChange={setSelection} />
@@ -211,13 +212,13 @@ function Report() {
 
         {snap && (
           <>
-            <div className="grid shrink-0 grid-cols-1 gap-2 lg:grid-cols-2"><div className="rounded-lg border-l-4 border-teal-600 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white sm:text-sm">
+            <div className="grid shrink-0 grid-cols-1 gap-2 lg:grid-cols-2"><div className="min-w-0 rounded-lg border-l-4 border-teal-600 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white sm:text-sm lg:truncate">
               KEY FACT &nbsp;|&nbsp;{' '}
               {active === CORE_MODULES.length
                 ? `${scope === 'All Vendor' ? 'All vendors have' : `${scope} has`} recorded transactions in all ${CORE_MODULES.length} modules.`
                 : `${scope === 'All Vendor' ? 'All vendors have' : `${scope} has`} recorded transactions in ${active} of ${CORE_MODULES.length} modules.`}
             </div>
-            <div className="rounded-lg border-l-4 border-rose-500 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 sm:text-sm">
+            <div className="min-w-0 rounded-lg border-l-4 border-rose-500 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 sm:text-sm lg:truncate">
               CAF ACTION &nbsp;|&nbsp; {fmt(cafWaiting)} waiting submit Pictorial Reports <span className="font-normal">(all time)</span>.
             </div>
             </div>
@@ -232,7 +233,7 @@ function Report() {
                 if (c.key === 'matc' && snap.modules.matcGr) {
                   // Tetap tampil (0) saat filter menghasilkan 0 BA Fully Approved; hanya disembunyikan jika snapshot lama tanpa matcGr.
                   const gr = aggregate(snap.modules.matcGr, vendorSet, range)
-                  note = <GrMini statuses={gr.statuses} total={gr.created} />
+                  note = <PatpFusionMini total={gr.created} basis="Fully Approved BA" legs={[{ label: 'GR Material', interfaceId: 'INTINV-005', statuses: gr.statuses }]} />
                 }
                 if (c.key === 'patp' && snap.modules.patpGi && snap.modules.patpGr && snap.modules.patpFa) {
                   // Basis = PATP Fully Approved; tampil 0 saat filter tidak menyisakan PATP, hilang hanya untuk snapshot lama.
@@ -258,12 +259,12 @@ function Report() {
                     unit={c.unit}
                     hint={c.hint}
                     value={a.created}
-                    subValue={c.key === 'baseline' ? `${fmt(a.extra)} Site` : undefined}
+                    subValue={c.key === 'baseline' ? `${fmt(a.extra)} Site` : a.amount !== undefined ? formatIdr(a.amount) : undefined}
                     note={note}
                     divided={c.key === 'matc' || c.key === 'patp'}
                     dimmed={a.created === 0}
                   >
-                    <StatusBreakdown statuses={a.statuses} total={a.created} title={c.title} />
+                    <StatusBreakdown statuses={a.statuses} total={a.created} title={c.title} tall={c.key === 'patp'} />
                   </ModuleCard>
                 )
               })}

@@ -1,22 +1,25 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState, type CSSProperties } from 'react'
 import { fmt } from './ModuleCard'
-import { pct, type StatusItem } from '@/lib/sanitation-report/aggregate'
-import type { Tone } from '@/lib/sanitation-report/types'
+import { formatIdr, formatIdrFull, pct, type StatusItem } from '@/lib/sanitation-report/aggregate'
+import { BAR_ORDER, COLOR, TONE_BG, TONE_GROUP } from './tones'
 
-export const TONE_BG: Record<Tone, string> = {
-  ok: 'bg-emerald-600',
-  wait: 'bg-amber-500',
-  bad: 'bg-rose-600',
-  neutral: 'bg-slate-400',
-}
+
 
 /**
  * Jumlah baris status inline mengikuti tinggi viewport:
  * <=680px: 2, default: 3, >=820px: 4, >=940px: 5. Sisanya lewat popover "All statuses".
  */
-function rowVisibility(i: number): string {
+/** 	all: card dengan header lebih tinggi (kotak funnel PATP) sehingga baris status tampil lebih sedikit di layar pendek. */
+function rowVisibility(i: number, tall = false): string {
+  if (tall) {
+    if (i === 0) return 'flex [@media(max-height:560px)]:hidden'
+    if (i === 1) return 'flex [@media(max-height:760px)]:hidden'
+    if (i === 2) return 'hidden [@media(min-height:840px)]:flex'
+    if (i === 3) return 'hidden [@media(min-height:900px)]:flex'
+    return 'hidden [@media(min-height:1040px)]:flex'
+  }
   if (i < 2) return 'flex'
   if (i === 2) return 'flex [@media(max-height:680px)]:hidden'
   if (i === 3) return 'hidden [@media(min-height:820px)]:flex'
@@ -32,28 +35,65 @@ function Row({ s, total, className = 'flex' }: { s: StatusItem; total: number; c
       </span>
       <span className="font-bold tabular-nums text-slate-900">{fmt(s.count)}</span>
       <span className="w-8 text-right tabular-nums text-slate-500">{pct(s.count, total)}</span>
+      {s.amount !== undefined && (
+        <span className="w-[64px] text-right tabular-nums text-slate-600" title={formatIdrFull(s.amount)}>
+          {formatIdr(s.amount)}
+        </span>
+      )}
     </li>
   )
 }
 
+/** Bar proporsi per kelompok warna (hijau, kuning, merah), bukan per status, supaya urutan dan warna konsisten di semua card. */
 export function StatusBar({ statuses, total }: { statuses: StatusItem[]; total: number }) {
-  if (!total) return <div className="h-1.5 rounded-full bg-slate-100" aria-hidden />
+  // shrink-0: elemen tanpa konten ini tidak boleh ikut menyusut jadi 0px saat card dibatasi tinggi layar.
+  if (!total) return <div className="h-1.5 shrink-0 rounded-full bg-slate-100" aria-hidden />
+  const groups = { green: 0, yellow: 0, red: 0 }
+  const amounts = { green: 0, yellow: 0, red: 0 }
+  let hasAmount = false
+  for (const s of statuses) {
+    groups[TONE_GROUP[s.tone]] += s.count
+    if (s.amount !== undefined) {
+      amounts[TONE_GROUP[s.tone]] += s.amount
+      hasAmount = true
+    }
+  }
+  const names = { green: 'Completed', yellow: 'In progress / waiting', red: 'Rejected / error' }
+  // Teks kuning memakai warna gelap (kontras), hijau dan merah memakai putih.
+  const labelColor = { green: 'text-white', yellow: 'text-slate-900', red: 'text-white' }
   return (
-    <div className="flex h-1.5 overflow-hidden rounded-full bg-slate-100" role="img" aria-label="Status proportion">
-      {statuses.map((s) => (
-        <div
-          key={s.label}
-          className={TONE_BG[s.tone]}
-          style={{ width: `${(s.count / total) * 100}%` }}
-          title={`${s.label}: ${fmt(s.count)} (${pct(s.count, total)})`}
-        />
-      ))}
+    <div
+      className={`flex shrink-0 overflow-hidden rounded-full bg-slate-100 ${hasAmount ? 'h-4' : 'h-1.5'}`}
+      role="img"
+      aria-label="Status proportion"
+    >
+      {BAR_ORDER.filter((g) => groups[g] > 0).map((g) => {
+        const share = (groups[g] / total) * 100
+        const value = hasAmount ? `, ${formatIdrFull(amounts[g])}` : ''
+        const label = hasAmount ? formatIdr(amounts[g]) : ''
+        // Dengan nilai: lebar proporsional (flex-grow = share) tetapi tiap segmen minimal selebar labelnya,
+        // sehingga segmen kecil tetap memuat angka di dalam bar dan segmen besar yang menyesuaikan.
+        const sizing: CSSProperties = hasAmount
+          ? { flexGrow: share, flexShrink: 1, flexBasis: 0, minWidth: `calc(${label.length}ch + 12px)` }
+          : { width: `${share}%` }
+        return (
+          <div
+            key={g}
+            className={`${COLOR[g]} flex items-center justify-center overflow-hidden whitespace-nowrap text-[10px] font-semibold leading-none ${labelColor[g]}`}
+            style={sizing}
+            title={`${names[g]}: ${fmt(groups[g])} (${pct(groups[g], total)})${value}`}
+          >
+            {label}
+          </div>
+        )
+      })}
     </div>
   )
 }
 
+
 /** Popover menutupi card induk (card harus `relative`), jadi tidak terpotong dan tidak menambah scroll halaman. */
-export function StatusBreakdown({ statuses, total, title }: { statuses: StatusItem[]; total: number; title: string }) {
+export function StatusBreakdown({ statuses, total, title, tall = false }: { statuses: StatusItem[]; total: number; title: string; tall?: boolean }) {
   const [open, setOpen] = useState(false)
   const id = useId()
 
@@ -71,7 +111,7 @@ export function StatusBreakdown({ statuses, total, title }: { statuses: StatusIt
       <StatusBar statuses={statuses} total={total} />
       <ul className="mt-1.5 space-y-0.5">
         {statuses.slice(0, 5).map((s, i) => (
-          <Row key={s.label} s={s} total={total} className={rowVisibility(i)} />
+          <Row key={s.label} s={s} total={total} className={rowVisibility(i, tall)} />
         ))}
       </ul>
       {statuses.length > 2 && (

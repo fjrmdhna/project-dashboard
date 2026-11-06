@@ -88,19 +88,36 @@ const Q = {
   mpsReserved: `select nullif(vendor_code,'') v, 'Reserved/Ready' s, to_char(create_time::date,'YYYY-MM-DD') d, count(distinct mps_id) n
     from mapping_systemkey_po where status_id in (1,2) and create_time >= '${SINCE}' group by 1,3`,
 
-  matc: `select v, s, d, count(*) n from (
-      select ${VENDOR_BY_SYSTEM_KEY('m.sk')} v, ${WF_LABEL} s, m.d d
-      from (select ba_number, max(system_key->>0) sk, to_char(min(created_date)::date,'YYYY-MM-DD') d from material_certificates
-            where created_date >= '${SINCE}' group by 1) m
+  // `a` = BA Value (IDR) seperti kolom di list Material Certificate PMIS (baValueSql): sum(quantity x net_price) line PO unik (po_number, line_item), hanya currency IDR.
+  matc: `select v, s, d, count(*) n, sum(a)::bigint a from (
+      select ${VENDOR_BY_SYSTEM_KEY('m.sk')} v, ${WF_LABEL} s, m.d d, m.a a
+      from (select mc.ba_number, max(mc.system_key->>0) sk, to_char(min(mc.created_date)::date,'YYYY-MM-DD') d,
+              coalesce((select sum(x.lv) from (select distinct d.po_number, d.line_item,
+                  case when tp.quantity ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then tp.quantity::numeric end
+                  * case when tp.net_price ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then tp.net_price::numeric end lv
+                from material_certificate_details d
+                join transaction_po tp on tp.po_number = d.po_number and tp.line_subline = d.line_item
+                where d.ba_number = mc.ba_number
+                  and upper(trim(coalesce(tp.currency,''))) = 'IDR') x), 0) a
+            from material_certificates mc
+            where mc.created_date >= '${SINCE}' group by mc.ba_number) m
       cross join lateral (select ${WF_LATEST('material_certificates', 'm.ba_number')} wf) l) x group by 1,2,3`,
 
   // GR Material (INTINV-005) per BA MATC yang Fully Approved. Aturan sama dengan gate BAST di PMIS:
   // hanya file_type non-service, line yang di-reject GR Control tidak dihitung.
-  matcGr: `select v, s, d, count(*) n from (
-      select ${VENDOR_BY_SYSTEM_KEY('m.sk')} v, m.d d,
+  matcGr: `select v, s, d, count(*) n, sum(a)::bigint a from (
+      select ${VENDOR_BY_SYSTEM_KEY('m.sk')} v, m.d d, m.a a,
         case when g.ba_number is null then 'Not Sent' when g.err > 0 then 'ACK Error'
              when g.ok = g.lines then 'ACK Success' when g.sent > 0 then 'Waiting ACK' else 'Not Sent' end s
-      from (select ba_number, max(system_key->>0) sk, to_char(min(created_date)::date,'YYYY-MM-DD') d from material_certificates
+      from (select ba_number, max(system_key->>0) sk, to_char(min(created_date)::date,'YYYY-MM-DD') d,
+              coalesce((select sum(x.lv) from (select distinct d.po_number, d.line_item,
+                  case when tp.quantity ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then tp.quantity::numeric end
+                  * case when tp.net_price ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then tp.net_price::numeric end lv
+                from material_certificate_details d
+                join transaction_po tp on tp.po_number = d.po_number and tp.line_subline = d.line_item
+                where d.ba_number = mcx.ba_number
+                  and upper(trim(coalesce(tp.currency,''))) = 'IDR') x), 0) a
+            from material_certificates mcx
             where created_date >= '${SINCE}' group by 1) m
       left join (select i.ba_number, count(*) lines,
                    count(*) filter (where i.export_status = 'EXPORTED') sent,
@@ -128,9 +145,18 @@ const Q = {
     table: 'fa', ack: 'oracle_fusion_intppm_002_ack', match: '(i.receipt_number = b.an or i.rn = b.an)',
   }),
 
-  cac: `select v, s, d, count(*) n from (
-      select m.v, ${WF_LABEL} s, m.d d
-      from (select ba_number, max(nullif(vendor_code,'')) v, to_char(min(created_at)::date,'YYYY-MM-DD') d from acceptance_certificate_header
+  // `a` = BA Value (IDR) seperti kolom di list PMIS (baValueSql): sum(quantity x net_price) line PO unik (po_number, line_item), hanya currency IDR.
+  cac: `select v, s, d, count(*) n, sum(a)::bigint a from (
+      select m.v, ${WF_LABEL} s, m.d d, m.a a
+      from (select ba_number, max(nullif(vendor_code,'')) v, to_char(min(created_at)::date,'YYYY-MM-DD') d,
+              coalesce((select sum(x.lv) from (select distinct d.po_number, d.line_item,
+                  case when tp.quantity ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then tp.quantity::numeric end
+                  * case when tp.net_price ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then tp.net_price::numeric end lv
+                from acceptance_certificate_detail d
+                join transaction_po tp on tp.po_number = d.po_number and tp.line_subline = d.line_item
+                where d.ba_number = acceptance_certificate_header.ba_number
+                  and upper(trim(coalesce(tp.currency,''))) = 'IDR') x), 0) a
+            from acceptance_certificate_header
             where created_at >= '${SINCE}' group by 1) m
       cross join lateral (select ${WF_LATEST('acceptance_certificates', 'm.ba_number')} wf) l) x group by 1,2,3`,
 
@@ -274,12 +300,17 @@ function toRows(rows, { normalize = true } = {}) {
     const s = normalize ? normalizeStatus(r.s) : r.s
     const d = r.d || r.dt || null
     const key = `${v}\u0000${s}\u0000${d}`
-    const cur = agg.get(key) || { v, s, d, t: toneOf(s), n: 0, x: 0 }
+    const cur = agg.get(key) || { v, s, d, t: toneOf(s), n: 0, x: 0, a: 0, hasA: false }
     cur.n += n(r.n)
     cur.x += n(r.x)
+    if (r.a !== undefined) { cur.a += n(r.a); cur.hasA = true }
     agg.set(key, cur)
   }
-  return [...agg.values()].map((r) => (r.x ? r : { v: r.v, s: r.s, d: r.d, t: r.t, n: r.n }))
+  return [...agg.values()].map((r) => {
+    const o = r.x ? { v: r.v, s: r.s, d: r.d, t: r.t, n: r.n, x: r.x } : { v: r.v, s: r.s, d: r.d, t: r.t, n: r.n }
+    if (r.hasA) o.a = r.a
+    return o
+  })
 }
 
 function hasTun0() {

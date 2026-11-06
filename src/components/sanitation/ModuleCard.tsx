@@ -51,12 +51,12 @@ export function ModuleCard({ title, value, unit, subValue, hint, tone, dimmed, n
           </span>
         </div>
         <div className={`flex justify-between gap-2 ${divided ? 'items-center' : 'items-end'}`}>
-          <div className="text-slate-900">
+          <div className="shrink-0 whitespace-nowrap text-slate-900">
             <span className="text-2xl font-extrabold tabular-nums leading-none">{fmt(value)}</span>
             {unit && <span className="ml-1 text-xs font-bold">{unit}</span>}
             {subValue && <span className="ml-1 text-[11px] text-slate-600">({subValue})</span>}
           </div>
-          {note && <div className="text-right text-[11px] font-semibold leading-tight text-slate-600">{note}</div>}
+          {note && <div className={`min-w-0 text-right text-[11px] font-semibold leading-tight text-slate-600 ${divided ? 'flex-1' : ''}`}>{note}</div>}
         </div>
         <div className={`min-h-0 flex-1 ${divided ? 'border-t border-slate-200 pt-1' : ''}`}>{children}</div>
       </div>

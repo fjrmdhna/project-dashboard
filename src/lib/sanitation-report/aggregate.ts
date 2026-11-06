@@ -1,7 +1,7 @@
 import { CORE_MODULES, type ModuleKey, type Row, type SanitationSnapshot, type Tone } from './types'
 
-export type StatusItem = { label: string; tone: Tone; count: number }
-export type Aggregated = { created: number; extra: number; statuses: StatusItem[] }
+export type StatusItem = { label: string; tone: Tone; count: number; amount?: number }
+export type Aggregated = { created: number; extra: number; statuses: StatusItem[]; amount?: number }
 
 /** Rentang tanggal inklusif (YYYY-MM-DD). Kosong = tanpa batas. */
 export type DateRange = { from?: string; to?: string }
@@ -18,6 +18,7 @@ export function aggregate(rows: Row[], vendors: ReadonlySet<string>, range: Date
   const map = new Map<string, StatusItem>()
   let created = 0
   let extra = 0
+  let amount: number | undefined
   for (const r of rows) {
     if (vendors.size > 0 && !vendors.has(r.v)) continue
     if (!inRange(r.d, range)) continue
@@ -25,10 +26,14 @@ export function aggregate(rows: Row[], vendors: ReadonlySet<string>, range: Date
     extra += r.x ?? 0
     const cur = map.get(r.s) ?? { label: r.s, tone: r.t, count: 0 }
     cur.count += r.n
+    if (r.a !== undefined) {
+      cur.amount = (cur.amount ?? 0) + r.a
+      amount = (amount ?? 0) + r.a
+    }
     map.set(r.s, cur)
   }
   const statuses = [...map.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-  return { created, extra, statuses }
+  return { created, extra, statuses, amount }
 }
 
 export function sumCount(rows: Row[], vendors: ReadonlySet<string>, range: DateRange = {}): number {
@@ -54,6 +59,21 @@ export function pct(count: number, total: number): string {
   const p = (count / total) * 100
   return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`
 }
+
+// ---------- Nilai IDR ----------
+/** Format ringkas (English): Rp 37.7 B / Rp 850 M / Rp 12 K. B = billion, M = million, K = thousand. */
+export function formatIdr(n: number): string {
+  const abs = Math.abs(n)
+  const trim = (v: number) => (v >= 100 ? String(Math.round(v)) : v.toFixed(1).replace(/\.0$/, ''))
+  if (abs >= 1e12) return `Rp ${trim(n / 1e12)} T`
+  if (abs >= 1e9) return `Rp ${trim(n / 1e9)} B`
+  if (abs >= 1e6) return `Rp ${trim(n / 1e6)} M`
+  if (abs >= 1e3) return `Rp ${trim(n / 1e3)} K`
+  return `Rp ${Math.round(n)}`
+}
+
+/** Nilai penuh untuk tooltip, mis. Rp 37,650,251,826. */
+export const formatIdrFull = (n: number) => `Rp ${Math.round(n).toLocaleString('en-US')}`
 
 // ---------- Tanggal ----------
 export type RangePreset = 'all' | 'today' | 'yesterday' | '7d' | '30d'

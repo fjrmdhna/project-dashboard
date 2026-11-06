@@ -1,7 +1,7 @@
 export type Tone = 'ok' | 'wait' | 'bad' | 'neutral'
 
-/** Satu baris agregat: vendor × status × hari dibuat (`d` = YYYY-MM-DD; null = tanpa tanggal). `x` hanya Baseline (jumlah site). */
-export type Row = { v: string; s: string; t: Tone; n: number; d?: string | null; x?: number }
+/** Satu baris agregat: vendor × status × hari dibuat (`d` = YYYY-MM-DD; null = tanpa tanggal). `x` hanya Baseline (jumlah site). `a` = nilai IDR (opsional, saat ini hanya MATC). */
+export type Row = { v: string; s: string; t: Tone; n: number; d?: string | null; x?: number; a?: number }
 
 export type ModuleKey =
   | 'baseline'
