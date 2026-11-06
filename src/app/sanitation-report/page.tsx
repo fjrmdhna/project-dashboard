@@ -3,10 +3,23 @@
 import { Suspense, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
+import { DateFilter, type DateSelection } from '@/components/sanitation/DateFilter'
+import { GrMini, PatpFusionMini } from '@/components/sanitation/GrPipeline'
 import { ModuleCard, fmt, type ModuleCardTone } from '@/components/sanitation/ModuleCard'
 import { StatusBreakdown } from '@/components/sanitation/StatusBreakdown'
 import { VendorFilter } from '@/components/sanitation/VendorFilter'
-import { aggregate, modulesWithTransactions, sumCount, vendorLabel } from '@/lib/sanitation-report/aggregate'
+import {
+  PRESET_LABEL,
+  aggregate,
+  isISODate,
+  isPreset,
+  modulesWithTransactions,
+  presetRange,
+  sumCount,
+  toISODate,
+  vendorLabel,
+  type DateRange,
+} from '@/lib/sanitation-report/aggregate'
 import { CORE_MODULES, type ModuleKey, type SanitationApiResponse } from '@/lib/sanitation-report/types'
 
 const fetcher = async (url: string): Promise<SanitationApiResponse> => {
@@ -23,15 +36,15 @@ type CardDef = {
 }
 
 const CARDS: CardDef[] = [
-  { key: 'baseline', title: 'Baseline', tone: 'navy', unit: 'Project', hint: 'Counted per baseline_id (project). Sites = sum of total_system_key.' },
   { key: 'mps', title: 'MPS', tone: 'cyan', hint: 'Counted per MPS transaction (mps_transaction_id), latest approval status.' },
+  { key: 'baseline', title: 'Baseline', tone: 'navy', unit: 'Project', hint: 'Counted per baseline_id (project). Sites = sum of total_system_key.' },
   { key: 'matc', title: 'MATC / BABT', tone: 'violet', hint: 'Counted per BA number; vendor derived from system key → PO mapping.' },
+  { key: 'caf', title: 'CAF', tone: 'orange', hint: 'Counted per caf_no, current CAF status.' },
+  { key: 'crRelocation', title: 'Change Request', tone: 'red', hint: 'Counted per CR number (type Relocation), latest status; vendor via system key.' },
   { key: 'fatp', title: 'Acceptance - FATP', tone: 'cyan', hint: 'Counted per acceptance_number (FATP), latest status.' },
   { key: 'patp', title: 'Acceptance - PATP', tone: 'violet', hint: 'Counted per acceptance_number (PATP), latest status.' },
-  { key: 'cac', title: 'CAC / BAUT', tone: 'teal', hint: 'Counted per BA number, latest workflow status.' },
   { key: 'endorsement', title: 'Endorsement', tone: 'teal', hint: 'Counted per endorse_number. Fully Approved = all systems endorsed.' },
-  { key: 'caf', title: 'CAF', tone: 'orange', hint: 'Counted per caf_no, current CAF status.' },
-  { key: 'crRelocation', title: 'CR - Relocation', tone: 'red', hint: 'Counted per CR number (Relocation), latest status; vendor via system key.' },
+  { key: 'cac', title: 'CAC Acceptance / BAUT', tone: 'teal', hint: 'Counted per BA number, latest workflow status.' },
 ]
 
 function formatSince(iso: string) {
@@ -98,20 +111,70 @@ function Report() {
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
   }
 
+  // ---- Filter tanggal (URL: ?range=today|yesterday|7d|30d|all  atau  ?from=YYYY-MM-DD&to=YYYY-MM-DD) ----
+  const rangeParam = params.get('range')
+  const fromParam = params.get('from')
+  const toParam = params.get('to')
+  const today = toISODate(new Date())
+  const selection: DateSelection = useMemo(() => {
+    if (isPreset(rangeParam)) return { preset: rangeParam, from: '', to: '' }
+    if (isISODate(fromParam) || isISODate(toParam)) {
+      return { preset: null, from: isISODate(fromParam) ? fromParam : '', to: isISODate(toParam) ? toParam : '' }
+    }
+    return { preset: 'all', from: '', to: '' }
+  }, [rangeParam, fromParam, toParam])
+  const range: DateRange = useMemo(
+    () =>
+      selection.preset
+        ? presetRange(selection.preset)
+        : { from: selection.from || undefined, to: selection.to || undefined },
+    [selection],
+  )
+
+  const setSelection = (v: DateSelection) => {
+    const sp = new URLSearchParams(params.toString())
+    sp.delete('range')
+    sp.delete('from')
+    sp.delete('to')
+    if (v.preset && v.preset !== 'all') sp.set('range', v.preset)
+    else if (!v.preset) {
+      if (v.from) sp.set('from', v.from)
+      if (v.to) sp.set('to', v.to)
+    }
+    const qs = sp.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
+
+  const fmtDay = (iso: string) =>
+    new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  const rangeLabel = selection.preset
+    ? PRESET_LABEL[selection.preset]
+    : `${selection.from ? fmtDay(selection.from) : '…'} – ${selection.to ? fmtDay(selection.to) : '…'}`
+  const periodText = !snap
+    ? 'since 20 Oct 2026'
+    : selection.preset === 'all'
+      ? `since ${formatSince(snap.since)}`
+      : range.from && range.from === range.to
+        ? `on ${fmtDay(range.from)}`
+        : `from ${range.from ? fmtDay(range.from) : formatSince(snap.since)} to ${range.to ? fmtDay(range.to) : 'today'}`
+
   const scope =
     selected.length === 0 ? 'All Vendor' : selected.length === 1 && snap ? vendorLabel(snap, selected[0]) : `${selected.length} Vendors`
   const cafWaiting = snap ? sumCount(snap.modules.cafAction, vendorSet) : 0
-  const active = snap ? modulesWithTransactions(snap, vendorSet) : 0
+  const active = snap ? modulesWithTransactions(snap, vendorSet, range) : 0
 
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50 text-slate-900 lg:h-dvh lg:overflow-hidden">
       <header className="z-20 shrink-0 border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-2 px-4 py-2">
           <h1 className="text-base font-extrabold sm:text-lg">
-            {scope} Transactions on PMIS since {snap ? formatSince(snap.since) : '20 Oct 2026'}
+            {scope} Transactions on PMIS {periodText}
           </h1>
           <div className="flex flex-wrap items-center gap-2">
             {snap && <VendorFilter options={options} selected={selected} onChange={setSelected} />}
+            {snap && (
+              <DateFilter value={selection} min={snap.since} max={today} label={rangeLabel} onChange={setSelection} />
+            )}
             {snap && (
               <span
                 className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -155,16 +218,37 @@ function Report() {
                 : `${scope === 'All Vendor' ? 'All vendors have' : `${scope} has`} recorded transactions in ${active} of ${CORE_MODULES.length} modules.`}
             </div>
             <div className="rounded-lg border-l-4 border-rose-500 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 sm:text-sm">
-              CAF ACTION &nbsp;|&nbsp; {fmt(cafWaiting)} waiting submit Pictorial Reports.
+              CAF ACTION &nbsp;|&nbsp; {fmt(cafWaiting)} waiting submit Pictorial Reports <span className="font-normal">(all time)</span>.
             </div>
             </div>
 
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 lg:grid-rows-3">
               {CARDS.map((c) => {
-                const a = aggregate(snap.modules[c.key], vendorSet)
+                const a = aggregate(snap.modules[c.key], vendorSet, range)
                 let note: React.ReactNode
                 if (c.key === 'mps') {
-                  note = `${fmt(sumCount(snap.modules.mpsReserved, vendorSet))} Reserved/Ready MPS IDs`
+                  note = `${fmt(sumCount(snap.modules.mpsReserved, vendorSet, range))} Reserved/Ready MPS IDs`
+                }
+                if (c.key === 'matc' && snap.modules.matcGr) {
+                  // Tetap tampil (0) saat filter menghasilkan 0 BA Fully Approved; hanya disembunyikan jika snapshot lama tanpa matcGr.
+                  const gr = aggregate(snap.modules.matcGr, vendorSet, range)
+                  note = <GrMini statuses={gr.statuses} total={gr.created} />
+                }
+                if (c.key === 'patp' && snap.modules.patpGi && snap.modules.patpGr && snap.modules.patpFa) {
+                  // Basis = PATP Fully Approved; tampil 0 saat filter tidak menyisakan PATP, hilang hanya untuk snapshot lama.
+                  const gi = aggregate(snap.modules.patpGi, vendorSet, range)
+                  const grs = aggregate(snap.modules.patpGr, vendorSet, range)
+                  const fa = aggregate(snap.modules.patpFa, vendorSet, range)
+                  note = (
+                    <PatpFusionMini
+                      total={gi.created}
+                      legs={[
+                        { label: 'GI Material', interfaceId: 'INTINV-006', statuses: gi.statuses },
+                        { label: 'GR Service', interfaceId: 'INTINV-005', statuses: grs.statuses },
+                        { label: 'Fixed Asset', interfaceId: 'INTPPM-002', statuses: fa.statuses },
+                      ]}
+                    />
+                  )
                 }
                 return (
                   <ModuleCard
@@ -176,6 +260,7 @@ function Report() {
                     value={a.created}
                     subValue={c.key === 'baseline' ? `${fmt(a.extra)} Site` : undefined}
                     note={note}
+                    divided={c.key === 'matc' || c.key === 'patp'}
                     dimmed={a.created === 0}
                   >
                     <StatusBreakdown statuses={a.statuses} total={a.created} title={c.title} />

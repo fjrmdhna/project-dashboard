@@ -24,7 +24,7 @@ export async function GET(req: Request) {
         .maybeSingle()
       if (error) throw new Error(error.message)
       const payload = data?.payload as SanitationSnapshot | undefined
-      if (payload && payload.version !== 2) throw new Error('Snapshot versi lama; jalankan collector v2')
+      if (payload && payload.version !== 3) throw new Error('Snapshot versi lama; jalankan collector v2')
       snapshot = payload ?? null
       if (snapshot) memorySet(CACHE_KEY, snapshot, CACHE_TTL_SECONDS)
     }

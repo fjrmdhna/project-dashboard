@@ -23,10 +23,12 @@ type Props = {
   tone: ModuleCardTone
   dimmed?: boolean
   note?: ReactNode
+  /** Garis pemisah abu-abu antara baris angka dan isi card (untuk card dengan blok tambahan di samping angka). */
+  divided?: boolean
   children: ReactNode
 }
 
-export function ModuleCard({ title, value, unit, subValue, hint, tone, dimmed, note, children }: Props) {
+export function ModuleCard({ title, value, unit, subValue, hint, tone, dimmed, note, divided, children }: Props) {
   const t = TONES[tone]
   return (
     <section
@@ -36,7 +38,7 @@ export function ModuleCard({ title, value, unit, subValue, hint, tone, dimmed, n
       }`}
     >
       <div className={`absolute inset-y-0 left-0 w-1 ${t.bar}`} />
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3 py-2 pl-4">
+      <div className={`flex min-h-0 flex-1 flex-col px-3 py-2 pl-4 ${divided ? 'gap-1' : 'gap-1.5'}`}>
         <div className="flex items-center justify-between gap-2">
           <h2 className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${t.chip}`}>{title}</h2>
           <span
@@ -48,7 +50,7 @@ export function ModuleCard({ title, value, unit, subValue, hint, tone, dimmed, n
             i
           </span>
         </div>
-        <div className="flex items-end justify-between gap-2">
+        <div className={`flex justify-between gap-2 ${divided ? 'items-center' : 'items-end'}`}>
           <div className="text-slate-900">
             <span className="text-2xl font-extrabold tabular-nums leading-none">{fmt(value)}</span>
             {unit && <span className="ml-1 text-xs font-bold">{unit}</span>}
@@ -56,7 +58,7 @@ export function ModuleCard({ title, value, unit, subValue, hint, tone, dimmed, n
           </div>
           {note && <div className="text-right text-[11px] font-semibold leading-tight text-slate-600">{note}</div>}
         </div>
-        <div className="min-h-0 flex-1">{children}</div>
+        <div className={`min-h-0 flex-1 ${divided ? 'border-t border-slate-200 pt-1' : ''}`}>{children}</div>
       </div>
     </section>
   )

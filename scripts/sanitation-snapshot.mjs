@@ -50,66 +50,121 @@ const WF_LATEST = (type, key) => `(select w.status from workflow_instances w
 const VENDOR_BY_SYSTEM_KEY = (key) =>
   `(select max(nullif(p.vendor_code,'')) from mapping_systemkey_po p where p.system_key = ${key})`
 
+// Progres Fusion per PATP Fully Approved (rantai GR Control: GI Material -> GR Service -> Fixed Asset).
+// Status dibaca dari tabel ACK (bukan interface.ack_status yang tidak andal), baris GATE_FILTERED tidak dihitung
+// sebagai terkirim. Kunci ke PATP sama dengan modules/gr-control/acceptance.list.js di PMIS:
+//   GI = system_key, GR Service = acceptance_number/ba_reference, Fixed Asset = receipt_number (akhiran _N dibuang).
+const PATP_BASE = `select acceptance_number an, max(nullif(vendor_code,'')) v, to_char(min(create_time)::date,'YYYY-MM-DD') d,
+    array_agg(distinct system_key) sks, max(status) st
+  from list_acceptance where create_time >= '${SINCE}' and acceptance_number like 'PATP-%' group by 1`
+const patpLeg = ({ table, ack, match, withSql = '' }) => `${withSql ? `with ${withSql} ` : ''}select v, s, d, count(*) n from (
+    select b.v, b.d,
+      case when g.lines is null then 'Not Sent' when g.err > 0 then 'ACK Error'
+           when g.ok = g.lines then 'ACK Success' else 'Waiting ACK' end s
+    from (${PATP_BASE}) b
+    left join lateral (
+      select count(*) lines, count(*) filter (where k.ack_status = 'ERROR') err, count(*) filter (where k.ack_status = 'SUCCESS') ok
+      from ${table} i
+      left join lateral (select a.ack_status from ${ack} a where a.interface_id_ref = i.id
+        order by a.processing_date desc nulls last, a.id desc limit 1) k on true
+      where ${match} and coalesce(i.export_status,'') <> 'GATE_FILTERED'
+      having count(*) > 0) g on true
+    where b.st like 'Acceptance Fully Approved%') x group by 1,2,3`
+
 // ---------- Query: semua mengembalikan baris (v = vendor_code, s = status, n = jumlah, x = extra) ----------
 const Q = {
   baseline: `select nullif(vendor_code,'') v, regexp_replace(baseline_status, '\\s*:.*$', '') s,
-      count(distinct baseline_id) n, coalesce(sum(total_system_key),0) x
-    from baseline where create_time >= '${SINCE}' group by 1,2`,
+      count(distinct baseline_id) n, coalesce(sum(total_system_key),0) x, to_char(create_time::date,'YYYY-MM-DD') d
+    from baseline where create_time >= '${SINCE}' group by 1,2,5`,
 
   mps: `with b as (select distinct on (mps_transaction_id) mps_transaction_id, status_approval
         from mps_transaction where created_date >= '${SINCE}' order by mps_transaction_id, id desc),
-      vv as (select mps_transaction_id, max(nullif(vendor_code,'')) vc
+      vv as (select mps_transaction_id, max(nullif(vendor_code,'')) vc, to_char(min(created_date)::date,'YYYY-MM-DD') d
         from mps_transaction where created_date >= '${SINCE}' group by 1)
-    select vv.vc v, coalesce(ms.name, 'Status ' || b.status_approval) s, count(*) n
+    select vv.vc v, coalesce(ms.name, 'Status ' || b.status_approval) s, vv.d d, count(*) n
     from b join vv using (mps_transaction_id) left join mps_status ms on ms.id = b.status_approval
-    group by 1,2`,
+    group by 1,2,3`,
 
-  mpsReserved: `select nullif(vendor_code,'') v, 'Reserved/Ready' s, count(distinct mps_id) n
-    from mapping_systemkey_po where status_id in (1,2) and create_time >= '${SINCE}' group by 1`,
+  mpsReserved: `select nullif(vendor_code,'') v, 'Reserved/Ready' s, to_char(create_time::date,'YYYY-MM-DD') d, count(distinct mps_id) n
+    from mapping_systemkey_po where status_id in (1,2) and create_time >= '${SINCE}' group by 1,3`,
 
-  matc: `select v, s, count(*) n from (
-      select ${VENDOR_BY_SYSTEM_KEY('m.sk')} v, ${WF_LABEL} s
-      from (select ba_number, max(system_key->>0) sk from material_certificates
+  matc: `select v, s, d, count(*) n from (
+      select ${VENDOR_BY_SYSTEM_KEY('m.sk')} v, ${WF_LABEL} s, m.d d
+      from (select ba_number, max(system_key->>0) sk, to_char(min(created_date)::date,'YYYY-MM-DD') d from material_certificates
             where created_date >= '${SINCE}' group by 1) m
-      cross join lateral (select ${WF_LATEST('material_certificates', 'm.ba_number')} wf) l) x group by 1,2`,
+      cross join lateral (select ${WF_LATEST('material_certificates', 'm.ba_number')} wf) l) x group by 1,2,3`,
 
-  cac: `select v, s, count(*) n from (
-      select m.v, ${WF_LABEL} s
-      from (select ba_number, max(nullif(vendor_code,'')) v from acceptance_certificate_header
+  // GR Material (INTINV-005) per BA MATC yang Fully Approved. Aturan sama dengan gate BAST di PMIS:
+  // hanya file_type non-service, line yang di-reject GR Control tidak dihitung.
+  matcGr: `select v, s, d, count(*) n from (
+      select ${VENDOR_BY_SYSTEM_KEY('m.sk')} v, m.d d,
+        case when g.ba_number is null then 'Not Sent' when g.err > 0 then 'ACK Error'
+             when g.ok = g.lines then 'ACK Success' when g.sent > 0 then 'Waiting ACK' else 'Not Sent' end s
+      from (select ba_number, max(system_key->>0) sk, to_char(min(created_date)::date,'YYYY-MM-DD') d from material_certificates
+            where created_date >= '${SINCE}' group by 1) m
+      left join (select i.ba_number, count(*) lines,
+                   count(*) filter (where i.export_status = 'EXPORTED') sent,
+                   count(*) filter (where i.ack_status = 'SUCCESS') ok,
+                   count(*) filter (where i.ack_status = 'ERROR') err
+                 from oracle_fusion_intinv_005_interface i
+                 where i.ba_number in (select ba_number from material_certificates where created_date >= '${SINCE}')
+                   and coalesce(i.file_type,'') not ilike 'service%'
+                   and not exists (select 1 from material_certificate_details rej where rej.ba_number = i.ba_number
+                     and rej.line_item = i.line_item::text and rej.gr_rejected_at is not null)
+                 group by 1) g on g.ba_number = m.ba_number
+      where ${WF_LATEST('material_certificates', 'm.ba_number')} = 'completed') x group by 1,2,3`,
+
+  patpGi: patpLeg({
+    table: 'oracle_fusion_intinv_006_interface', ack: 'oracle_fusion_intinv_006_ack', match: 'i.system_key = any(b.sks)',
+  }),
+  patpGr: patpLeg({
+    table: 'oracle_fusion_intinv_005_interface', ack: 'oracle_fusion_intinv_005_ack',
+    match: `(i.acceptance_number = b.an or i.ba_reference = b.an) and coalesce(i.file_type,'') ilike 'service%'`,
+  }),
+  // Pra-filter ke receipt PATP supaya regexp_replace tidak jalan di seluruh tabel (receipt CAC/BAUT ikut di tabel yang sama).
+  patpFa: patpLeg({
+    withSql: `fa as (select id, export_status, receipt_number, regexp_replace(receipt_number, '_[0-9]+$', '') rn
+      from oracle_fusion_intppm_002_interface where receipt_number like 'PATP-%')`,
+    table: 'fa', ack: 'oracle_fusion_intppm_002_ack', match: '(i.receipt_number = b.an or i.rn = b.an)',
+  }),
+
+  cac: `select v, s, d, count(*) n from (
+      select m.v, ${WF_LABEL} s, m.d d
+      from (select ba_number, max(nullif(vendor_code,'')) v, to_char(min(created_at)::date,'YYYY-MM-DD') d from acceptance_certificate_header
             where created_at >= '${SINCE}' group by 1) m
-      cross join lateral (select ${WF_LATEST('acceptance_certificates', 'm.ba_number')} wf) l) x group by 1,2`,
+      cross join lateral (select ${WF_LATEST('acceptance_certificates', 'm.ba_number')} wf) l) x group by 1,2,3`,
 
-  acceptance: `select k, v, s, count(*) n from (
+  acceptance: `select k, v, s, d, count(*) n from (
       select case when acceptance_number like 'FATP-%' then 'fatp' else 'patp' end k, acceptance_number,
-             max(nullif(vendor_code,'')) v, max(status) s
+             max(nullif(vendor_code,'')) v, max(status) s, to_char(min(create_time)::date,'YYYY-MM-DD') d
       from list_acceptance
       where create_time >= '${SINCE}' and (acceptance_number like 'FATP-%' or acceptance_number like 'PATP-%')
-      group by 1,2) x group by 1,2,3`,
+      group by 1,2) x group by 1,2,3,4`,
 
   endorsement: `with e as (select endorse_number, system_key, min(created_at) c, max(nullif(vendor_code,'')) vc
         from endorsements where created_at >= '${SINCE}' group by 1,2),
-      l as (select distinct on (e.endorse_number, e.system_key) e.endorse_number, e.vc, h.approval_value
+      l as (select distinct on (e.endorse_number, e.system_key) e.endorse_number, e.vc, e.c, h.approval_value
         from e left join endorsement_history_approval h
           on h.system_key = e.system_key and h.created_at >= e.c - interval '1 minute'
         order by e.endorse_number, e.system_key, h.created_at desc, h.id desc),
-      per as (select endorse_number, max(vc) v, bool_and(approval_value = 'ENDORSE_APPROVED') ap,
+      per as (select endorse_number, max(vc) v, to_char(min(c)::date,'YYYY-MM-DD') d, bool_and(approval_value = 'ENDORSE_APPROVED') ap,
                      bool_or(approval_value = 'REJECTED') rj from l group by 1)
-    select v, case when ap then 'Fully Approved' when rj then 'Rejected' else 'Waiting Approval' end s, count(*) n
-    from per group by 1,2`,
+    select v, case when ap then 'Fully Approved' when rj then 'Rejected' else 'Waiting Approval' end s, d, count(*) n
+    from per group by 1,2,3`,
 
-  caf: `select nullif(d.vendor_code,'') v, coalesce(cs.label, 'Status ' || d.status) s, count(distinct d.caf_no) n
+  caf: `select nullif(d.vendor_code,'') v, coalesce(cs.label, 'Status ' || d.status) s, to_char(d.created_date::date,'YYYY-MM-DD') dt, count(distinct d.caf_no) n
     from caf_detail d left join caf_status cs on cs.status_id = d.status
-    where d.created_date >= '${SINCE}' group by 1,2`,
+    where d.created_date >= '${SINCE}' group by 1,2,3`,
 
   cafAction: `select nullif(vendor_code,'') v, 'Approve Waiting Implementation' s, count(distinct caf_no) n
     from caf_detail where status = 12 group by 1`,
 
-  cr: `select v, s, count(*) n from (
-      select ${VENDOR_BY_SYSTEM_KEY('d.sk')} v,
+  cr: `select v, s, dt, count(*) n from (
+      select ${VENDOR_BY_SYSTEM_KEY('d.sk')} v, d.dt,
         (select h.cr_status from cr_history h where h.cr_number = d.cr_number
           order by h.cr_version desc, h.date_status desc nulls last, h.created_date desc nulls last limit 1) s
-      from (select cr_number, max(system_key) sk from cr_document
-            where cr_type = 'Relocation' and created_date >= '${SINCE}' group by 1) d) x group by 1,2`,
+      from (select cr_number, max(system_key) sk, to_char(min(created_date)::date,'YYYY-MM-DD') dt from cr_document
+            where cr_type = 'Relocation' and created_date >= '${SINCE}' group by 1) d) x group by 1,2,3`,
 
   // Dibangun dinamis di main(): hanya vendor yang dipakai (DBX memotong sel >200 karakter, jadi jangan string_agg).
 }
@@ -162,23 +217,30 @@ async function makeDbxRunner() {
   await recv()
   send({ jsonrpc: '2.0', method: 'notifications/initialized' })
   let id = 2
+  const PAGE = 100 // DBX membatasi hasil 100 baris per query -> paginasi
+  async function page(sql) {
+    send({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name: 'dbx_execute_query', arguments: { connection_name: DBX_CONNECTION, database: PMIS_DB, sql } } })
+    const msg = JSON.parse(await recv())
+    if (msg.error) throw new Error(`DBX error: ${msg.error.message}`)
+    const text = msg.result?.content?.[0]?.text || ''
+    if (msg.result?.isError) throw new Error(`DBX query error: ${text.slice(0, 300)}`)
+    const lines = text.split('\n').filter((l) => l.startsWith('|'))
+    if (lines.length < 2) return []
+    const cols = lines[0].split('|').slice(1, -1).map((s) => s.trim())
+    return lines.slice(2).map((l) => {
+      const vals = l.split('|').slice(1, -1).map((s) => s.trim())
+      return Object.fromEntries(cols.map((c, i) => [c, vals[i] === 'NULL' ? null : vals[i]]))
+    })
+  }
   return {
     async rows(sql) {
-      send({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name: 'dbx_execute_query', arguments: { connection_name: DBX_CONNECTION, database: PMIS_DB, sql } } })
-      const msg = JSON.parse(await recv())
-      if (msg.error) throw new Error(`DBX error: ${msg.error.message}`)
-      const text = msg.result?.content?.[0]?.text || ''
-      if (msg.result?.isError) throw new Error(`DBX query error: ${text.slice(0, 300)}`)
-      const m = text.match(/\((\d+) rows?,/)
-      const lines = text.split('\n').filter((l) => l.startsWith('|'))
-      if (lines.length < 2) return []
-      const cols = lines[0].split('|').slice(1, -1).map((s) => s.trim())
-      const out = lines.slice(2).map((l) => {
-        const vals = l.split('|').slice(1, -1).map((s) => s.trim())
-        return Object.fromEntries(cols.map((c, i) => [c, vals[i] === 'NULL' ? null : vals[i]]))
-      })
-      if (m && Number(m[1]) !== out.length) throw new Error(`DBX hasil terpotong: ${out.length}/${m[1]} baris`)
-      return out
+      const all = []
+      for (let off = 0; ; off += PAGE) {
+        const part = await page(`select * from (${sql}) q order by q::text limit ${PAGE} offset ${off}`)
+        all.push(...part)
+        if (part.length < PAGE) return all
+        if (off > 50_000) throw new Error('Terlalu banyak baris (paginasi DBX)')
+      }
     },
     async close() { p.kill() },
   }
@@ -198,9 +260,9 @@ function normalizeStatus(raw) {
 }
 function toneOf(label) {
   const l = label.toLowerCase()
-  if (/reject|cancel|dropped/.test(l)) return 'bad'
-  if (/fully approved|fully implemented|^approved/.test(l)) return 'ok'
-  if (/waiting|progress|draft|reserved|ready|await|pending|no workflow/.test(l)) return 'wait'
+  if (/reject|cancel|dropped|ack error/.test(l)) return 'bad'
+  if (/fully approved|fully implemented|^approved|ack success/.test(l)) return 'ok'
+  if (/waiting|progress|draft|reserved|ready|await|pending|no workflow|not sent/.test(l)) return 'wait'
   return 'neutral'
 }
 
@@ -210,13 +272,14 @@ function toRows(rows, { normalize = true } = {}) {
   for (const r of rows) {
     const v = r.v || UNKNOWN_VENDOR
     const s = normalize ? normalizeStatus(r.s) : r.s
-    const key = `${v}\u0000${s}`
-    const cur = agg.get(key) || { v, s, t: toneOf(s), n: 0, x: 0 }
+    const d = r.d || r.dt || null
+    const key = `${v}\u0000${s}\u0000${d}`
+    const cur = agg.get(key) || { v, s, d, t: toneOf(s), n: 0, x: 0 }
     cur.n += n(r.n)
     cur.x += n(r.x)
     agg.set(key, cur)
   }
-  return [...agg.values()].map((r) => (r.x ? r : { v: r.v, s: r.s, t: r.t, n: r.n }))
+  return [...agg.values()].map((r) => (r.x ? r : { v: r.v, s: r.s, d: r.d, t: r.t, n: r.n }))
 }
 
 function hasTun0() {
@@ -269,8 +332,12 @@ async function main() {
     mps: toRows(raw.mps),
     mpsReserved: toRows(raw.mpsReserved, { normalize: false }),
     matc: toRows(raw.matc),
+    matcGr: toRows(raw.matcGr),
     fatp: toRows(acc('fatp')),
     patp: toRows(acc('patp')),
+    patpGi: toRows(raw.patpGi),
+    patpGr: toRows(raw.patpGr),
+    patpFa: toRows(raw.patpFa),
     cac: toRows(raw.cac),
     endorsement: toRows(raw.endorsement),
     caf: toRows(raw.caf),
@@ -286,7 +353,7 @@ async function main() {
     .sort((a, b) => a.name.localeCompare(b.name))
 
   const payload = {
-    version: 2,
+    version: 3,
     generatedAt: new Date().toISOString(),
     since: SINCE,
     durationMs: Date.now() - started,
@@ -310,7 +377,7 @@ async function main() {
     console.log(JSON.stringify({ totals, vendorCoverage: unknownShare, vendors: vendors.length, timings, durationMs: payload.durationMs, bytes: JSON.stringify(payload).length }, null, 2))
   } else {
     await writeSnapshot(payload)
-    console.log(`[sanitation] snapshot v2 ditulis (${payload.durationMs} ms, ${JSON.stringify(payload).length} bytes)`)
+    console.log(`[sanitation] snapshot v3 ditulis (${payload.durationMs} ms, ${JSON.stringify(payload).length} bytes)`)
   }
 }
 
