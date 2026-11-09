@@ -58,6 +58,9 @@ jobs:
       - name: Test
         run: npx vitest run
 
+      - name: Test Sanitation collector connection timeout
+        run: node scripts/test-sanitation-snapshot-timeout.mjs
+
       - name: Production build
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
