@@ -27,7 +27,7 @@ const REQUIRE_VPN = process.argv.includes('--require-vpn')
 const DBX_PATH = process.env.DBX_MCP_PATH || 'C:\\Users\\ACER\\.dbx\\bin\\dbx-mcp.exe'
 const DBX_CONNECTION = process.env.DBX_CONNECTION || 'PMIS Prod'
 const PMIS_DB = process.env.PMIS_DB_NAME || 'pmisdb_20261008'
-const QUERY_TIMEOUT_MS = 60_000
+const QUERY_TIMEOUT_MS = Math.max(1, Number(process.env.SANITATION_QUERY_TIMEOUT_MS) || 60_000)
 const UNKNOWN_VENDOR = 'UNKNOWN'
 
 function loadEnvFile(file) {
@@ -205,7 +205,12 @@ function assertReadOnly(sql) {
 // ---------- Runner: pg ----------
 async function makePgRunner() {
   const { default: pg } = await import('pg')
-  const client = new pg.Client({ connectionString: process.env.PMIS_DATABASE_URL, statement_timeout: QUERY_TIMEOUT_MS, lock_timeout: 2000 })
+  const client = new pg.Client({
+    connectionString: process.env.PMIS_DATABASE_URL,
+    connectionTimeoutMillis: QUERY_TIMEOUT_MS,
+    statement_timeout: QUERY_TIMEOUT_MS,
+    lock_timeout: 2000,
+  })
   await client.connect()
   await client.query('begin read only')
   return {
@@ -325,6 +330,7 @@ async function writeSnapshot(payload) {
     method: 'POST',
     headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify([{ id: 'latest', generated_at: payload.generatedAt, payload }]),
+    signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
   })
   if (!res.ok) throw new Error(`Supabase write gagal: HTTP ${res.status}`)
 }
