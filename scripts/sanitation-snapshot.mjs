@@ -59,20 +59,19 @@ const PATP_BASE = `select acceptance_number an, max(nullif(vendor_code,'')) v, t
   from list_acceptance where acceptance_number like 'PATP-%' group by 1 having max(coalesce(update_time, create_time)) >= '${SINCE}'`
 // BA Value turunan per PATP (PMIS tidak punya kolom ini): sum(mapping_po_sk_quantity x net_price) line material + service ber-PO,
 // hanya currency IDR. Quantity = porsi yang di-mapping ke PATP itu (satu line PO bisa dibagi ke banyak PATP). Baris WO-only (tanpa PO) tidak bernilai.
-// Dihitung sekali di main() lalu disisipkan ke semua query yang memakai token PATP_VAL (menghindari 4x agregasi tabel besar).
+// Dihitung sekali di main() lalu disisipkan (VALUES) ke query yang memakai token PATP_VAL. service_powo_acceptance tidak punya index
+// acceptance_number, jadi in-scope PATP difilter lebih dulu lewat CTE materialized (satu seq scan) sebelum join transaction_po.
 const PATP_VAL = '__PATP_VAL__'
-const PATP_AN_SQL = `select acceptance_number an from list_acceptance where acceptance_number like 'PATP-%'
-  group by 1 having max(coalesce(update_time, create_time)) >= '${SINCE}'`
-// Daftar PATP in-scope diambil dulu, lalu dipakai sebagai IN literal supaya planner memakai index acceptance_number (subquery membuat seq scan ~150 dtk).
-const patpValSql = (ans) => `select l.acceptance_number an, sum(
+const PATP_VAL_SQL = `with ans as materialized (select acceptance_number from list_acceptance where acceptance_number like 'PATP-%'
+    group by 1 having max(coalesce(update_time, create_time)) >= '${SINCE}'),
+  l as materialized (
+    select s.acceptance_number, s.po_number, s.line_item, s.mapping_po_sk_quantity from service_powo_acceptance s where s.acceptance_number in (select acceptance_number from ans)
+    union all select m.acceptance_number, m.po_number, m.line_item, m.mapping_po_sk_quantity from material_acceptance m where m.acceptance_number in (select acceptance_number from ans))
+  select l.acceptance_number an, sum(
       case when l.mapping_po_sk_quantity ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then l.mapping_po_sk_quantity::numeric end
       * case when tp.net_price ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then tp.net_price::numeric end) a
-    from (select acceptance_number, po_number, line_item, mapping_po_sk_quantity from material_acceptance
-          union all select acceptance_number, po_number, line_item, mapping_po_sk_quantity from service_powo_acceptance) l
-    join transaction_po tp on tp.po_number = l.po_number and tp.line_subline = l.line_item
-    where upper(trim(coalesce(tp.currency,''))) = 'IDR'
-      and l.acceptance_number in (${ans.map((x) => `'${String(x).replace(/'/g, "''")}'`).join(',')})
-    group by 1`
+    from l join transaction_po tp on tp.po_number = l.po_number and tp.line_subline = l.line_item
+    where upper(trim(coalesce(tp.currency,''))) = 'IDR' group by 1`
 
 const patpLeg = ({ table, ack, match, withSql = '' }) => `with pv as (${PATP_VAL})${withSql ? `, ${withSql}` : ''} select v, s, d, count(*) n, sum(a)::bigint a from (
     select b.v, b.d, coalesce(pv.a, 0) a,
@@ -406,12 +405,9 @@ async function main() {
   const timings = {}
   const raw = {}
   try {
-    assertReadOnly(PATP_AN_SQL)
+    assertReadOnly(PATP_VAL_SQL)
     const tv = Date.now()
-    const patpAns = (await runner.rows(PATP_AN_SQL)).map((r) => r.an)
-    const pvQuery = patpAns.length ? patpValSql(patpAns) : null
-    if (pvQuery) assertReadOnly(pvQuery)
-    const pvRows = pvQuery ? await runner.rows(pvQuery) : []
+    const pvRows = await runner.rows(PATP_VAL_SQL)
     timings.patpVal = Date.now() - tv
     const pvSql = pvRows.length
       ? `select an, a::numeric a from (values ${pvRows.map((r) => `('${String(r.an).replace(/'/g, "''")}', ${Number(r.a) || 0})`).join(',')}) t(an, a)`
