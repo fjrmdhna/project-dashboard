@@ -58,7 +58,7 @@ export function DateFilter({ value, min, max, label, onChange }: Props) {
         className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
       >
         <span>
-          <span className="mr-1 font-normal text-slate-500">Created:</span>
+          <span className="mr-1 font-normal text-slate-500">Modified:</span>
           {label}
         </span>
         <span aria-hidden className="text-slate-500">

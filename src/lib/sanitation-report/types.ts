@@ -26,7 +26,7 @@ export type SanitationSnapshot = {
    * Opsional: snapshot yang dibuat sebelum fitur GR/Fusion belum memilikinya.
    * `patpGi`/`patpGr`/`patpFa` = progres Fusion per PATP Fully Approved (INTINV-006, INTINV-005 service, INTPPM-002).
    */
-  modules: Record<ModuleKey, Row[]> & { matcGr?: Row[]; patpGi?: Row[]; patpGr?: Row[]; patpFa?: Row[] }
+  modules: Record<ModuleKey, Row[]> & { matcGr?: Row[]; patpGi?: Row[]; patpGr?: Row[]; patpFa?: Row[]; cacGr?: Row[]; cacFa?: Row[] }
 }
 
 export type SanitationApiResponse = {

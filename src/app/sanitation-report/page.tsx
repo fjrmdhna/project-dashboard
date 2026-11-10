@@ -43,7 +43,7 @@ const CARDS: CardDef[] = [
   { key: 'caf', title: 'CAF', tone: 'orange', hint: 'Counted per caf_no, current CAF status.' },
   { key: 'crRelocation', title: 'Change Request', tone: 'red', hint: 'Counted per CR number (type Relocation), latest status; vendor via system key.' },
   { key: 'fatp', title: 'Acceptance - FATP', tone: 'cyan', hint: 'Counted per acceptance_number (FATP), latest status.' },
-  { key: 'patp', title: 'Acceptance - PATP', tone: 'violet', hint: 'Counted per acceptance_number (PATP), latest status.' },
+  { key: 'patp', title: 'Acceptance - PATP', tone: 'violet', hint: 'Counted per acceptance_number (PATP), latest status. Rp = derived BA Value (mapped quantity x PO net price, IDR, PO-based lines only); PMIS has no BA Value for PATP, and WO-only PATP (no PO) has no value.' },
   { key: 'endorsement', title: 'Endorsement', tone: 'teal', hint: 'Counted per endorse_number. Fully Approved = all systems endorsed.' },
   { key: 'cac', title: 'CAC Acceptance / BAUT', tone: 'teal', hint: 'Counted per BA number, latest workflow status.' },
 ]
@@ -235,6 +235,21 @@ function Report() {
                   const gr = aggregate(snap.modules.matcGr, vendorSet, range)
                   note = <PatpFusionMini total={gr.created} basis="Fully Approved BA" legs={[{ label: 'GR Material', interfaceId: 'INTINV-005', statuses: gr.statuses }]} />
                 }
+                if (c.key === 'cac' && snap.modules.cacGr && snap.modules.cacFa) {
+                  // Basis = BA CAC Fully Approved; tampil 0 saat filter tidak menyisakan BA, hilang hanya untuk snapshot lama.
+                  const grs = aggregate(snap.modules.cacGr, vendorSet, range)
+                  const fa = aggregate(snap.modules.cacFa, vendorSet, range)
+                  note = (
+                    <PatpFusionMini
+                      total={grs.created}
+                      basis="Fully Approved BA"
+                      legs={[
+                        { label: 'GR Service', interfaceId: 'INTINV-005', statuses: grs.statuses },
+                        { label: 'Fixed Asset', interfaceId: 'INTPPM-002', statuses: fa.statuses },
+                      ]}
+                    />
+                  )
+                }
                 if (c.key === 'patp' && snap.modules.patpGi && snap.modules.patpGr && snap.modules.patpFa) {
                   // Basis = PATP Fully Approved; tampil 0 saat filter tidak menyisakan PATP, hilang hanya untuk snapshot lama.
                   const gi = aggregate(snap.modules.patpGi, vendorSet, range)
@@ -261,10 +276,11 @@ function Report() {
                     value={a.created}
                     subValue={c.key === 'baseline' ? `${fmt(a.extra)} Site` : a.amount !== undefined ? formatIdr(a.amount) : undefined}
                     note={note}
-                    divided={c.key === 'matc' || c.key === 'patp'}
+                    divided={c.key === 'matc' || c.key === 'patp' || c.key === 'cac'}
+                    stackSub={c.key === 'cac' || c.key === 'patp'}
                     dimmed={a.created === 0}
                   >
-                    <StatusBreakdown statuses={a.statuses} total={a.created} title={c.title} tall={c.key === 'patp'} />
+                    <StatusBreakdown statuses={a.statuses} total={a.created} title={c.title} tall={c.key === 'patp' ? true : c.key === 'cac' ? 'compact' : false} />
                   </ModuleCard>
                 )
               })}

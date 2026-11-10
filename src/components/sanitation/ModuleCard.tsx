@@ -25,10 +25,12 @@ type Props = {
   note?: ReactNode
   /** Garis pemisah abu-abu antara baris angka dan isi card (untuk card dengan blok tambahan di samping angka). */
   divided?: boolean
+  /** Nilai total (subValue) ditaruh di bawah angka besar, bukan di sampingnya (untuk funnel lebar di samping angka). */
+  stackSub?: boolean
   children: ReactNode
 }
 
-export function ModuleCard({ title, value, unit, subValue, hint, tone, dimmed, note, divided, children }: Props) {
+export function ModuleCard({ title, value, unit, subValue, hint, tone, dimmed, note, divided, stackSub, children }: Props) {
   const t = TONES[tone]
   return (
     <section
@@ -54,7 +56,8 @@ export function ModuleCard({ title, value, unit, subValue, hint, tone, dimmed, n
           <div className="shrink-0 whitespace-nowrap text-slate-900">
             <span className="text-2xl font-extrabold tabular-nums leading-none">{fmt(value)}</span>
             {unit && <span className="ml-1 text-xs font-bold">{unit}</span>}
-            {subValue && <span className="ml-1 text-[11px] text-slate-600">({subValue})</span>}
+            {subValue && !stackSub && <span className="ml-1 text-[11px] text-slate-600">({subValue})</span>}
+            {subValue && stackSub && <div className="mt-0.5 text-[11px] font-normal leading-none text-slate-600">({subValue})</div>}
           </div>
           {note && <div className={`min-w-0 text-right text-[11px] font-semibold leading-tight text-slate-600 ${divided ? 'flex-1' : ''}`}>{note}</div>}
         </div>

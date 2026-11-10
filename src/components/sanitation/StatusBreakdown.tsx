@@ -12,7 +12,15 @@ import { BAR_ORDER, COLOR, TONE_BG, TONE_GROUP } from './tones'
  * <=680px: 2, default: 3, >=820px: 4, >=940px: 5. Sisanya lewat popover "All statuses".
  */
 /** 	all: card dengan header lebih tinggi (kotak funnel PATP) sehingga baris status tampil lebih sedikit di layar pendek. */
-function rowVisibility(i: number, tall = false): string {
+function rowVisibility(i: number, tall: boolean | 'compact' = false): string {
+  // compact: header setinggi 2 baris funnel (CAC); baris ke-2 disembunyikan hanya di layar sangat pendek.
+  if (tall === 'compact') {
+    if (i === 0) return 'flex'
+    if (i === 1) return 'flex [@media(max-height:640px)]:hidden'
+    if (i === 2) return 'hidden [@media(min-height:840px)]:flex'
+    if (i === 3) return 'hidden [@media(min-height:900px)]:flex'
+    return 'hidden [@media(min-height:1040px)]:flex'
+  }
   if (tall) {
     if (i === 0) return 'flex [@media(max-height:560px)]:hidden'
     if (i === 1) return 'flex [@media(max-height:760px)]:hidden'
@@ -93,7 +101,7 @@ export function StatusBar({ statuses, total }: { statuses: StatusItem[]; total: 
 
 
 /** Popover menutupi card induk (card harus `relative`), jadi tidak terpotong dan tidak menambah scroll halaman. */
-export function StatusBreakdown({ statuses, total, title, tall = false }: { statuses: StatusItem[]; total: number; title: string; tall?: boolean }) {
+export function StatusBreakdown({ statuses, total, title, tall = false }: { statuses: StatusItem[]; total: number; title: string; tall?: boolean | 'compact' }) {
   const [open, setOpen] = useState(false)
   const id = useId()
 
