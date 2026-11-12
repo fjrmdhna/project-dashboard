@@ -161,7 +161,7 @@ function Report() {
 
   const scope =
     selected.length === 0 ? 'All Vendor' : selected.length === 1 && snap ? vendorLabel(snap, selected[0]) : `${selected.length} Vendors`
-  const cafWaiting = snap ? sumCount(snap.modules.cafAction, vendorSet) : 0
+  const cafWaiting = snap ? sumCount(snap.modules.cafAction, vendorSet, range) : 0
   const active = snap ? modulesWithTransactions(snap, vendorSet, range) : 0
 
   return (
@@ -219,7 +219,7 @@ function Report() {
                 : `${scope === 'All Vendor' ? 'All vendors have' : `${scope} has`} recorded transactions in ${active} of ${CORE_MODULES.length} modules.`}
             </div>
             <div className="min-w-0 rounded-lg border-l-4 border-rose-500 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 sm:text-sm lg:truncate">
-              CAF ACTION &nbsp;|&nbsp; {fmt(cafWaiting)} waiting submit Pictorial Reports <span className="font-normal">(all time)</span>.
+              CAF ACTION &nbsp;|&nbsp; {fmt(cafWaiting)} waiting submit Pictorial Reports <span className="font-normal">({selection.preset === 'all' ? 'all time' : rangeLabel.toLowerCase()})</span>.
             </div>
             </div>
 

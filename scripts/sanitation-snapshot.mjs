@@ -244,8 +244,10 @@ const Q = {
     from caf_detail d left join caf_status cs on cs.status_id = d.status
     where coalesce(d.modified_date, d.created_date) >= '${SINCE}' group by 1,2,3`,
 
-  cafAction: `select nullif(vendor_code,'') v, 'Approve Waiting Implementation' s, count(distinct caf_no) n
-    from caf_detail where status = 12 group by 1`,
+  // Backlog CAF menunggu implementasi (tanpa batas SINCE). d = modified terakhir per CAF supaya filter tanggal ikut berlaku.
+  cafAction: `select v, s, d, count(*) n from (
+      select nullif(vendor_code,'') v, 'Approve Waiting Implementation' s, to_char(max(coalesce(modified_date, created_date))::date,'YYYY-MM-DD') d
+      from caf_detail where status = 12 group by caf_no, 1) x group by 1,2,3`,
 
   cr: `select v, s, dt, count(*) n from (
       select ${VENDOR_BY_SYSTEM_KEY('d.sk')} v, d.dt,
