@@ -165,6 +165,7 @@ const Q = {
             group by mc.ba_number having max(coalesce(mc.updated_date, mc.created_date)) >= '${SINCE}') m
       cross join lateral (select ${WF_LATEST('material_certificates', 'm.ba_number')} wf) l) x group by 1,2,3`,
 
+  // ACK dibaca dari tabel ack terbaru per baris (kolom i.ack_status di tabel interface tidak selalu ikut terisi).
   // GR Material (INTINV-005) per BA MATC yang Fully Approved. Aturan sama dengan gate BAST di PMIS:
   // hanya file_type non-service, line yang di-reject GR Control tidak dihitung.
   matcGr: `select v, s, d, count(*) n, sum(a)::bigint a from (
@@ -182,10 +183,12 @@ const Q = {
             from material_certificates mcx
             group by 1 having max(coalesce(updated_date, created_date)) >= '${SINCE}') m
       left join (select i.ba_number, count(*) lines,
-                   count(*) filter (where i.export_status = 'EXPORTED') sent,
-                   count(*) filter (where i.ack_status = 'SUCCESS') ok,
-                   count(*) filter (where i.ack_status = 'ERROR') err
+                   count(*) filter (where i.export_status = 'EXPORTED' or k.ack_status is not null) sent,
+                   count(*) filter (where k.ack_status = 'SUCCESS') ok,
+                   count(*) filter (where k.ack_status = 'ERROR') err
                  from oracle_fusion_intinv_005_interface i
+                 left join lateral (select a.ack_status from oracle_fusion_intinv_005_ack a where a.interface_id_ref = i.id
+                   order by a.processing_date desc nulls last, a.id desc limit 1) k on true
                  where i.ba_number in (select ba_number from material_certificates where coalesce(updated_date, created_date) >= '${SINCE}')
                    and coalesce(i.file_type,'') not ilike 'service%'
                    and not exists (select 1 from material_certificate_details rej where rej.ba_number = i.ba_number
