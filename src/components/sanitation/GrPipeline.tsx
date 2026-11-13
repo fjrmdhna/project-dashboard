@@ -27,10 +27,10 @@ export function PatpFusionMini({ legs, total, basis = 'Fully Approved PATP' }: {
   const hasAmount = legs.some((l) => l.statuses.some((s) => s.amount !== undefined))
   // Grid dengan subgrid: semua baris berbagi kolom yang sama, sehingga label, bar, dan angka selalu sejajar.
   const cols = hasAmount
-    ? 'grid-cols-[auto_minmax(48px,1fr)_auto_auto_auto_auto] max-w-[340px]'
-    : 'grid-cols-[auto_minmax(48px,1fr)_auto_auto_auto] max-w-[300px]'
+    ? 'grid-cols-[auto_minmax(14px,1fr)_auto_auto_auto_auto] max-w-[340px]'
+    : 'grid-cols-[auto_minmax(14px,1fr)_auto_auto_auto] max-w-[300px]'
   return (
-    <div className={`grid ${cols} ml-auto w-full items-center gap-x-2.5 gap-y-1 rounded-md bg-slate-50 px-2.5 py-1.5 [@media(max-height:700px)]:gap-y-0 [@media(max-height:700px)]:py-1 ring-1 ring-inset ring-slate-200/70`}>
+    <div className={`grid ${cols} ml-auto w-full min-w-0 items-center gap-x-1.5 gap-y-1 rounded-md bg-slate-50 px-2 py-1.5 [@media(max-height:700px)]:gap-y-0 [@media(max-height:700px)]:py-1 ring-1 ring-inset ring-slate-200/70`}>
       {legs.map((leg) => {
         const success = countOf(leg.statuses, GR.success)
         const waiting = countOf(leg.statuses, GR.waiting)

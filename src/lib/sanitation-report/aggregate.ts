@@ -61,11 +61,11 @@ export function pct(count: number, total: number): string {
 }
 
 // ---------- Nilai IDR ----------
-/** Format ringkas (English): Rp 37.7 B / Rp 850 M / Rp 12 K. B = billion, M = million, K = thousand. */
+/** Format ringkas (English): Rp 37.65 B / Rp 850.00 M / Rp 12.00 K. B = billion, M = million, K = thousand. */
 export function formatIdr(n: number): string {
   const abs = Math.abs(n)
-  const trim = (v: number) => (v >= 100 ? String(Math.round(v)) : v.toFixed(1).replace(/\.0$/, ''))
-  if (abs >= 1e12) return `Rp ${trim(n / 1e12)} T`
+  const trim = (v: number) => v.toFixed(2)
+  if (abs >= 1e12) return `Rp ${(n / 1e12).toFixed(2)} T`
   if (abs >= 1e9) return `Rp ${trim(n / 1e9)} B`
   if (abs >= 1e6) return `Rp ${trim(n / 1e6)} M`
   if (abs >= 1e3) return `Rp ${trim(n / 1e3)} K`

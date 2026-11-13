@@ -39,13 +39,13 @@ type CardDef = {
 const CARDS: CardDef[] = [
   { key: 'mps', title: 'MPS', tone: 'cyan', hint: 'Counted per MPS transaction (mps_transaction_id), latest approval status.' },
   { key: 'baseline', title: 'Baseline', tone: 'navy', unit: 'Project', hint: 'Counted per baseline_id (project). Sites = sum of total_system_key.' },
-  { key: 'matc', title: 'MATC / BABT', tone: 'violet', hint: 'Counted per BA number; vendor derived from system key → PO mapping.' },
+  { key: 'matc', title: 'MATC / BABT', tone: 'violet', hint: 'Counted per BA number; vendor derived from system key → PO mapping. Rp = BA Value as the Current Realization of MATC Appendix 2 (certified quantity x PO net price, IDR lines only).' },
   { key: 'caf', title: 'CAF', tone: 'orange', hint: 'Counted per caf_no, current CAF status.' },
   { key: 'crRelocation', title: 'Change Request', tone: 'red', hint: 'Counted per CR number (type Relocation), latest status; vendor via system key.' },
   { key: 'fatp', title: 'Acceptance - FATP', tone: 'cyan', hint: 'Counted per acceptance_number (FATP), latest status.' },
-  { key: 'patp', title: 'Acceptance - PATP', tone: 'violet', hint: 'Counted per acceptance_number (PATP), latest status. Rp = derived BA Value (mapped quantity x PO net price, IDR, PO-based lines only); PMIS has no BA Value for PATP, and WO-only PATP (no PO) has no value.' },
+  { key: 'patp', title: 'Acceptance - PATP', tone: 'violet', hint: 'Counted per acceptance_number (PATP), latest status. Rp = derived BA Value = Current Realisation (mapped quantity per system key x latest PO net price, IDR, PO-based lines only); PMIS has no BA Value for PATP, and WO-only PATP (no PO) has no value.' },
   { key: 'endorsement', title: 'Endorsement', tone: 'teal', hint: 'Counted per endorse_number. Fully Approved = all systems endorsed.' },
-  { key: 'cac', title: 'CAC Acceptance / BAUT', tone: 'teal', hint: 'Counted per BA number, latest workflow status.' },
+  { key: 'cac', title: 'CAC Acceptance / BAUT', tone: 'teal', hint: 'Counted per BA number, latest workflow status. Rp = BA Value as the Realisation Total of ATP Appendix 2 (mapped quantity x PO net price, IDR lines only).' },
 ]
 
 function formatSince(iso: string) {
@@ -152,9 +152,9 @@ function Report() {
     ? PRESET_LABEL[selection.preset]
     : `${selection.from ? fmtDay(selection.from) : '…'} – ${selection.to ? fmtDay(selection.to) : '…'}`
   const periodText = !snap
-    ? 'since 20 Oct 2026'
+    ? '· SAP to Fusion & Fusion'
     : selection.preset === 'all'
-      ? `since ${formatSince(snap.since)}`
+      ? '· SAP to Fusion & Fusion'
       : range.from && range.from === range.to
         ? `on ${fmtDay(range.from)}`
         : `from ${range.from ? fmtDay(range.from) : formatSince(snap.since)} to ${range.to ? fmtDay(range.to) : 'today'}`
