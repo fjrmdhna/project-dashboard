@@ -58,8 +58,8 @@ jobs:
       - name: Test
         run: npx vitest run
 
-      - name: Test Sanitation collector connection timeout
-        run: node scripts/test-sanitation-snapshot-timeout.mjs
+      - name: Test Sanitation collector mode and timeout
+        run: node scripts/test-sanitation-mode.mjs && node scripts/test-sanitation-snapshot-timeout.mjs
 
       - name: Production build
         env:

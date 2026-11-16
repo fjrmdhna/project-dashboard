@@ -23,25 +23,6 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const DRY = process.argv.includes('--dry-run')
-// Selalu log progress per query (DBX sekuensial bisa >10 mnt; tanpa log terlihat hang).
-const VERBOSE = true
-// Boleh dipakai tanpa --dry-run (merge modul lain dari snapshot sebelumnya).
-const ONLY = process.env.SANITATION_ONLY ? process.env.SANITATION_ONLY.split(',') : null
-const REQUIRE_VPN = process.argv.includes('--require-vpn')
-const DBX_PATH = process.env.DBX_MCP_PATH || 'C:\\Users\\ACER\\.dbx\\bin\\dbx-mcp.exe'
-const DBX_CONNECTION = process.env.DBX_CONNECTION || 'PMIS Prod'
-const PMIS_DB = process.env.PMIS_DB_NAME || 'pmisdb_20261008'
-const QUERY_TIMEOUT_MS = Math.max(1, Number(process.env.SANITATION_QUERY_TIMEOUT_MS) || 300_000)
-const UNKNOWN_VENDOR = 'UNKNOWN'
-/** true = driver pg (paralel, timeout panjang). false = DBX sekuensial. */
-const USE_PG = !!process.env.PMIS_DATABASE_URL
-/**
- * Di DBX, patpAll/patpFunnel hampir selalu timeout 60s dan menduplikasi CTE need.
- * Default: skip + inherit dari snapshot lama. Paksa jalan: SANITATION_FORCE_PATP=1.
- */
-const SKIP_PATP_ON_DBX = !USE_PG && process.env.SANITATION_FORCE_PATP !== '1'
-
 function loadEnvFile(file) {
   if (!existsSync(file)) return
   for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
@@ -53,6 +34,26 @@ loadEnvFile(join(ROOT, '.env.local'))
 loadEnvFile(join(ROOT, '.sanitation.env'))
 loadEnvFile('/opt/project-dashboard/.sanitation.env')
 loadEnvFile('/opt/project-dashboard/.env')
+
+const DRY = process.argv.includes('--dry-run')
+// Selalu log progress per query (DBX sekuensial bisa >10 mnt; tanpa log terlihat hang).
+const VERBOSE = true
+// Boleh dipakai tanpa --dry-run (merge modul lain dari snapshot sebelumnya).
+const ONLY = process.env.SANITATION_ONLY ? process.env.SANITATION_ONLY.split(',') : null
+const REQUIRE_VPN = process.argv.includes('--require-vpn')
+const DBX_PATH = process.env.DBX_MCP_PATH || 'C:\\Users\\ACER\\.dbx\\bin\\dbx-mcp.exe'
+const DBX_CONNECTION = process.env.DBX_CONNECTION || 'PMIS Prod'
+const PMIS_DB = process.env.PMIS_DB_NAME || 'pmisdb_20261008'
+const QUERY_TIMEOUT_MS = Math.max(1, Number(process.env.SANITATION_QUERY_TIMEOUT_MS) || 300_000)
+const UNKNOWN_VENDOR = 'UNKNOWN'
+
+/** true = driver pg (paralel, timeout panjang). false = DBX sekuensial. */
+const USE_PG = !!process.env.PMIS_DATABASE_URL
+/**
+ * Di DBX, patpAll/patpFunnel hampir selalu timeout 60s dan menduplikasi CTE need.
+ * Default: skip + inherit dari snapshot lama. Paksa jalan: SANITATION_FORCE_PATP=1.
+ */
+const SKIP_PATP_ON_DBX = !USE_PG && process.env.SANITATION_FORCE_PATP !== '1'
 
 // Workflow status (MATC/CAC) -> label PMIS
 const WF_LABEL = `case wf when 'completed' then 'Fully Approved' when 'in_progress' then 'In Progress'
@@ -1006,6 +1007,7 @@ async function main() {
   } finally {
     await runner.close()
   }
+  if (USE_PG && failed.length && !ONLY) throw new Error(`Query gagal; snapshot lama dipertahankan: ${failed.join(', ')}`)
 
   const part = (k) => [...(raw.patpAll || []), ...(raw.patpFunnel || [])].filter((r) => r.k === k)
   const cacPart = (k) => (raw.cacAll || []).filter((r) => r.k === k)
