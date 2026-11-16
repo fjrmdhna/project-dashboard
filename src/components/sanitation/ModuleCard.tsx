@@ -17,6 +17,8 @@ type Props = {
   title: string
   value: number
   unit?: string
+  /** Nilai Rp format siap tampil di samping angka besar (mis. "Rp 652.08 B"). */
+  amountLabel?: string
   subValue?: string
   /** Definisi satuan hitung (tooltip). */
   hint: string
@@ -30,7 +32,7 @@ type Props = {
   children: ReactNode
 }
 
-export function ModuleCard({ title, value, unit, subValue, hint, tone, dimmed, note, divided, stackSub, children }: Props) {
+export function ModuleCard({ title, value, unit, amountLabel, subValue, hint, tone, dimmed, note, divided, stackSub, children }: Props) {
   const t = TONES[tone]
   return (
     <section
@@ -40,28 +42,37 @@ export function ModuleCard({ title, value, unit, subValue, hint, tone, dimmed, n
       }`}
     >
       <div className={`absolute inset-y-0 left-0 w-1 ${t.bar}`} />
-      <div className={`flex min-h-0 flex-1 flex-col px-3 py-2 pl-4 ${divided ? 'gap-1' : 'gap-1.5'}`}>
-        <div className="flex items-center justify-between gap-2">
+      <div className={`flex min-h-0 flex-1 flex-col pl-4 pr-4 pt-2 ${divided ? 'gap-1 pb-3' : 'gap-1.5 pb-2.5'}`}>
+        <div className="flex shrink-0 items-center justify-between gap-2">
           <h2 className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${t.chip}`}>{title}</h2>
           <span
             tabIndex={0}
             title={hint}
             aria-label={`Counting unit: ${hint}`}
-            className="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
+            className="flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
           >
             i
           </span>
         </div>
-        <div className={`flex justify-between gap-2 ${divided ? 'items-center' : 'items-end'}`}>
-          <div className="shrink-0 whitespace-nowrap text-slate-900">
-            <span className="text-2xl font-extrabold tabular-nums leading-none">{fmt(value)}</span>
-            {unit && <span className="ml-1 text-xs font-bold">{unit}</span>}
-            {subValue && !stackSub && <span className="ml-1 text-[11px] text-slate-600">({subValue})</span>}
-            {subValue && stackSub && <div className="mt-0.5 text-[11px] font-normal leading-none text-slate-600">({subValue})</div>}
+        {/* note/funnel boleh menyusut agar StatusBar + 1 status + All statuses tidak terpotong */}
+        <div className={`flex min-h-0 min-w-0 justify-between gap-2 ${note ? 'min-h-0 shrink' : 'shrink-0'} ${divided ? 'items-center' : 'items-end'}`}>
+          <div className={`min-w-0 text-slate-900 ${note ? 'max-w-[40%] shrink' : 'shrink-0 whitespace-nowrap'}`}>
+            <div className="truncate whitespace-nowrap">
+              <span className={`${note ? 'text-lg' : 'text-2xl'} font-extrabold tabular-nums leading-none`}>{fmt(value)}</span>
+              {unit && <span className="ml-1 text-xs font-bold">{unit}</span>}
+              {amountLabel && <span className="ml-1 text-[11px] font-semibold tabular-nums text-slate-600">· {amountLabel}</span>}
+              {subValue && !stackSub && <span className="ml-1 text-[10px] text-slate-600">({subValue})</span>}
+            </div>
+            {subValue && stackSub && (
+              <div className="mt-0.5 truncate text-[10px] font-normal leading-tight text-slate-600" title={subValue}>
+                ({subValue})
+              </div>
+            )}
           </div>
-          {note && <div className={`min-w-0 text-right text-[11px] font-semibold leading-tight text-slate-600 ${divided ? 'flex-1' : ''}`}>{note}</div>}
+          {note && <div className="min-h-0 min-w-0 flex-1 overflow-hidden text-right text-[11px] font-semibold leading-tight text-slate-600">{note}</div>}
         </div>
-        <div className={`min-h-0 flex-1 ${divided ? 'border-t border-slate-200 pt-1' : ''}`}>{children}</div>
+        {/* min-h: StatusBar + 1 row + All statuses harus selalu muat */}
+        <div className={`flex min-h-[3.25rem] flex-1 flex-col overflow-hidden ${divided ? 'border-t border-slate-200 pt-1' : ''}`}>{children}</div>
       </div>
     </section>
   )

@@ -24,14 +24,23 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DRY = process.argv.includes('--dry-run')
-const VERBOSE = DRY || !!process.env.SANITATION_VERBOSE
-const ONLY = DRY && process.env.SANITATION_ONLY ? process.env.SANITATION_ONLY.split(',') : null // debug: jalankan sebagian query
+// Selalu log progress per query (DBX sekuensial bisa >10 mnt; tanpa log terlihat hang).
+const VERBOSE = true
+// Boleh dipakai tanpa --dry-run (merge modul lain dari snapshot sebelumnya).
+const ONLY = process.env.SANITATION_ONLY ? process.env.SANITATION_ONLY.split(',') : null
 const REQUIRE_VPN = process.argv.includes('--require-vpn')
 const DBX_PATH = process.env.DBX_MCP_PATH || 'C:\\Users\\ACER\\.dbx\\bin\\dbx-mcp.exe'
 const DBX_CONNECTION = process.env.DBX_CONNECTION || 'PMIS Prod'
 const PMIS_DB = process.env.PMIS_DB_NAME || 'pmisdb_20261008'
-const QUERY_TIMEOUT_MS = Math.max(1, Number(process.env.SANITATION_QUERY_TIMEOUT_MS) || 180_000)
+const QUERY_TIMEOUT_MS = Math.max(1, Number(process.env.SANITATION_QUERY_TIMEOUT_MS) || 300_000)
 const UNKNOWN_VENDOR = 'UNKNOWN'
+/** true = driver pg (paralel, timeout panjang). false = DBX sekuensial. */
+const USE_PG = !!process.env.PMIS_DATABASE_URL
+/**
+ * Di DBX, patpAll/patpFunnel hampir selalu timeout 60s dan menduplikasi CTE need.
+ * Default: skip + inherit dari snapshot lama. Paksa jalan: SANITATION_FORCE_PATP=1.
+ */
+const SKIP_PATP_ON_DBX = !USE_PG && process.env.SANITATION_FORCE_PATP !== '1'
 
 function loadEnvFile(file) {
   if (!existsSync(file)) return
@@ -71,137 +80,360 @@ const IN_SK = (col) => `${col} in (select sk from scope_sk)`
 // Scope per BA: punya >=1 PO scope dan tidak punya PO di luar scope. `col` harus ter-qualify (mis. mc.ba_number).
 const BA_SCOPE = (table, col) => `${col} in (select x.ba_number from ${table} x where ${IN_PO('x.po_number')})
     and not exists (select 1 from ${table} y where y.ba_number = ${col} and y.po_number is not null and y.po_number not in (select po from scope_po))`
-// Scope per acceptance (PATP/FATP): punya >=1 system_key scope dan tidak ada system_key di luar scope.
-const ACC_HAVING = `having bool_or(${IN_SK('system_key')}) and bool_and(system_key is null or ${IN_SK('system_key')})`
 // Tanggal modified. SANITATION_DAILY_DAYS>0: data lebih tua dari N hari digabung per bulan (tanggal = awal bulan) agar payload ringan.
 const BUCKET_DAYS = Math.max(0, Number(process.env.SANITATION_DAILY_DAYS) || 0)
 const DT = (e) => BUCKET_DAYS > 0
   ? `to_char(case when (${e}) >= current_date - ${BUCKET_DAYS} then (${e})::date else date_trunc('month', ${e})::date end,'YYYY-MM-DD')`
   : `to_char((${e})::date,'YYYY-MM-DD')`
 
-// Progres Fusion per PATP Fully Approved (rantai GR Control: GI Material -> GR Service -> Fixed Asset).
-// Status dibaca dari tabel ACK (bukan interface.ack_status yang tidak andal), baris GATE_FILTERED tidak dihitung
-// sebagai terkirim. Kunci ke PATP sama dengan modules/gr-control/acceptance.list.js di PMIS:
-//   GI = system_key, GR Service = acceptance_number/ba_reference, Fixed Asset = receipt_number (akhiran _N dibuang).
-const PATP_BASE = `select acceptance_number an, max(nullif(vendor_code,'')) v, ${DT('max(coalesce(update_time, create_time))')} d,
-    array_agg(distinct system_key) sks, max(status) st
-  from list_acceptance where acceptance_number like 'PATP-%' group by 1 ${ACC_HAVING}`
-// BA Value turunan per PATP (PMIS tidak punya kolom ini) = Current Realisation: sum(qty x net_price) line material + service ber-PO,
-// hanya currency IDR. qty = least(mapping_po_sk_quantity, quanty_mapping per PO/line/system key PATP): sebagian baris PATP menyimpan
-// qty penuh line PO (membengkak), sedangkan mapping per system key adalah porsi sebenarnya. Tanpa mapping -> pakai mapping_po_sk_quantity.
-// Harga = transaction_po terbaru (dedup). Baris WO-only (tanpa PO) tidak bernilai.
-// Dihitung di DB (CTE materialized) di setiap query yang memakai token PATP_VAL.
-const PATP_VAL = '__PATP_VAL__'
+// PATP/FATP: 1 system key = 1 hitungan (unik per jenis). Status = acceptance TERBARU untuk system key itu
+// (update_time/create_time, tie-break acceptance_number). Scope = system_key di scope_sk Fusion.
+// Funnel Fusion per Fully Approved system key (status terbaru Fully Approved). Kunci sama GR Control PMIS:
+//   GI = system_key, GR Service = acceptance_number/ba_reference terbaru SK, Fixed Asset = receipt_number (strip _N).
+// ACK dari tabel ack terbaru; GATE_FILTERED tidak dihitung terkirim.
+// Rp PATP = Current Realisation per (acceptance terbaru, system key): qty x net_price IDR line ber-PO.
 const NUM_RE = "'^-{0,1}[0-9]+([.][0-9]+){0,1}$'"
-const PATP_VAL_SQL = `with ans as materialized (select acceptance_number, max(system_key) sk from list_acceptance where acceptance_number like 'PATP-%'
-    group by 1 ${ACC_HAVING}),
-  l as materialized (
-    select s.acceptance_number, s.po_number, s.line_item, s.mapping_po_sk_quantity from service_powo_acceptance s where s.acceptance_number in (select acceptance_number from ans)
-    union all select m.acceptance_number, m.po_number, m.line_item, m.mapping_po_sk_quantity from material_acceptance m where m.acceptance_number in (select acceptance_number from ans)),
-  mp as materialized (select distinct on (po, material_line_item, system_key) po, material_line_item, system_key, quanty_mapping
-    from mapping_systemkey_po where po in (select po_number from l) order by po, material_line_item, system_key, id desc)
-  select l.acceptance_number an, sum(
-      case when l.mapping_po_sk_quantity ~ ${NUM_RE} then least(l.mapping_po_sk_quantity::numeric,
-            case when mp.quanty_mapping::text ~ ${NUM_RE} then mp.quanty_mapping::numeric else l.mapping_po_sk_quantity::numeric end) end
-      * case when tp.net_price ~ ${NUM_RE} then tp.net_price::numeric end) a
-    from l join ans on ans.acceptance_number = l.acceptance_number
-    left join mp on mp.po = l.po_number and mp.material_line_item = l.line_item and mp.system_key = ans.sk
-    join lateral (select t.net_price, t.currency from transaction_po t where t.po_number = l.po_number and t.line_subline = l.line_item
-      order by t.created_at desc, t.id desc limit 1) tp on true
-    where upper(trim(coalesce(tp.currency,''))) = 'IDR' group by 1`
 
-// Leg PATP (GI/GR/FA) dan total PATP/FATP dihitung dalam SATU query supaya nilai (pv) dan himpunan PATP (b) hanya dibangun sekali.
-// Cabang memakai CTE `b` (PATP Fully Approved + progres) dan `pv` (BA Value). Hasil diberi tag k.
-const patpLeg = ({ k, table, ack, match }) => `select '${k}' k, v, s, d, count(*) n, sum(a)::bigint a from (
-    select b.v, b.d, coalesce(pv.a, 0) a,
-      case when g.lines is null then 'Not Sent' when g.err > 0 then 'ACK Error'
-           when g.ok = g.lines then 'ACK Success' else 'Waiting ACK' end s
-    from b left join pv on pv.an = b.an
-    left join lateral (
-      select count(*) lines, count(*) filter (where k.ack_status = 'ERROR') err, count(*) filter (where k.ack_status = 'SUCCESS') ok
-      from ${table} i
-      left join lateral (select a.ack_status from ${ack} a where a.interface_id_ref = i.id
-        order by a.processing_date desc nulls last, a.id desc limit 1) k on true
-      where ${match} and coalesce(i.export_status,'') <> 'GATE_FILTERED'
-      having count(*) > 0) g on true
-    where b.st like 'Acceptance Fully Approved%') x group by 2,3,4`
+// Status ACK funnel dari agregat hash-join (bukan lateral per system key).
+const FUNNEL_STATUS = `case when g.lines is null then 'Not Sent' when g.err > 0 then 'ACK Error'
+           when g.ok = g.lines then 'ACK Success' else 'Waiting ACK' end`
 
-// Satu baris per BA CAC (acceptance_certificate_header) dalam scope; a = BA Value IDR = Realisation Total Appendix 2 ATP:
-// sum(quanty_mapping baris mapping detail x net_price PO terbaru), hanya line IDR (bukan quantity penuh line PO).
-const CAC_M = `select ba_number, max(nullif(vendor_code,'')) v, ${DT('max(coalesce(updated_at, created_at))')} d,
-              coalesce((select sum(x.lv) from (select d.id,
-                  case when m.quanty_mapping ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then m.quanty_mapping::numeric end
-                  * case when tp.net_price ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then tp.net_price::numeric end lv
-                from acceptance_certificate_detail d
-                join lateral (select m0.quanty_mapping, m0.po, m0.material_line_item from mapping_systemkey_po m0
-                  where nullif(d.system_key,'') is not null
-                    and ((d.mapping_id is not null and m0.id = d.mapping_id)
-                      or (d.mapping_id is null and m0.po = d.po_number and m0.material_line_item = d.line_item
-                          and m0.system_key = d.system_key and m0.network_header is not distinct from d.network_header))
-                  order by m0.id desc limit 1) m on true
-                join lateral (select t.net_price, t.currency from transaction_po t
-                  where t.po_number = m.po and t.line_subline = m.material_line_item
-                  order by t.created_at desc, t.id desc limit 1) tp on true
-                where d.ba_number = acceptance_certificate_header.ba_number
-                  and upper(trim(coalesce(tp.currency,''))) = 'IDR') x), 0) a
-            from acceptance_certificate_header
-            where ${BA_SCOPE('acceptance_certificate_detail', 'acceptance_certificate_header.ba_number')}
-            group by 1`
+// Line SERVICE (tidak dihitung): material_type berawalan Y, 'Network Service', atau mengandung 'Svc'. Selain itu = material.
+const IS_SVC = (a) => `(coalesce(${a}.material_type,'') ilike 'Y%' or coalesce(${a}.material_type,'') = 'Network Service' or coalesce(${a}.material_type,'') ilike '%Svc%')`
 
-const ACK_LATEST = (ack) => `left join lateral (select a.ack_status from ${ack} a where a.interface_id_ref = i.id
-  order by a.processing_date desc nulls last, a.id desc limit 1) k on true`
-const CAC_COUNTS = 'count(*) lines, count(*) filter (where k.ack_status = \'ERROR\') err, count(*) filter (where k.ack_status = \'SUCCESS\') ok'
-const cacLeg = (kind) => `with b as (
-    select m.ba_number ba, m.v, m.d, m.a,
-      (select array_agg(distinct x.system_key) from acceptance_certificate_detail x where x.ba_number = m.ba_number and x.system_key is not null) sks,
-      (select array_agg(distinct x.po_number) from acceptance_certificate_detail x where x.ba_number = m.ba_number) pos
-    from (${CAC_M}) m
-    where ${WF_LATEST('acceptance_certificates', 'm.ba_number')} = 'completed')
-  select v, s, d, count(*) n, sum(a)::bigint a from (
-    select b.v, b.d, b.a,
-      case when g.lines is null then 'Not Sent' when g.err > 0 then 'ACK Error'
-           when g.ok = g.lines then 'ACK Success' else 'Waiting ACK' end s
-    from b
-    left join lateral (select array_agg(la.acceptance_number) p from list_acceptance la
-      where la.acceptance_category = 'PATP' and la.system_key = any(b.sks)) pn on true
-    left join lateral (select ${CAC_COUNTS}, array_agg(distinct i.acceptance_number) sp
-      from oracle_fusion_intinv_005_interface i ${ACK_LATEST('oracle_fusion_intinv_005_ack')}
-      where coalesce(i.file_type,'') ilike 'service%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'
-        and ((i.system_key = any(b.sks) and i.po_numbers = any(b.pos))
-          or i.acceptance_number = any(pn.p) or i.ba_reference = any(pn.p)
-          or (nullif(trim(i.system_key),'') is null and (i.acceptance_number = b.ba or i.ba_reference = b.ba)))
-      having count(*) > 0) sv on true
-    ${kind === 'gr' ? 'left join lateral (select sv.lines, sv.err, sv.ok) g on true' : `left join lateral (select ${CAC_COUNTS}
-      from oracle_fusion_intppm_002_interface i ${ACK_LATEST('oracle_fusion_intppm_002_ack')}
-      where sv.sp is not null and i.po_number = any(b.pos)
-        and (i.receipt_number = any(sv.sp)
-          or regexp_replace(regexp_replace(i.receipt_number, '_[0-9]+$', ''), '_v[0-9]+[.][0-9]+$', '') = any(sv.sp))
-      having count(*) > 0) g on true`}
-  ) x group by 1,2,3`
+/**
+ * Prefiks CTE PATP. withMtSc=true (jalur pg): scope dari list_acceptance + sitelist_mt JSON.
+ * withMtSc=false (DBX): hanya list_acceptance — jauh lebih cepat, Reserved tanpa LA bisa kurang ter-cover.
+ */
+const PATP_BASE_CTE = (withMtSc) => `with tx as materialized (select p.transaction_id, max(p.update_time) ut from mapping_systemkey_po p
+          where ${IN_PO('p.po')} and p.transaction_id is not null group by 1),
+    okx as materialized (select tx.transaction_id, tx.ut from tx where not exists (select 1 from mapping_systemkey_po q
+          where q.transaction_id = tx.transaction_id and q.po is not null and q.po not in (select po from scope_po))),
+    m as (select t.mps_transaction_id, max(nullif(t.vendor_code,'')) vc,
+          ${DT('greatest(max(t.created_date), max(okx.ut))')} d
+        from mps_transaction t join okx on okx.transaction_id = t.mps_transaction_id group by 1),
+    sk as materialized (select distinct on (p.system_key) p.system_key, p.transaction_id
+        from mapping_systemkey_po p join okx on okx.transaction_id = p.transaction_id
+        where p.system_key is not null and p.system_key <> ''
+        order by p.system_key, p.update_time desc nulls last, p.transaction_id desc),
+    mps_tx as materialized (
+      select sk.system_key sk, m.vc v, m.d d from sk join m on m.mps_transaction_id = sk.transaction_id),
+    txsk as materialized (select distinct system_key from mapping_systemkey_po
+        where transaction_id is not null and transaction_id <> '' and system_key is not null),
+    mps_res as materialized (
+      select p.system_key sk, max(nullif(p.vendor_code,'')) v, ${DT('max(coalesce(p.update_time, p.create_time))')} d
+      from mapping_systemkey_po p
+      where p.status_id in (1,2) and ${IN_PO('p.po')} and p.system_key is not null and p.system_key <> ''
+        and not exists (select 1 from txsk where txsk.system_key = p.system_key)
+      group by p.system_key),
+    mps_sk as materialized (select * from mps_tx union all select * from mps_res),
+    la_sc as materialized (
+      select distinct on (la.system_key) la.system_key, btrim(la.scope_category) as scope_category
+      from list_acceptance la
+      where la.system_key in (select sk from mps_sk) and coalesce(btrim(la.scope_category), '') <> ''
+      order by la.system_key, la.create_time desc nulls last),
+    sm_pt as materialized (
+      select sm.system_key, sm.project_type from sitelist_mt sm
+      where sm.system_key in (select sk from mps_sk)),
+    ${withMtSc ? `mt_sc as materialized (
+      select sm.system_key, nullif(btrim(sm.content_column -> 0 ->> 'scope_category'), '') as scope_category
+      from sitelist_mt sm
+      where sm.system_key in (select sk from mps_sk except select system_key from la_sc)
+        and nullif(btrim(sm.content_column -> 0 ->> 'scope_category'), '') is not null),` : ''}
+    mptc_n as materialized (select id, btrim(name) as nm from master_project_type_code),
+    msa_n as materialized (select btrim(project_type) pt, btrim(scope_category) sc, fatp, patp from master_scope_acceptance),
+    need as materialized (
+      select m.sk, m.v, m.d,
+        bool_or(coalesce(msa.fatp, false)) need_fatp,
+        bool_or(coalesce(msa.patp, false)) need_patp
+      from mps_sk m
+      join sm_pt sm on sm.system_key = m.sk
+      left join mptc_n mptc on mptc.id = sm.project_type
+      ${withMtSc
+        ? `left join la_sc on la_sc.system_key = m.sk
+      left join mt_sc on mt_sc.system_key = m.sk
+      left join msa_n msa
+        on msa.pt = mptc.nm
+       and msa.sc = coalesce(la_sc.scope_category, mt_sc.scope_category)`
+        : `join la_sc on la_sc.system_key = m.sk
+      left join msa_n msa
+        on msa.pt = mptc.nm
+       and msa.sc = la_sc.scope_category`}
+      group by m.sk, m.v, m.d),
+    fatp_need as materialized (select sk, v, d from need where need_fatp),
+    patp_need as materialized (select sk, v, d from need where need_patp),
+    latest_patp as materialized (
+      select distinct on (la.system_key)
+        la.system_key sk, la.acceptance_number an, n.v, n.d, la.status st
+      from list_acceptance la
+      join patp_need n on n.sk = la.system_key
+      where la.acceptance_number like 'PATP-%'
+      order by la.system_key, coalesce(la.update_time, la.create_time) desc nulls last, la.acceptance_number desc),
+    latest_fatp as materialized (
+      select distinct on (la.system_key)
+        la.system_key sk, la.acceptance_number an, n.v, n.d, la.status st
+      from list_acceptance la
+      join fatp_need n on n.sk = la.system_key
+      where la.acceptance_number like 'FATP-%'
+      order by la.system_key, coalesce(la.update_time, la.create_time) desc nulls last, la.acceptance_number desc)`
+// System key MPS (aturan sama dengan card MPS: transaksi scope Fusion tanpa PO legacy, transaksi terbaru per system key).
+// nm = jumlah line MATERIAL (bukan service) di transaksi itu; a = Rp hanya line material. System key tanpa line material (service only) tidak dihitung.
+// onlyMatc=true membatasi ke system key yang ada di BA MATC (lebih ringan). Berakhir di CTE `val`.
+const MPS_SK_VAL = (onlyMatc) => `with tx as materialized (select p.transaction_id, max(p.update_time) ut from mapping_systemkey_po p
+          where ${IN_PO('p.po')} and p.transaction_id is not null group by 1),
+      okx as materialized (select tx.transaction_id, tx.ut from tx where not exists (select 1 from mapping_systemkey_po q
+          where q.transaction_id = tx.transaction_id and q.po is not null and q.po not in (select po from scope_po))),
+      sk as materialized (select distinct on (p.system_key) p.system_key, p.transaction_id
+        from mapping_systemkey_po p join okx on okx.transaction_id = p.transaction_id
+        where p.system_key is not null and p.system_key <> ''${onlyMatc ? ' and p.system_key in (select x.system_key from material_certificate_details x where x.system_key is not null)' : ''}
+        order by p.system_key, p.update_time desc nulls last, p.transaction_id desc),
+      val as materialized (select sk.system_key, sk.transaction_id,
+          count(*) filter (where not ${IS_SVC('p')}) nm,
+          sum(case when not ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end) a
+        from sk join mapping_systemkey_po p on p.system_key = sk.system_key and p.transaction_id = sk.transaction_id
+        left join lateral (select t.net_price::numeric np from transaction_po t where t.po_number = p.po and t.line_subline = p.material_line_item
+            and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+          order by t.created_at desc, t.id desc limit 1) tp on true
+        group by 1,2)`
 
-// BA Value (IDR) per BA MATC = Current Realization Appendix 2 MATC: sum(purpose_gr_qty (kosong/0 -> quanty_mapping) x net_price PO terbaru), hanya IDR.
-const MATC_BA = (alias) => `select ${alias}.ba_number, max(${alias}.system_key->>0) sk, ${DT(`max(coalesce(${alias}.updated_date, ${alias}.created_date))`)} d,
-              coalesce((select sum(x.lv) from (select d.id,
-                  coalesce(nullif(d.purpose_gr_qty, 0), case when m.quanty_mapping ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then m.quanty_mapping::numeric end)
-                  * case when tp.net_price ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' then tp.net_price::numeric end lv
-                from material_certificate_details d
-                left join lateral (select m0.quanty_mapping from mapping_systemkey_po m0
-                  where m0.po = d.po_number and m0.material_line_item = d.line_item and m0.system_key = d.system_key
-                  order by m0.id desc limit 1) m on true
-                join lateral (select t.net_price, t.currency from transaction_po t
-                  where t.po_number = d.po_number and t.line_subline = d.line_item
-                  order by t.created_at desc, t.id desc limit 1) tp on true
-                where d.ba_number = ${alias}.ba_number
-                  and upper(trim(coalesce(tp.currency,''))) = 'IDR') x), 0) a
-            from material_certificates ${alias}
-            where ${BA_SCOPE('material_certificate_details', `${alias}.ba_number`)}
-            group by ${alias}.ba_number`
+// MATC per SYSTEM KEY (bukan per BA): 1 system key = 1 baris, memakai BA MATC TERBARU bila ada di beberapa BA
+// (updated_date, fallback created_date, tie-break ba_number). Kolom tetap ba_number, sk, d, a agar query hilir tidak berubah.
+// Hanya system key yang punya MPS dan >= 1 line material; Rp (a) = line material saja (harga PO terbaru, IDR).
+const MATC_BA = (alias) => `select z.ba_number, z.sk, z.d, coalesce(v.a, 0) a from (
+              select ba_number, sk, d from (
+                select ${alias}.ba_number, dd.system_key sk, ${DT(`max(coalesce(${alias}.updated_date, ${alias}.created_date))`)} d,
+                  row_number() over (partition by dd.system_key
+                    order by max(coalesce(${alias}.updated_date, ${alias}.created_date)) desc nulls last, ${alias}.ba_number desc) rn
+                from material_certificates ${alias}
+                join material_certificate_details dd on dd.ba_number = ${alias}.ba_number
+                where ${BA_SCOPE('material_certificate_details', `${alias}.ba_number`)}
+                  and dd.system_key is not null and dd.system_key <> ''
+                group by ${alias}.ba_number, dd.system_key) r where rn = 1) z
+            join (${MPS_SK_VAL(true)} select system_key, a from val where nm > 0) v on v.system_key = z.sk`
 
 // ---------- Query: semua mengembalikan baris (v = vendor_code, s = status, n = jumlah, x = extra) ----------
+/** PATP queries: pg = monolit 1× need CTE; DBX = pecah (atau di-skip). */
+const PATP_QUERIES = (() => {
+  const base = PATP_BASE_CTE(USE_PG)
+  // Of-Y Rp: valuasi MPS/PO (semua line IDR) untuk universe patp_need (tx terbaru + Reserved/Ready).
+  const scopeVal = `
+    scope_tx as materialized (
+      select sk.system_key sk,
+        sum(case when p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end) a
+      from sk
+      join patp_need n on n.sk = sk.system_key
+      join mapping_systemkey_po p on p.system_key = sk.system_key and p.transaction_id = sk.transaction_id
+      left join lateral (select t.net_price::numeric np from transaction_po t
+        where t.po_number = p.po and t.line_subline = p.material_line_item
+          and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+        order by t.created_at desc, t.id desc limit 1) tp on true
+      group by sk.system_key),
+    scope_res as materialized (
+      select p.system_key sk,
+        sum(case when p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end) a
+      from mapping_systemkey_po p
+      join patp_need n on n.sk = p.system_key
+      left join lateral (select t.net_price::numeric np from transaction_po t
+        where t.po_number = p.po and t.line_subline = p.material_line_item
+          and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+        order by t.created_at desc, t.id desc limit 1) tp on true
+      where p.status_id in (1,2) and ${IN_PO('p.po')}
+        and not exists (select 1 from txsk where txsk.system_key = p.system_key)
+      group by p.system_key),
+    scope_val as materialized (
+      select sk, a from scope_tx
+      union all
+      select sk, a from scope_res)`
+  const pvLatest = `
+    l as materialized (
+      select s.acceptance_number, s.po_number, s.line_item, s.mapping_po_sk_quantity
+        from service_powo_acceptance s where s.acceptance_number in (select an from latest_patp)
+      union all
+      select m.acceptance_number, m.po_number, m.line_item, m.mapping_po_sk_quantity
+        from material_acceptance m where m.acceptance_number in (select an from latest_patp)),
+    mp as materialized (select distinct on (po, material_line_item, system_key) po, material_line_item, system_key, quanty_mapping
+      from mapping_systemkey_po where po in (select po_number from l) order by po, material_line_item, system_key, id desc),
+    pv as materialized (
+      select lp.sk, sum(
+          case when l.mapping_po_sk_quantity ~ ${NUM_RE} then least(l.mapping_po_sk_quantity::numeric,
+                case when mp.quanty_mapping::text ~ ${NUM_RE} then mp.quanty_mapping::numeric else l.mapping_po_sk_quantity::numeric end) end
+          * case when tp.net_price ~ ${NUM_RE} then tp.net_price::numeric end) a
+        from latest_patp lp
+        join l on l.acceptance_number = lp.an
+        left join mp on mp.po = l.po_number and mp.material_line_item = l.line_item and mp.system_key = lp.sk
+        join lateral (select t.net_price, t.currency from transaction_po t
+          where t.po_number = l.po_number and t.line_subline = l.line_item
+          order by t.created_at desc, t.id desc limit 1) tp on true
+        where upper(trim(coalesce(tp.currency,''))) = 'IDR'
+        group by lp.sk)`
+  const funnelTail = `
+    b as materialized (select sk, an, v, d, st from latest_patp where st like 'Acceptance Fully Approved%'),
+    b_an as materialized (select distinct an from b),
+    gi_i as materialized (
+      select i.id, i.system_key sk from oracle_fusion_intinv_006_interface i
+      where coalesce(i.export_status,'') <> 'GATE_FILTERED' and i.system_key in (select sk from b)),
+    gi_ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intinv_006_ack a where a.interface_id_ref in (select id from gi_i)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
+    gi_agg as materialized (
+      select i.sk, count(*) lines,
+        count(*) filter (where k.ack_status = 'ERROR') err,
+        count(*) filter (where k.ack_status = 'SUCCESS') ok
+      from gi_i i left join gi_ack k on k.interface_id_ref = i.id group by i.sk),
+    gr_i as materialized (
+      select distinct i.id, ba.an from b_an ba
+      join oracle_fusion_intinv_005_interface i
+        on (i.acceptance_number = ba.an or i.ba_reference = ba.an)
+      where coalesce(i.file_type,'') ilike 'service%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
+    gr_ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intinv_005_ack a where a.interface_id_ref in (select id from gr_i)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
+    gr_agg as materialized (
+      select i.an, count(*) lines,
+        count(*) filter (where k.ack_status = 'ERROR') err,
+        count(*) filter (where k.ack_status = 'SUCCESS') ok
+      from gr_i i left join gr_ack k on k.interface_id_ref = i.id group by i.an),
+    fa as materialized (
+      select distinct i.id, kk.kx from oracle_fusion_intppm_002_interface i
+      cross join lateral (select distinct x kx from (values (i.receipt_number), (regexp_replace(i.receipt_number, '_[0-9]+$', ''))) v(x)) kk
+      where coalesce(i.export_status,'') <> 'GATE_FILTERED'
+        and i.receipt_number like 'PATP-%' and kk.kx in (select an from b_an)),
+    fa_ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intppm_002_ack a where a.interface_id_ref in (select id from fa)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
+    fl as materialized (
+      select f.kx, count(*) lines,
+        count(*) filter (where k.ack_status = 'ERROR') err,
+        count(*) filter (where k.ack_status = 'SUCCESS') ok
+      from fa f left join fa_ack k on k.interface_id_ref = f.id group by f.kx)`
+  const coreSelect = `
+    select 'patp' k, v, s, d, count(*) n, sum(a)::bigint a from (
+      select lp.v, lp.st s, lp.d, coalesce(pv.a, 0) a
+      from latest_patp lp left join pv on pv.sk = lp.sk) y group by 2,3,4
+    union all select 'fatp' k, v, s, d, count(*) n, 0::bigint a from (
+      select lf.v, lf.st s, lf.d from latest_fatp lf) z group by 2,3,4
+    union all select 'fatpScope' k, v, 'Required' s, d, count(*) n, 0::bigint a from fatp_need group by v, d
+    union all select 'patpScope' k, v, 'Required' s, d, count(*) n, coalesce(sum(a), 0)::bigint a from (
+      select n.v, n.d, coalesce(sv.a, 0) a from patp_need n left join scope_val sv on sv.sk = n.sk) z group by v, d`
+  const funnelSelect = `
+    select 'patpGi' k, v, s, d, count(*) n, sum(a)::bigint a from (
+      select b.v, b.d, coalesce(pv.a, 0) a, ${FUNNEL_STATUS} s
+      from b left join pv on pv.sk = b.sk left join gi_agg g on g.sk = b.sk) x group by 2,3,4
+    union all select 'patpGr' k, v, s, d, count(*) n, sum(a)::bigint a from (
+      select b.v, b.d, coalesce(pv.a, 0) a, ${FUNNEL_STATUS} s
+      from b left join pv on pv.sk = b.sk left join gr_agg g on g.an = b.an) x group by 2,3,4
+    union all select 'patpFa' k, v, s, d, count(*) n, sum(a)::bigint a from (
+      select b.v, b.d, coalesce(pv.a, 0) a, ${FUNNEL_STATUS} s
+      from b left join pv on pv.sk = b.sk left join fl g on g.kx = b.an) x group by 2,3,4`
+  // Query ringan of-Y saja (jalan di DBX meski patpAll di-skip).
+  // Pakai withMtSc=true agar universe of-Y sama dengan jalur pg (~100rb; include Reserved via sitelist_mt).
+  const patpScopeVal = `${PATP_BASE_CTE(true)},${scopeVal}
+    select v, 'Required' s, d, count(*) n, coalesce(sum(a), 0)::bigint a from (
+      select n.v, n.d, coalesce(sv.a, 0) a from patp_need n left join scope_val sv on sv.sk = n.sk) z group by v, d`
+  if (USE_PG) {
+    // Satu query: need CTE hanya sekali (hindari dobel beban DB saat paralel).
+    return {
+      patpAll: `${base},${scopeVal},${pvLatest},${funnelTail}
+    ${funnelSelect}
+    union all${coreSelect}`,
+      // Fallback of-Y bila SANITATION_ONLY=patpScopeVal.
+      patpScopeVal,
+    }
+  }
+  // DBX: pecah (core vs funnel). Default tetap di-skip lewat SKIP_PATP_ON_DBX.
+  return {
+    patpAll: `${base},${scopeVal},${pvLatest}
+    ${coreSelect}`,
+    patpScopeVal,
+    patpFunnel: `${base},
+    b as materialized (select sk, an, v, d, st from latest_patp where st like 'Acceptance Fully Approved%'),
+    b_an as materialized (select distinct an from b),
+    l as materialized (
+      select s.acceptance_number, s.po_number, s.line_item, s.mapping_po_sk_quantity
+        from service_powo_acceptance s where s.acceptance_number in (select an from b_an)
+      union all
+      select m.acceptance_number, m.po_number, m.line_item, m.mapping_po_sk_quantity
+        from material_acceptance m where m.acceptance_number in (select an from b_an)),
+    mp as materialized (select distinct on (po, material_line_item, system_key) po, material_line_item, system_key, quanty_mapping
+      from mapping_systemkey_po where po in (select po_number from l) order by po, material_line_item, system_key, id desc),
+    pv as materialized (
+      select b.sk, sum(
+          case when l.mapping_po_sk_quantity ~ ${NUM_RE} then least(l.mapping_po_sk_quantity::numeric,
+                case when mp.quanty_mapping::text ~ ${NUM_RE} then mp.quanty_mapping::numeric else l.mapping_po_sk_quantity::numeric end) end
+          * case when tp.net_price ~ ${NUM_RE} then tp.net_price::numeric end) a
+        from b
+        join l on l.acceptance_number = b.an
+        left join mp on mp.po = l.po_number and mp.material_line_item = l.line_item and mp.system_key = b.sk
+        join lateral (select t.net_price, t.currency from transaction_po t
+          where t.po_number = l.po_number and t.line_subline = l.line_item
+          order by t.created_at desc, t.id desc limit 1) tp on true
+        where upper(trim(coalesce(tp.currency,''))) = 'IDR'
+        group by b.sk),
+    gi_i as materialized (
+      select i.id, i.system_key sk from oracle_fusion_intinv_006_interface i
+      where coalesce(i.export_status,'') <> 'GATE_FILTERED' and i.system_key in (select sk from b)),
+    gi_ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intinv_006_ack a where a.interface_id_ref in (select id from gi_i)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
+    gi_agg as materialized (
+      select i.sk, count(*) lines,
+        count(*) filter (where k.ack_status = 'ERROR') err,
+        count(*) filter (where k.ack_status = 'SUCCESS') ok
+      from gi_i i left join gi_ack k on k.interface_id_ref = i.id group by i.sk),
+    gr_i as materialized (
+      select distinct i.id, ba.an from b_an ba
+      join oracle_fusion_intinv_005_interface i
+        on (i.acceptance_number = ba.an or i.ba_reference = ba.an)
+      where coalesce(i.file_type,'') ilike 'service%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
+    gr_ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intinv_005_ack a where a.interface_id_ref in (select id from gr_i)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
+    gr_agg as materialized (
+      select i.an, count(*) lines,
+        count(*) filter (where k.ack_status = 'ERROR') err,
+        count(*) filter (where k.ack_status = 'SUCCESS') ok
+      from gr_i i left join gr_ack k on k.interface_id_ref = i.id group by i.an),
+    fa as materialized (
+      select distinct i.id, kk.kx from oracle_fusion_intppm_002_interface i
+      cross join lateral (select distinct x kx from (values (i.receipt_number), (regexp_replace(i.receipt_number, '_[0-9]+$', ''))) v(x)) kk
+      where coalesce(i.export_status,'') <> 'GATE_FILTERED'
+        and i.receipt_number like 'PATP-%' and kk.kx in (select an from b_an)),
+    fa_ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intppm_002_ack a where a.interface_id_ref in (select id from fa)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
+    fl as materialized (
+      select f.kx, count(*) lines,
+        count(*) filter (where k.ack_status = 'ERROR') err,
+        count(*) filter (where k.ack_status = 'SUCCESS') ok
+      from fa f left join fa_ack k on k.interface_id_ref = f.id group by f.kx)
+    ${funnelSelect}`,
+  }
+})()
+
 const Q = {
-  baseline: `select nullif(vendor_code,'') v, regexp_replace(baseline_status, '\\s*:.*$', '') s,
-      count(distinct baseline_id) n, coalesce(sum(total_system_key),0) x, ${DT('coalesce(update_time, create_time)')} d
-    from baseline where ${IN_PO('po_number')} group by 1,2,5`,
+  // Hanya system key yang SUDAH punya MPS (set sama dengan card MPS); yang belum punya MPS tidak dihitung.
+  // 1 system key = 1 baris (unik global): dibaca dari daftar baseline.system_key (json array), memakai baseline TERBARU
+  // (update_time, fallback create_time, tie-break baseline_id) bila system key ada di beberapa baseline. x = jumlah project pembawa.
+  baseline: `with tx as materialized (select p.transaction_id from mapping_systemkey_po p
+          where ${IN_PO('p.po')} and p.transaction_id is not null group by 1),
+      okx as materialized (select tx.transaction_id from tx where not exists (select 1 from mapping_systemkey_po q
+          where q.transaction_id = tx.transaction_id and q.po is not null and q.po not in (select po from scope_po))),
+      mpssk as materialized (select distinct p.system_key from mapping_systemkey_po p join okx on okx.transaction_id = p.transaction_id
+        where p.system_key is not null and p.system_key <> '')
+    select v, s, d, count(*) n, count(distinct baseline_id) x from (
+      select b.baseline_id, nullif(b.vendor_code,'') v, regexp_replace(b.baseline_status, '\\s*:.*$', '') s,
+        ${DT('coalesce(b.update_time, b.create_time)')} d,
+        row_number() over (partition by k.v order by coalesce(b.update_time, b.create_time) desc nulls last, b.baseline_id desc) rn
+      from baseline b cross join lateral json_array_elements_text(b.system_key) k(v)
+      where json_typeof(b.system_key) = 'array' and ${IN_PO('b.po_number')} and k.v <> ''
+        and k.v in (select system_key from mpssk)) z
+    where rn = 1 group by 1,2,3`,
 
   // Modified = max(mapping_systemkey_po.update_time) per transaksi (kolom Modified Date list MPS PMIS), fallback created_date.
   // Transaksi yang punya PO legacy dikeluarkan.
@@ -213,13 +445,77 @@ const Q = {
           ${DT('greatest(max(t.created_date), max(okx.ut))')} d
         from mps_transaction t join okx on okx.transaction_id = t.mps_transaction_id group by 1),
       b as (select distinct on (t.mps_transaction_id) t.mps_transaction_id, t.status_approval
-        from mps_transaction t join m using (mps_transaction_id) order by t.mps_transaction_id, t.id desc)
-    select m.vc v, coalesce(ms.name, 'Status ' || b.status_approval) s, m.d d, count(*) n
-    from b join m using (mps_transaction_id) left join mps_status ms on ms.id = b.status_approval
+        from mps_transaction t join m using (mps_transaction_id) order by t.mps_transaction_id, t.id desc),
+      sk as materialized (select distinct on (p.system_key) p.system_key, p.transaction_id
+        from mapping_systemkey_po p join okx on okx.transaction_id = p.transaction_id
+        where p.system_key is not null and p.system_key <> ''
+        order by p.system_key, p.update_time desc nulls last, p.transaction_id desc),
+      val as materialized (select sk.system_key, sk.transaction_id,
+          sum(p.quanty_mapping::numeric * tp.np) a,
+          sum(case when ${IS_SVC('p')} then p.quanty_mapping::numeric * tp.np end) a_svc
+        from sk join mapping_systemkey_po p on p.system_key = sk.system_key and p.transaction_id = sk.transaction_id
+        left join lateral (select t.net_price::numeric np from transaction_po t where t.po_number = p.po and t.line_subline = p.material_line_item
+            and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+          order by t.created_at desc, t.id desc limit 1) tp on true
+        where p.quanty_mapping ~ ${NUM_RE} group by 1,2)
+    select m.vc v, coalesce(ms.name, 'Status ' || b.status_approval) s, m.d d, count(*) n,
+      coalesce(sum(val.a), 0)::bigint a, coalesce(sum(val.a_svc), 0)::bigint a_svc
+    from val join b on b.mps_transaction_id = val.transaction_id
+    join m on m.mps_transaction_id = val.transaction_id
+    left join mps_status ms on ms.id = b.status_approval
     group by 1,2,3`,
 
-  mpsReserved: `select nullif(vendor_code,'') v, 'Reserved/Ready' s, ${DT('coalesce(update_time, create_time)')} d, count(distinct mps_id) n
-    from mapping_systemkey_po where status_id in (1,2) and ${IN_PO('po')} group by 1,3`,
+  // Penyebut "of Y" card MATC: system key dengan >= 1 line material (service only tidak dihitung),
+  // termasuk Reserved/Ready yang belum punya transaksi MPS (selaras total MPS gabungan di UI).
+  // Rp (a) = line material saja (qty x latest PO net price IDR).
+  mpsMaterial: `${MPS_SK_VAL(false)},
+      m as (select t.mps_transaction_id, max(nullif(t.vendor_code,'')) vc,
+          ${DT('greatest(max(t.created_date), max(okx.ut))')} d
+        from mps_transaction t join okx on okx.transaction_id = t.mps_transaction_id group by 1),
+      b as (select distinct on (t.mps_transaction_id) t.mps_transaction_id, t.status_approval
+        from mps_transaction t join m using (mps_transaction_id) order by t.mps_transaction_id, t.id desc),
+      tx_mat as (
+        select m.vc v, coalesce(ms.name, 'Status ' || b.status_approval) s, m.d d, count(*) n,
+          coalesce(sum(val.a), 0)::bigint a
+        from val join b on b.mps_transaction_id = val.transaction_id
+        join m on m.mps_transaction_id = val.transaction_id
+        left join mps_status ms on ms.id = b.status_approval
+        where val.nm > 0
+        group by 1,2,3),
+      txsk as materialized (select distinct system_key from mapping_systemkey_po
+        where transaction_id is not null and transaction_id <> '' and system_key is not null),
+      res_mat as (
+        select v, 'Reserved/Ready' s, d, count(*) n, coalesce(sum(a), 0)::bigint a from (
+          select max(nullif(p.vendor_code,'')) v, ${DT('max(coalesce(p.update_time, p.create_time))')} d,
+            sum(case when not ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end) a
+          from mapping_systemkey_po p
+          left join lateral (select t.net_price::numeric np from transaction_po t where t.po_number = p.po and t.line_subline = p.material_line_item
+              and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+            order by t.created_at desc, t.id desc limit 1) tp on true
+          where p.status_id in (1,2) and ${IN_PO('p.po')} and p.system_key is not null and p.system_key <> ''
+            and not exists (select 1 from txsk where txsk.system_key = p.system_key)
+          group by p.system_key
+          having count(*) filter (where not ${IS_SVC('p')}) > 0) x
+        group by 1,3)
+    select * from tx_mat
+    union all
+    select * from res_mat`,
+
+  // Reserved/Ready: 1 system key = 1 baris (unik global). System key yang sudah punya transaksi MPS dikeluarkan.
+  // Rp = sum(quanty_mapping x net_price PO terbaru, IDR) semua line; a_svc = service lines only (untuk of-Y CAC).
+  mpsReserved: `with txsk as materialized (select distinct system_key from mapping_systemkey_po
+      where transaction_id is not null and transaction_id <> '' and system_key is not null)
+    select v, 'Reserved/Ready' s, d, count(*) n, coalesce(sum(a), 0)::bigint a, coalesce(sum(a_svc), 0)::bigint a_svc from (
+      select max(nullif(p.vendor_code,'')) v, ${DT('max(coalesce(p.update_time, p.create_time))')} d,
+        sum(case when p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end) a,
+        sum(case when ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end) a_svc
+      from mapping_systemkey_po p
+      left join lateral (select t.net_price::numeric np from transaction_po t where t.po_number = p.po and t.line_subline = p.material_line_item
+              and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+            order by t.created_at desc, t.id desc limit 1) tp on true
+      where p.status_id in (1,2) and ${IN_PO('p.po')} and p.system_key is not null and p.system_key <> ''
+        and not exists (select 1 from txsk where txsk.system_key = p.system_key)
+      group by p.system_key) x group by 1,3`,
 
   matc: `select v, s, d, count(*) n, sum(a)::bigint a from (
       select ${VENDOR_BY_SYSTEM_KEY('m.sk')} v, ${WF_LABEL} s, m.d d, m.a a
@@ -247,57 +543,157 @@ const Q = {
                  group by 1) g on g.ba_number = m.ba_number
       where ${WF_LATEST('material_certificates', 'm.ba_number')} = 'completed') x group by 1,2,3`,
 
-  // Fixed Asset (INTPPM-002): kunci receipt_number atau receipt_number tanpa akhiran _N. Dihitung per kunci SEKALI (hash join), bukan per PATP:
-  // dengan 48 rb PATP, pencocokan regexp per baris (lateral) melewati batas 60 dtk. Pra-filter receipt PATP (tabel yang sama berisi receipt CAC/BAUT).
-  patpAll: `with pv as materialized (${PATP_VAL}),
-    b as materialized (${PATP_BASE}),
-    fa as materialized (select i.id, i.export_status, kk.kx from oracle_fusion_intppm_002_interface i
-      cross join lateral (select distinct x kx from (values (i.receipt_number), (regexp_replace(i.receipt_number, '_[0-9]+$', ''))) v(x)) kk
-      where i.receipt_number like 'PATP-%'),
-    fl as materialized (select f.kx, count(*) lines, count(*) filter (where k.ack_status = 'ERROR') err, count(*) filter (where k.ack_status = 'SUCCESS') ok
-      from fa f left join lateral (select a.ack_status from oracle_fusion_intppm_002_ack a where a.interface_id_ref = f.id
-        order by a.processing_date desc nulls last, a.id desc limit 1) k on true
-      where coalesce(f.export_status,'') <> 'GATE_FILTERED' group by f.kx)
-    ${patpLeg({ k: 'patpGi', table: 'oracle_fusion_intinv_006_interface', ack: 'oracle_fusion_intinv_006_ack', match: 'i.system_key = any(b.sks)' })}
-    union all ${patpLeg({
-      k: 'patpGr', table: 'oracle_fusion_intinv_005_interface', ack: 'oracle_fusion_intinv_005_ack',
-      match: "(i.acceptance_number = b.an or i.ba_reference = b.an) and coalesce(i.file_type,'') ilike 'service%'",
-    })}
-    union all select 'patpFa' k, v, s, d, count(*) n, sum(a)::bigint a from (
-      select b.v, b.d, coalesce(pv.a, 0) a,
-        case when g.lines is null then 'Not Sent' when g.err > 0 then 'ACK Error'
-             when g.ok = g.lines then 'ACK Success' else 'Waiting ACK' end s
-      from b left join pv on pv.an = b.an left join fl g on g.kx = b.an
-      where b.st like 'Acceptance Fully Approved%') x group by 2,3,4
-    union all select k, v, s, d, n, a from (
-      select k, v, s, d, count(*) n, sum(a)::bigint a from (
-        select case when acceptance_number like 'FATP-%' then 'fatp' else 'patp' end k, acceptance_number,
-               max(nullif(vendor_code,'')) v, max(status) s, ${DT('max(coalesce(update_time, create_time))')} d,
-               coalesce(max(pv.a), 0) a
-        from list_acceptance left join pv on pv.an = list_acceptance.acceptance_number
-        where (acceptance_number like 'FATP-%' or acceptance_number like 'PATP-%')
-        group by 1,2 ${ACC_HAVING}) y group by 1,2,3,4) z`,
+  // PATP: di pg = 1 query monolit (need CTE sekali). Di DBX default di-skip (lihat SKIP_PATP_ON_DBX).
+  ...PATP_QUERIES,
 
-  cac: `select v, s, d, count(*) n, sum(a)::bigint a from (
-      select m.v, ${WF_LABEL} s, m.d d, m.a a
-      from (${CAC_M}) m
-      cross join lateral (select ${WF_LATEST('acceptance_certificates', 'm.ba_number')} wf) l) x group by 1,2,3`,
+  // CAC: 1 system key = 1 (BA terbaru). Funnel GR/FA per Fully Approved SK
+  // (ACK dihitung per BA via hash-join, lalu di-join ke SK — sama pola PATP).
+  // Rp = realisation Appendix 2 SERVICE lines only (IS_SVC); material excluded.
+  // SK tanpa line service tetap dihitung (n) dengan a = 0.
+  cacAll: `with scoped_ba as materialized (
+      select ba from (
+        select x.ba_number ba,
+          bool_or(${IN_PO('x.po_number')}) has_in,
+          bool_or(x.po_number is not null and x.po_number not in (select po from scope_po)) has_out
+        from acceptance_certificate_detail x group by 1) t
+      where has_in and not has_out),
+    latest as materialized (
+      select distinct on (d.system_key)
+        d.system_key sk, h.ba_number ba, nullif(h.vendor_code,'') v,
+        ${DT('coalesce(h.updated_at, h.created_at)')} d
+      from acceptance_certificate_detail d
+      join scoped_ba s on s.ba = d.ba_number
+      join acceptance_certificate_header h on h.ba_number = d.ba_number
+      where d.system_key is not null and d.system_key <> ''
+      order by d.system_key, coalesce(h.updated_at, h.created_at) desc nulls last, h.ba_number desc),
+    det as materialized (
+      select d.id, l.sk, d.mapping_id, d.po_number, d.line_item, d.network_header
+      from latest l
+      join acceptance_certificate_detail d on d.ba_number = l.ba and d.system_key = l.sk),
+    mp as materialized (
+      select d.id, m.quanty_mapping, m.po, m.material_line_item
+      from det d join mapping_systemkey_po m on m.id = d.mapping_id
+      where d.mapping_id is not null and ${IS_SVC('m')}
+      union all
+      select * from (
+        select distinct on (d.id) d.id, m.quanty_mapping, m.po, m.material_line_item
+        from det d
+        join mapping_systemkey_po m on m.po = d.po_number and m.material_line_item = d.line_item
+          and m.system_key = d.sk and m.network_header is not distinct from d.network_header
+        where d.mapping_id is null and ${IS_SVC('m')}
+        order by d.id, m.id desc) f),
+    tp as materialized (
+      select distinct on (t.po_number, t.line_subline) t.po_number, t.line_subline, t.net_price
+      from transaction_po t
+      join (select distinct po, material_line_item from mp) k
+        on k.po = t.po_number and k.material_line_item = t.line_subline
+      where upper(trim(coalesce(t.currency,''))) = 'IDR'
+      order by t.po_number, t.line_subline, t.created_at desc, t.id desc),
+    sk_val as materialized (
+      select d.sk, coalesce(sum(
+          case when mp.quanty_mapping ~ ${NUM_RE} then mp.quanty_mapping::numeric end
+          * case when tp.net_price ~ ${NUM_RE} then tp.net_price::numeric end), 0)::bigint a
+      from det d
+      join mp on mp.id = d.id
+      join tp on tp.po_number = mp.po and tp.line_subline = mp.material_line_item
+      group by d.sk),
+    wf as materialized (
+      select distinct on (w.entity_id) w.entity_id ba, w.status wf
+      from workflow_instances w
+      where w.entity_type = 'acceptance_certificates' and w.entity_id in (select ba from latest)
+      order by w.entity_id, w.version desc, w.id desc),
+    latest_cac as materialized (
+      select l.sk, l.ba, l.v, l.d, coalesce(sv.a, 0) a, wf.wf
+      from latest l
+      left join sk_val sv on sv.sk = l.sk
+      left join wf on wf.ba = l.ba),
+    b as materialized (select sk, ba, v, d, a from latest_cac where wf = 'completed'),
+    ba_done as materialized (select distinct ba from b),
+    ba_sk as materialized (
+      select distinct d.ba_number ba, d.system_key sk from acceptance_certificate_detail d
+      where d.ba_number in (select ba from ba_done) and d.system_key is not null and d.system_key <> ''),
+    ba_po as materialized (
+      select distinct d.ba_number ba, d.po_number po from acceptance_certificate_detail d
+      where d.ba_number in (select ba from ba_done) and d.po_number is not null),
+    ba_patp as materialized (
+      select distinct bs.ba, la.acceptance_number an from ba_sk bs
+      join list_acceptance la on la.system_key = bs.sk and la.acceptance_category = 'PATP'),
+    gr_i as materialized (
+      select i.id, nullif(trim(i.system_key),'') sk, i.po_numbers po, i.acceptance_number an, i.ba_reference br
+      from oracle_fusion_intinv_005_interface i
+      where coalesce(i.file_type,'') ilike 'service%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
+    gr_match as materialized (
+      select distinct i.id, bp.ba, i.an
+      from gr_i i join ba_sk bs on bs.sk = i.sk join ba_po bp on bp.ba = bs.ba and bp.po = i.po
+      union
+      select distinct i.id, p.ba, i.an from gr_i i join ba_patp p on i.an = p.an
+      union
+      select distinct i.id, p.ba, i.an from gr_i i join ba_patp p on i.br = p.an
+      union
+      select distinct i.id, bd.ba, i.an from gr_i i join ba_done bd on i.an = bd.ba where i.sk is null
+      union
+      select distinct i.id, bd.ba, i.an from gr_i i join ba_done bd on i.br = bd.ba where i.sk is null),
+    gr_ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intinv_005_ack a where a.interface_id_ref in (select id from gr_match)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
+    gr_agg as materialized (
+      select g.ba, count(*) lines,
+        count(*) filter (where k.ack_status = 'ERROR') err,
+        count(*) filter (where k.ack_status = 'SUCCESS') ok
+      from gr_match g left join gr_ack k on k.interface_id_ref = g.id group by g.ba),
+    gr_an as materialized (select distinct ba, an from gr_match where an is not null),
+    fa_i as materialized (
+      select i.id, i.po_number po, i.receipt_number rn,
+        regexp_replace(regexp_replace(i.receipt_number, '_[0-9]+$', ''), '_v[0-9]+[.][0-9]+$', '') rs
+      from oracle_fusion_intppm_002_interface i
+      where coalesce(i.export_status,'') <> 'GATE_FILTERED'
+        and i.po_number in (select po from ba_po)),
+    fa_match as materialized (
+      select distinct f.id, g.ba
+      from fa_i f
+      join ba_po bp on bp.po = f.po
+      join gr_an g on g.ba = bp.ba and (f.rn = g.an or f.rs = g.an)),
+    fa_ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intppm_002_ack a where a.interface_id_ref in (select id from fa_match)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
+    fa_agg as materialized (
+      select f.ba, count(*) lines,
+        count(*) filter (where k.ack_status = 'ERROR') err,
+        count(*) filter (where k.ack_status = 'SUCCESS') ok
+      from fa_match f left join fa_ack k on k.interface_id_ref = f.id group by f.ba)
+    select 'cac' k, v, s, d, count(*) n, sum(a)::bigint a from (
+      select v, ${WF_LABEL} s, d, a from latest_cac) x group by 2,3,4
+    union all select 'cacGr' k, v, s, d, count(*) n, sum(a)::bigint a from (
+      select b.v, b.d, b.a, ${FUNNEL_STATUS} s
+      from b left join gr_agg g on g.ba = b.ba) y group by 2,3,4
+    union all select 'cacFa' k, v, s, d, count(*) n, sum(a)::bigint a from (
+      select b.v, b.d, b.a, ${FUNNEL_STATUS} s
+      from b left join fa_agg g on g.ba = b.ba) z group by 2,3,4`,
 
-  // Progres Fusion per BA CAC Fully Approved: GR Service (INTINV-005, file_type service%) dan Fixed Asset (INTPPM-002).
-  // Aturan kunci sama dengan modules/commercials/atp-certificate/atp-erp-legs.js di PMIS. `a` = BA Value.
-  cacGr: cacLeg('gr'),
-  cacFa: cacLeg('fa'),
-
-  endorsement: `with e as (select endorse_number, system_key, min(created_at) c, max(coalesce(updated_at, created_at)) mx, max(nullif(vendor_code,'')) vc
-        from endorsements where ${IN_PO('po_number')} or ${IN_SK('system_key')} group by 1,2),
-      l as (select distinct on (e.endorse_number, e.system_key) e.endorse_number, e.vc, e.c, e.mx, h.approval_value
-        from e left join endorsement_history_approval h
-          on h.system_key = e.system_key and h.created_at >= e.c - interval '1 minute'
-        order by e.endorse_number, e.system_key, h.created_at desc, h.id desc),
-      per as (select endorse_number, max(vc) v, ${DT('max(mx)')} d, bool_and(approval_value = 'ENDORSE_APPROVED') ap,
-                     bool_or(approval_value = 'REJECTED') rj from l group by 1)
-    select v, case when ap then 'Fully Approved' when rj then 'Rejected' else 'Waiting Approval' end s, d, count(*) n
-    from per group by 1,2,3`,
+  // 1 system key = 1 hitungan; status approval SK pada endorsement TERBARU.
+  endorsement: `with e as materialized (
+      select distinct on (system_key)
+        system_key sk, endorse_number, nullif(vendor_code,'') v,
+        ${DT('coalesce(updated_at, created_at)')} d,
+        created_at c
+      from endorsements
+      where system_key is not null and system_key <> ''
+        and (${IN_PO('po_number')} or ${IN_SK('system_key')})
+      order by system_key, coalesce(updated_at, created_at) desc nulls last, endorse_number desc),
+    l as materialized (
+      select distinct on (e.sk) e.sk, e.v, e.d, h.approval_value
+      from e
+      left join endorsement_history_approval h
+        on h.system_key = e.sk and h.created_at >= e.c - interval '1 minute'
+      order by e.sk, h.created_at desc nulls last, h.id desc)
+    select v,
+      case when approval_value = 'ENDORSE_APPROVED' then 'Fully Approved'
+           when approval_value = 'REJECTED' then 'Rejected'
+           else 'Waiting Approval' end s,
+      d, count(*) n
+    from l group by 1,2,3`,
 
   caf: `with ${CAF_SCOPE_CTE} select nullif(d.vendor_code,'') v, coalesce(cs.label, 'Status ' || d.status) s, ${DT('coalesce(d.modified_date, d.created_date)')} dt, count(distinct d.caf_no) n
     from caf_detail d left join caf_status cs on cs.status_id = d.status
@@ -326,24 +722,47 @@ function assertReadOnly(sql) {
   if (WRITE_RE.test(sql)) throw new Error('Keyword non-read terdeteksi')
 }
 
-// ---------- Runner: pg ----------
+// ---------- Runner: pg (pool + paralel untuk query independen) ----------
 async function makePgRunner() {
   const { default: pg } = await import('pg')
-  const client = new pg.Client({
+  // Pool kecil + query paralel: menunggu slot bisa selama query terberat (patpAll ~5 mnt).
+  // connectionTimeout harus >= statement timeout, bukan 15 dtk — kalau tidak, antrian slot dianggap "connect timeout".
+  const poolSize = Math.min(6, Math.max(2, Number(process.env.SANITATION_PG_POOL) || 4))
+  const pool = new pg.Pool({
     connectionString: process.env.PMIS_DATABASE_URL,
+    max: poolSize,
     connectionTimeoutMillis: QUERY_TIMEOUT_MS,
-    statement_timeout: QUERY_TIMEOUT_MS,
-    lock_timeout: 2000,
+    idleTimeoutMillis: 60_000,
+    allowExitOnIdle: true,
   })
-  await client.connect()
-  await client.query('begin read only')
+  pool.on('error', (err) => {
+    if (VERBOSE) console.error('[sanitation] pool error:', err.message)
+  })
   return {
+    parallel: true,
     async rows(sql) {
-      return (await client.query(sql)).rows
+      const client = await pool.connect()
+      const onErr = (err) => {
+        if (VERBOSE) console.error('[sanitation] client error:', err.message)
+      }
+      client.on('error', onErr)
+      try {
+        await client.query(`set statement_timeout = ${QUERY_TIMEOUT_MS}`)
+        await client.query('set lock_timeout = 2000')
+        await client.query('begin read only')
+        // Bantu sort/hash CTE besar (patp/mps); set local harus di dalam transaksi.
+        await client.query("set local work_mem = '256MB'")
+        await client.query('set local jit = off')
+        const res = await client.query(sql)
+        await client.query('rollback').catch(() => {})
+        return res.rows
+      } finally {
+        client.removeListener('error', onErr)
+        client.release()
+      }
     },
     async close() {
-      await client.query('rollback').catch(() => {})
-      await client.end()
+      await pool.end()
     },
   }
 }
@@ -388,6 +807,7 @@ async function makeDbxRunner() {
     })
   }
   return {
+    parallel: false,
     async rows(sql) {
       if (process.env.SANITATION_COUNT) { // debug: total + jumlah baris tanpa paginasi (ukur waktu server saja)
         const g = sql.includes("'patpGi' k")
@@ -463,6 +883,20 @@ async function writeSnapshot(payload) {
   if (!res.ok) throw new Error(`Supabase write gagal: HTTP ${res.status}`)
 }
 
+/** Baca snapshot latest dari Supabase (untuk inherit modul bila query gagal/di-skip). */
+async function readLatestSnapshot() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  const res = await fetch(`${url}/rest/v1/sanitation_report_snapshots?id=eq.latest&select=payload`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(60_000),
+  })
+  if (!res.ok) return null
+  const rows = await res.json()
+  return rows?.[0]?.payload || null
+}
+
 async function main() {
   if (REQUIRE_VPN && !hasTun0()) {
     console.log('[sanitation] VPN tun0 tidak aktif - dilewati, snapshot lama dipertahankan')
@@ -472,55 +906,122 @@ async function main() {
   const runner = process.env.PMIS_DATABASE_URL ? await makePgRunner() : await makeDbxRunner()
   const timings = {}
   const raw = {}
+  const failed = []
   try {
-    for (const [name, rawSql] of Object.entries(Q)) {
-      if (ONLY && !ONLY.includes(name)) { raw[name] = []; continue }
-      const sql = withScope(rawSql.split(PATP_VAL).join(PATP_VAL_SQL))
+    if (SKIP_PATP_ON_DBX) console.error('[sanitation] DBX: skip patpAll/patpFunnel (timeout 60s) — inherit snapshot lama; paksa: SANITATION_FORCE_PATP=1')
+    const jobs = Object.entries(Q).map(([name, rawSql]) => {
+      if (ONLY && !ONLY.includes(name)) return async () => { raw[name] = []; timings[name] = 0 }
+      if (SKIP_PATP_ON_DBX && (name === 'patpAll' || name === 'patpFunnel')) {
+        return async () => {
+          raw[name] = []
+          timings[name] = 0
+          failed.push(name)
+          if (VERBOSE) console.error(`[sanitation] ${name}: skip (DBX)`)
+        }
+      }
+      const sql = withScope(rawSql)
       assertReadOnly(sql)
-      const t = Date.now()
-      raw[name] = await runner.rows(sql)
-      timings[name] = Date.now() - t
-      if (VERBOSE) console.error(`[sanitation] ${name}: ${process.env.SANITATION_COUNT ? JSON.stringify(raw[name]) : raw[name].length + ' baris'}, ${timings[name]} ms`)
-    }
+      return async () => {
+        const t = Date.now()
+        try {
+          raw[name] = await runner.rows(sql)
+          timings[name] = Date.now() - t
+          if (VERBOSE) console.error(`[sanitation] ${name}: ${process.env.SANITATION_COUNT ? JSON.stringify(raw[name]) : raw[name].length + ' baris'}, ${timings[name]} ms`)
+        } catch (e) {
+          timings[name] = Date.now() - t
+          failed.push(name)
+          raw[name] = []
+          console.error(`[sanitation] ${name}: GAGAL (${timings[name]} ms) — ${e.message}`)
+        }
+      }
+    })
+    if (runner.parallel) await Promise.all(jobs.map((fn) => fn()))
+    else for (const fn of jobs) await fn()
     const codes = [...new Set(Object.values(raw).flat().map((r) => r.v).filter(Boolean))]
     const t0 = Date.now()
     const vendorSql = codes.length
       ? `select code, trim(name) as vname from master_vendor where code in (${codes.map((c) => `'${String(c).replace(/'/g, "''")}'`).join(',')})`
       : null
     if (vendorSql) assertReadOnly(vendorSql)
-    raw.vendors = vendorSql ? await runner.rows(vendorSql) : []
+    try {
+      raw.vendors = vendorSql ? await runner.rows(vendorSql) : []
+    } catch (e) {
+      console.error(`[sanitation] vendors: GAGAL — ${e.message}`)
+      raw.vendors = []
+    }
     timings.vendors = Date.now() - t0
   } finally {
     await runner.close()
   }
 
-  const part = (k) => raw.patpAll.filter((r) => r.k === k)
+  const part = (k) => [...(raw.patpAll || []), ...(raw.patpFunnel || [])].filter((r) => r.k === k)
+  const cacPart = (k) => (raw.cacAll || []).filter((r) => r.k === k)
+  // a_svc dihitung sekali di query mps/mpsReserved (hindari query mpsService terpisah ~4 mnt di DBX).
+  const mpsRaw = raw.mps || []
+  const mpsResRaw = raw.mpsReserved || []
+  const dropSvc = (rows) => rows.map(({ a_svc, ...r }) => r)
+  const asService = (rows) => rows.map(({ a, a_svc, ...r }) => ({ ...r, a: a_svc }))
   const modules = {
     baseline: toRows(raw.baseline),
-    mps: toRows(raw.mps),
-    mpsReserved: toRows(raw.mpsReserved, { normalize: false }),
+    mps: toRows(dropSvc(mpsRaw)),
+    mpsReserved: toRows(dropSvc(mpsResRaw), { normalize: false }),
+    mpsMaterial: toRows(raw.mpsMaterial),
+    mpsService: toRows([...asService(mpsRaw), ...asService(mpsResRaw)], { normalize: false }),
     matc: toRows(raw.matc),
     matcGr: toRows(raw.matcGr),
     fatp: toRows(part('fatp').map(({ a, ...r }) => r)),
+    fatpScope: toRows(part('fatpScope').map(({ a, ...r }) => r), { normalize: false }),
     patp: toRows(part('patp')),
+    // Of-Y Rp = valuasi MPS/PO (semua line IDR) untuk universe patp_need.
+    // Di DBX patpAll sering di-skip → pakai query ringan patpScopeVal.
+    patpScope: toRows(part('patpScope').length ? part('patpScope') : (raw.patpScopeVal || []), { normalize: false }),
     patpGi: toRows(part('patpGi')),
     patpGr: toRows(part('patpGr')),
     patpFa: toRows(part('patpFa')),
-    cac: toRows(raw.cac),
-    cacGr: toRows(raw.cacGr),
-    cacFa: toRows(raw.cacFa),
+    cac: toRows(cacPart('cac')),
+    cacGr: toRows(cacPart('cacGr')),
+    cacFa: toRows(cacPart('cacFa')),
     endorsement: toRows(raw.endorsement),
     caf: toRows(raw.caf),
     crRelocation: toRows(raw.cr),
     cafAction: toRows(raw.cafAction, { normalize: false }),
   }
 
+  // Inherit modul kosong dari snapshot sebelumnya (query timeout DBX / SANITATION_ONLY).
+  if (failed.length || ONLY) {
+    const prev = await readLatestSnapshot()
+    if (prev?.modules) {
+      let inherited = 0
+      for (const [k, rows] of Object.entries(prev.modules)) {
+        if ((!modules[k] || modules[k].length === 0) && Array.isArray(rows) && rows.length > 0) {
+          modules[k] = rows
+          inherited++
+          console.error(`[sanitation] inherit ${k} dari snapshot sebelumnya (${rows.length} baris)`)
+        }
+      }
+      if (inherited) console.error(`[sanitation] ${inherited} modul di-inherit; gagal/skip: ${(failed.length ? failed : ONLY).join(',')}`)
+    } else if (failed.length) {
+      console.error(`[sanitation] peringatan: ${failed.join(',')} gagal dan tidak ada snapshot lama untuk di-inherit`)
+    }
+  }
+
   const nameByCode = new Map(raw.vendors.filter((r) => r.vname).map((r) => [r.code, r.vname]))
-  if (nameByCode.size === 0) throw new Error('master_vendor kosong / gagal dibaca')
   const usedCodes = new Set(Object.values(modules).flat().map((r) => r.v))
-  const vendors = [...usedCodes]
+  let vendors = [...usedCodes]
     .map((code) => ({ code, name: code === UNKNOWN_VENDOR ? 'Unknown vendor' : nameByCode.get(code) || code }))
     .sort((a, b) => a.name.localeCompare(b.name))
+  if (nameByCode.size === 0) {
+    const prev = await readLatestSnapshot()
+    if (prev?.vendors?.length) {
+      const prevMap = new Map(prev.vendors.map((v) => [v.code, v.name]))
+      vendors = [...usedCodes]
+        .map((code) => ({ code, name: code === UNKNOWN_VENDOR ? 'Unknown vendor' : prevMap.get(code) || code }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+      console.error('[sanitation] inherit vendors dari snapshot sebelumnya')
+    } else {
+      throw new Error('master_vendor kosong / gagal dibaca')
+    }
+  }
 
   const earliest = Object.values(modules).flat().map((r) => r.d).filter(Boolean).sort()[0] || null
   const payload = {
@@ -531,6 +1032,7 @@ async function main() {
     dailyDays: BUCKET_DAYS,
     durationMs: Date.now() - started,
     timings,
+    failedQueries: failed.length ? failed : undefined,
     vendors,
     modules,
   }
@@ -546,8 +1048,13 @@ async function main() {
     }),
   )
 
+  const amounts = Object.fromEntries(
+    Object.entries(modules)
+      .map(([k, rows]) => [k, rows.reduce((s, r) => s + (r.a || 0), 0)])
+      .filter(([, a]) => a > 0),
+  )
   if (DRY) {
-    console.log(JSON.stringify({ totals, vendorCoverage: unknownShare, vendors: vendors.length, timings, durationMs: payload.durationMs, bytes: JSON.stringify(payload).length }, null, 2))
+    console.log(JSON.stringify({ totals, amounts, vendorCoverage: unknownShare, vendors: vendors.length, timings, durationMs: payload.durationMs, bytes: JSON.stringify(payload).length }, null, 2))
   } else {
     await writeSnapshot(payload)
     console.log(`[sanitation] snapshot v3 ditulis (${payload.durationMs} ms, ${JSON.stringify(payload).length} bytes)`)

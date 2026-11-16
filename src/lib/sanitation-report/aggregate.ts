@@ -3,6 +3,9 @@ import { CORE_MODULES, type ModuleKey, type Row, type SanitationSnapshot, type T
 export type StatusItem = { label: string; tone: Tone; count: number; amount?: number }
 export type Aggregated = { created: number; extra: number; statuses: StatusItem[]; amount?: number }
 
+/** Hijau (ok) dulu, lalu kuning (wait/neutral), lalu merah (bad) — selaras bar sanitation. */
+const TONE_SORT_RANK: Record<Tone, number> = { ok: 0, wait: 1, neutral: 1, bad: 2 }
+
 /** Rentang tanggal inklusif (YYYY-MM-DD). Kosong = tanpa batas. */
 export type DateRange = { from?: string; to?: string }
 
@@ -32,8 +35,19 @@ export function aggregate(rows: Row[], vendors: ReadonlySet<string>, range: Date
     }
     map.set(r.s, cur)
   }
-  const statuses = [...map.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+  const statuses = [...map.values()].sort(
+    (a, b) => TONE_SORT_RANK[a.tone] - TONE_SORT_RANK[b.tone] || b.count - a.count || a.label.localeCompare(b.label),
+  )
   return { created, extra, statuses, amount }
+}
+
+/** Gabungkan beberapa kumpulan baris lalu agregasi (status/Rp ter-merge). */
+export function aggregateCombined(
+  rowSets: readonly (readonly Row[] | undefined)[],
+  vendors: ReadonlySet<string>,
+  range: DateRange = {},
+): Aggregated {
+  return aggregate(rowSets.flatMap((rows) => rows ?? []), vendors, range)
 }
 
 export function sumCount(rows: Row[], vendors: ReadonlySet<string>, range: DateRange = {}): number {
@@ -46,7 +60,12 @@ export function modulesWithTransactions(
   vendors: ReadonlySet<string>,
   range: DateRange = {},
 ): number {
-  return CORE_MODULES.filter((k: ModuleKey) => sumCount(snap.modules[k], vendors, range) > 0).length
+  return CORE_MODULES.filter((k: ModuleKey) => {
+    if (k === 'mps') {
+      return aggregateCombined([snap.modules.mps, snap.modules.mpsReserved], vendors, range).created > 0
+    }
+    return sumCount(snap.modules[k], vendors, range) > 0
+  }).length
 }
 
 export function vendorLabel(snap: SanitationSnapshot, code: string): string {

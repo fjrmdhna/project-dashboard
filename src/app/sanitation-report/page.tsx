@@ -11,6 +11,7 @@ import { VendorFilter } from '@/components/sanitation/VendorFilter'
 import {
   PRESET_LABEL,
   aggregate,
+  aggregateCombined,
   isISODate,
   formatIdr,
   isPreset,
@@ -37,15 +38,15 @@ type CardDef = {
 }
 
 const CARDS: CardDef[] = [
-  { key: 'mps', title: 'MPS', tone: 'cyan', hint: 'Counted per MPS transaction (mps_transaction_id), latest approval status.' },
-  { key: 'baseline', title: 'Baseline', tone: 'navy', unit: 'Project', hint: 'Counted per baseline_id (project). Sites = sum of total_system_key.' },
-  { key: 'matc', title: 'MATC / BABT', tone: 'violet', hint: 'Counted per BA number; vendor derived from system key → PO mapping. Rp = BA Value as the Current Realization of MATC Appendix 2 (certified quantity x PO net price, IDR lines only).' },
+  { key: 'mps', title: 'MPS', tone: 'cyan', hint: 'Counted per unique system key. Keys with an MPS transaction use the approval status of the latest transaction; keys without a transaction yet appear as Reserved/Ready. Rp = sum of mapped quantity x latest PO net price (IDR) over all lines of the system key (including Reserved/Ready).' },
+  { key: 'baseline', title: 'Baseline', tone: 'navy', hint: 'Counted per unique system key (read from the baseline system key list), using its latest baseline (status of that baseline). Only system keys that already have an MPS transaction are counted; the "of" number is the total MPS system keys including Reserved/Ready.' },
+  { key: 'matc', title: 'MATC / BABT', tone: 'violet', hint: 'Counted per unique system key, using its latest MATC/BABT BA (status of that BA). Only system keys that have an MPS transaction and at least one material line (not service-only) are counted; the "of" number is all such material-line system keys including Reserved/Ready. Rp beside the count = material-line PO value of those MATC system keys; Rp beside "of" = material-line PO value of the full material-line MPS universe (including Reserved/Ready).' },
   { key: 'caf', title: 'CAF', tone: 'orange', hint: 'Counted per caf_no, current CAF status.' },
   { key: 'crRelocation', title: 'Change Request', tone: 'red', hint: 'Counted per CR number (type Relocation), latest status; vendor via system key.' },
-  { key: 'fatp', title: 'Acceptance - FATP', tone: 'cyan', hint: 'Counted per acceptance_number (FATP), latest status.' },
-  { key: 'patp', title: 'Acceptance - PATP', tone: 'violet', hint: 'Counted per acceptance_number (PATP), latest status. Rp = derived BA Value = Current Realisation (mapped quantity per system key x latest PO net price, IDR, PO-based lines only); PMIS has no BA Value for PATP, and WO-only PATP (no PO) has no value.' },
-  { key: 'endorsement', title: 'Endorsement', tone: 'teal', hint: 'Counted per endorse_number. Fully Approved = all systems endorsed.' },
-  { key: 'cac', title: 'CAC Acceptance / BAUT', tone: 'teal', hint: 'Counted per BA number, latest workflow status. Rp = BA Value as the Realisation Total of ATP Appendix 2 (mapped quantity x PO net price, IDR lines only).' },
+  { key: 'fatp', title: 'Acceptance - FATP', tone: 'cyan', hint: 'Counted per unique system key that Master Scope Acceptance requires for FATP, using its latest FATP acceptance (status of that acceptance). The "of" number is MPS system keys (including Reserved/Ready) that require FATP per Master Scope Acceptance (project type + scope category).' },
+  { key: 'patp', title: 'Acceptance - PATP', tone: 'violet', hint: 'Counted per unique system key that Master Scope Acceptance requires for PATP, using its latest PATP acceptance (status of that acceptance). The "of" number is MPS system keys (including Reserved/Ready) that require PATP per Master Scope Acceptance. Rp beside the count = Current Realisation on the latest PATP (mapped quantity x latest PO net price, IDR, PO-based lines only; WO-only has no value). Rp beside "of" = MPS/PO mapped value (all IDR lines) for every system key in that PATP-required universe when the snapshot includes that amount.' },
+  { key: 'endorsement', title: 'Endorsement', tone: 'teal', hint: 'Counted per unique system key, using its latest endorsement (approval status of that system key).' },
+  { key: 'cac', title: 'CAC Acceptance / BAUT', tone: 'teal', hint: 'Counted per unique system key, using its latest CAC/BAUT BA (workflow status of that BA). The "of" number is the total MPS system keys including Reserved/Ready. Rp beside the count = Realisation of ATP Appendix 2 service lines only for those CAC system keys; Rp beside "of" = service-line PO value for the full MPS universe (including Reserved/Ready). Fusion funnel is per Fully Approved system key.' },
 ]
 
 function formatSince(iso: string) {
@@ -225,24 +226,24 @@ function Report() {
 
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 lg:grid-rows-3">
               {CARDS.map((c) => {
-                const a = aggregate(snap.modules[c.key], vendorSet, range)
+                const a =
+                  c.key === 'mps'
+                    ? aggregateCombined([snap.modules.mps, snap.modules.mpsReserved], vendorSet, range)
+                    : aggregate(snap.modules[c.key], vendorSet, range)
                 let note: React.ReactNode
-                if (c.key === 'mps') {
-                  note = `${fmt(sumCount(snap.modules.mpsReserved, vendorSet, range))} Reserved/Ready MPS IDs`
-                }
                 if (c.key === 'matc' && snap.modules.matcGr) {
-                  // Tetap tampil (0) saat filter menghasilkan 0 BA Fully Approved; hanya disembunyikan jika snapshot lama tanpa matcGr.
+                  // Tetap tampil (0) saat filter menghasilkan 0 system key Fully Approved; hanya disembunyikan jika snapshot lama tanpa matcGr.
                   const gr = aggregate(snap.modules.matcGr, vendorSet, range)
-                  note = <PatpFusionMini total={gr.created} basis="Fully Approved BA" legs={[{ label: 'GR Material', interfaceId: 'INTINV-005', statuses: gr.statuses }]} />
+                  note = <PatpFusionMini total={gr.created} basis="Fully Approved system key" legs={[{ label: 'GR Material', interfaceId: 'INTINV-005', statuses: gr.statuses }]} />
                 }
                 if (c.key === 'cac' && snap.modules.cacGr && snap.modules.cacFa) {
-                  // Basis = BA CAC Fully Approved; tampil 0 saat filter tidak menyisakan BA, hilang hanya untuk snapshot lama.
+                  // Basis = Fully Approved system key (BA terbaru completed); tampil 0 saat filter kosong.
                   const grs = aggregate(snap.modules.cacGr, vendorSet, range)
                   const fa = aggregate(snap.modules.cacFa, vendorSet, range)
                   note = (
                     <PatpFusionMini
                       total={grs.created}
-                      basis="Fully Approved BA"
+                      basis="Fully Approved system key"
                       legs={[
                         { label: 'GR Service', interfaceId: 'INTINV-005', statuses: grs.statuses },
                         { label: 'Fixed Asset', interfaceId: 'INTPPM-002', statuses: fa.statuses },
@@ -251,13 +252,14 @@ function Report() {
                   )
                 }
                 if (c.key === 'patp' && snap.modules.patpGi && snap.modules.patpGr && snap.modules.patpFa) {
-                  // Basis = PATP Fully Approved; tampil 0 saat filter tidak menyisakan PATP, hilang hanya untuk snapshot lama.
+                  // Basis = Fully Approved system key (status PATP terbaru); tampil 0 saat filter kosong; hilang hanya snapshot lama.
                   const gi = aggregate(snap.modules.patpGi, vendorSet, range)
                   const grs = aggregate(snap.modules.patpGr, vendorSet, range)
                   const fa = aggregate(snap.modules.patpFa, vendorSet, range)
                   note = (
                     <PatpFusionMini
                       total={gi.created}
+                      basis="Fully Approved system key"
                       legs={[
                         { label: 'GI Material', interfaceId: 'INTINV-006', statuses: gi.statuses },
                         { label: 'GR Service', interfaceId: 'INTINV-005', statuses: grs.statuses },
@@ -266,6 +268,11 @@ function Report() {
                     />
                   )
                 }
+                const ofLabel = (y: { created: number; amount?: number }) =>
+                  y.amount !== undefined
+                    ? `of ${fmt(y.created)} · ${formatIdr(y.amount)}`
+                    : `of ${fmt(y.created)} system key`
+                const xyAmount = c.key === 'matc' || c.key === 'patp' || c.key === 'cac'
                 return (
                   <ModuleCard
                     key={c.key}
@@ -274,10 +281,28 @@ function Report() {
                     unit={c.unit}
                     hint={c.hint}
                     value={a.created}
-                    subValue={c.key === 'baseline' ? `${fmt(a.extra)} Site` : a.amount !== undefined ? formatIdr(a.amount) : undefined}
+                    amountLabel={xyAmount && a.amount !== undefined ? formatIdr(a.amount) : undefined}
+                    subValue={
+                      c.key === 'baseline'
+                        ? `of ${fmt(aggregateCombined([snap.modules.mps, snap.modules.mpsReserved], vendorSet, range).created)} system key`
+                        : c.key === 'matc' && snap.modules.mpsMaterial
+                          ? ofLabel(aggregate(snap.modules.mpsMaterial, vendorSet, range))
+                          : c.key === 'fatp' && snap.modules.fatpScope
+                            ? `of ${fmt(aggregate(snap.modules.fatpScope, vendorSet, range).created)} system key`
+                            : c.key === 'patp' && snap.modules.patpScope
+                              ? ofLabel(aggregate(snap.modules.patpScope, vendorSet, range))
+                              : c.key === 'cac'
+                                ? ofLabel({
+                                    created: aggregateCombined([snap.modules.mps, snap.modules.mpsReserved], vendorSet, range).created,
+                                    amount: snap.modules.mpsService
+                                      ? aggregate(snap.modules.mpsService, vendorSet, range).amount
+                                      : undefined,
+                                  })
+                                : a.amount !== undefined ? formatIdr(a.amount) : undefined
+                    }
                     note={note}
                     divided={c.key === 'matc' || c.key === 'patp' || c.key === 'cac'}
-                    stackSub={c.key === 'cac' || c.key === 'patp'}
+                    stackSub={c.key === 'cac' || c.key === 'patp' || c.key === 'matc' || c.key === 'fatp'}
                     dimmed={a.created === 0}
                   >
                     <StatusBreakdown statuses={a.statuses} total={a.created} title={c.title} tall={c.key === 'patp' ? true : c.key === 'cac' ? 'compact' : false} />

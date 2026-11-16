@@ -17,68 +17,121 @@ const countOf = (statuses: StatusItem[], label: string) => statuses.find((s) => 
 /** Satu tahap rantai Fusion PATP: hasil `aggregate()` dari satu set data (`patpGi`/`patpGr`/`patpFa`). */
 export type FusionLeg = { label: string; interfaceId: string; statuses: StatusItem[] }
 
+type LegMetrics = {
+  leg: FusionLeg
+  success: number
+  waiting: number
+  error: number
+  notSent: number
+  sent: number
+  ackAmount: number
+  detail: string
+}
+
+function legMetrics(leg: FusionLeg, total: number, basis: string, hasAmount: boolean): LegMetrics {
+  const success = countOf(leg.statuses, GR.success)
+  const waiting = countOf(leg.statuses, GR.waiting)
+  const error = countOf(leg.statuses, GR.error)
+  const notSent = countOf(leg.statuses, GR.notSent)
+  const sent = total - notSent
+  const ackAmount = amountOfStatus(leg.statuses, GR.success)
+  const detail = [
+    `${leg.label} to Oracle Fusion (${leg.interfaceId}), of ${fmt(total)} ${basis}`,
+    `Sent: ${fmt(sent)} (${pct(sent, total)} of ${basis})`,
+    `ACK rate: ${pct(success, sent)} (ACK Success / Sent)`,
+    `ACK Success: ${fmt(success)}`,
+    `Waiting ACK: ${fmt(waiting)}`,
+    `ACK Error: ${fmt(error)}`,
+    `Not sent: ${fmt(notSent)}`,
+    ...(hasAmount ? [`BA Value of ACK Success: ${formatIdrFull(ackAmount)}`] : []),
+  ].join('\n')
+  return { leg, success, waiting, error, notSent, sent, ackAmount, detail }
+}
+
+function FusionBar({ sent, success, waiting, error, label }: { sent: number; success: number; waiting: number; error: number; label: string }) {
+  const seg = (n: number) => (sent ? `${(n / sent) * 100}%` : '0%')
+  return (
+    <div
+      className="flex h-1 min-w-[10px] flex-1 overflow-hidden rounded-full bg-slate-200"
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={sent}
+      aria-valuenow={success}
+    >
+      <div className={`h-full ${COLOR.green}`} style={{ width: seg(success) }} />
+      <div className={`h-full ${COLOR.yellow}`} style={{ width: seg(waiting) }} />
+      <div className={`h-full ${COLOR.red}`} style={{ width: seg(error) }} />
+    </div>
+  )
+}
+
 /**
- * Funnel Fusion untuk card PATP: satu baris per tahap (GI Material, GR Service, Fixed Asset).
- * Angka = terkirim (sent) dari total Fully Approved; persen = ACK sukses / sent. Bar dibagi dari sent:
- * hijau = ACK sukses, kuning = menunggu ACK, merah = ACK error. Rinciannya ada di tooltip.
+ * Funnel Fusion untuk card PATP/MATC/CAC.
+ * 1 tahap (MATC): baris flex padat yang bisa menyusut tanpa clip Rp.
+ * Multi tahap (PATP/CAC): grid sejajar antar baris.
  */
 export function PatpFusionMini({ legs, total, basis = 'Fully Approved PATP' }: { legs: FusionLeg[]; total: number; basis?: string }) {
-  // Kolom nilai (BA Value ACK sukses) hanya muncul bila data punya amount; kartu melebar sedikit agar bar tetap terbaca.
   const hasAmount = legs.some((l) => l.statuses.some((s) => s.amount !== undefined))
-  // Grid dengan subgrid: semua baris berbagi kolom yang sama, sehingga label, bar, dan angka selalu sejajar.
+  const rows = legs.map((leg) => legMetrics(leg, total, basis, hasAmount))
+
+  // Satu tahap: flex wrap-safe — angka penting tidak terdorong keluar card.
+  if (rows.length === 1) {
+    const m = rows[0]
+    return (
+      <div
+        className="ml-auto flex w-full min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-md bg-slate-50 px-1.5 py-1 ring-1 ring-inset ring-slate-200/70 text-[9px] leading-3 text-slate-700"
+        title={m.detail}
+        aria-label={m.detail}
+      >
+        <span className="flex shrink-0 items-center gap-0.5 whitespace-nowrap">
+          {m.leg.label}
+          {m.error > 0 && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-600" aria-hidden />}
+        </span>
+        <FusionBar sent={m.sent} success={m.success} waiting={m.waiting} error={m.error} label={m.leg.label} />
+        <span className="shrink-0 font-bold tabular-nums text-slate-900">{fmt(m.sent)}</span>
+        <span className={`shrink-0 tabular-nums ${m.success > 0 ? 'font-semibold text-emerald-700' : 'text-slate-400'}`}>
+          {fmt(m.success)} ACK
+        </span>
+        <span className="shrink-0 tabular-nums text-slate-500">{pct(m.success, m.sent)}</span>
+        {hasAmount && (
+          <span className="min-w-0 truncate tabular-nums text-slate-600" title={m.ackAmount > 0 ? formatIdrFull(m.ackAmount) : undefined}>
+            {m.ackAmount > 0 ? formatIdr(m.ackAmount) : '—'}
+          </span>
+        )}
+      </div>
+    )
+  }
+
   const cols = hasAmount
-    ? 'grid-cols-[auto_minmax(14px,1fr)_auto_auto_auto_auto] max-w-[340px]'
-    : 'grid-cols-[auto_minmax(14px,1fr)_auto_auto_auto] max-w-[300px]'
+    ? 'grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto_auto_auto_auto]'
+    : 'grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto_auto_auto]'
   return (
-    <div className={`grid ${cols} ml-auto w-full min-w-0 items-center gap-x-1.5 gap-y-1 rounded-md bg-slate-50 px-2 py-1.5 [@media(max-height:700px)]:gap-y-0 [@media(max-height:700px)]:py-1 ring-1 ring-inset ring-slate-200/70`}>
-      {legs.map((leg) => {
-        const success = countOf(leg.statuses, GR.success)
-        const waiting = countOf(leg.statuses, GR.waiting)
-        const error = countOf(leg.statuses, GR.error)
-        const notSent = countOf(leg.statuses, GR.notSent)
-        const sent = total - notSent
-        const amountOf = (label: string) => amountOfStatus(leg.statuses, label)
-        const seg = (n: number) => (sent ? `${(n / sent) * 100}%` : '0%')
-        const detail = [
-          `${leg.label} to Oracle Fusion (${leg.interfaceId}), of ${fmt(total)} ${basis}`,
-          `Sent: ${fmt(sent)} (${pct(sent, total)} of ${basis})`,
-          `ACK rate: ${pct(success, sent)} (ACK Success / Sent)`,
-          `ACK Success: ${fmt(success)}`,
-          `Waiting ACK: ${fmt(waiting)}`,
-          `ACK Error: ${fmt(error)}`,
-          `Not sent: ${fmt(notSent)}`,
-          ...(hasAmount ? [`BA Value of ACK Success: ${formatIdrFull(amountOf(GR.success))}`] : []),
-        ].join('\n')
-        return (
-          <div
-            key={leg.label}
-            className="col-span-full grid grid-cols-subgrid items-center text-[11px] font-normal leading-4 text-slate-700 [@media(max-height:700px)]:leading-[14px]"
-            title={detail}
-            aria-label={detail}
-          >
-            <span className="flex items-center gap-1 whitespace-nowrap text-left">
-              {leg.label}
-              {error > 0 && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-600" role="img" aria-label="ACK error present" />}
+    <div className={`grid ${cols} ml-auto w-full min-w-0 max-w-full items-center gap-x-1 gap-y-px overflow-hidden rounded-md bg-slate-50 px-1.5 py-0.5 ring-1 ring-inset ring-slate-200/70`}>
+      {rows.map((m) => (
+        <div
+          key={m.leg.label}
+          className="col-span-full grid min-w-0 grid-cols-subgrid items-center text-[9px] font-normal leading-3 text-slate-700"
+          title={m.detail}
+          aria-label={m.detail}
+        >
+          <span className="flex min-w-0 items-center gap-0.5 truncate text-left">
+            <span className="truncate">{m.leg.label}</span>
+            {m.error > 0 && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-600" aria-hidden />}
+          </span>
+          <FusionBar sent={m.sent} success={m.success} waiting={m.waiting} error={m.error} label={m.leg.label} />
+          <span className="shrink-0 text-right font-bold tabular-nums text-slate-900">{fmt(m.sent)}</span>
+          <span className={`shrink-0 whitespace-nowrap text-right tabular-nums ${m.success > 0 ? 'font-semibold text-emerald-700' : 'text-slate-400'}`}>
+            {fmt(m.success)} ACK
+          </span>
+          <span className="w-6 shrink-0 text-right tabular-nums text-slate-500">{pct(m.success, m.sent)}</span>
+          {hasAmount && (
+            <span className="max-w-[4.25rem] shrink-0 truncate text-right tabular-nums text-slate-600" title={m.ackAmount > 0 ? formatIdrFull(m.ackAmount) : undefined}>
+              {m.ackAmount > 0 ? formatIdr(m.ackAmount) : '—'}
             </span>
-            <div
-              className="flex h-2 overflow-hidden rounded-full bg-slate-200"
-              role="progressbar"
-              aria-label={leg.label}
-              aria-valuemin={0}
-              aria-valuemax={sent}
-              aria-valuenow={success}
-            >
-              <div className={`h-full ${COLOR.green}`} style={{ width: seg(success) }} />
-              <div className={`h-full ${COLOR.yellow}`} style={{ width: seg(waiting) }} />
-              <div className={`h-full ${COLOR.red}`} style={{ width: seg(error) }} />
-            </div>
-            <span className="text-right font-bold tabular-nums text-slate-900">{fmt(sent)}</span>
-            <span className={`whitespace-nowrap text-right tabular-nums ${success > 0 ? 'font-semibold text-emerald-700' : 'text-slate-400'}`}>{fmt(success)} ACK</span>
-            <span className="text-right tabular-nums text-slate-500">{pct(success, sent)}</span>
-            {hasAmount && <span className="whitespace-nowrap text-right tabular-nums text-slate-600">{formatIdr(amountOf(GR.success))}</span>}
-          </div>
-        )
-      })}
+          )}
+        </div>
+      ))}
     </div>
   )
 }

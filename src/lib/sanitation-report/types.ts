@@ -24,9 +24,22 @@ export type SanitationSnapshot = {
   vendors: { code: string; name: string }[]
   /**
    * Opsional: snapshot yang dibuat sebelum fitur GR/Fusion belum memilikinya.
-   * `patpGi`/`patpGr`/`patpFa` = progres Fusion per PATP Fully Approved (INTINV-006, INTINV-005 service, INTPPM-002).
+   * `patpGi`/`patpGr`/`patpFa` = progres Fusion per Fully Approved system key.
+   * `fatpScope`/`patpScope` = penyebut "of Y" (MPS universe ∩ master_scope_acceptance).
    */
-  modules: Record<ModuleKey, Row[]> & { matcGr?: Row[]; patpGi?: Row[]; patpGr?: Row[]; patpFa?: Row[]; cacGr?: Row[]; cacFa?: Row[] }
+  modules: Record<ModuleKey, Row[]> & {
+    mpsMaterial?: Row[]
+    /** Populasi MPS+Reserved dengan a = service lines only (Rp of-Y CAC). */
+    mpsService?: Row[]
+    matcGr?: Row[]
+    patpGi?: Row[]
+    patpGr?: Row[]
+    patpFa?: Row[]
+    cacGr?: Row[]
+    cacFa?: Row[]
+    fatpScope?: Row[]
+    patpScope?: Row[]
+  }
 }
 
 export type SanitationApiResponse = {
