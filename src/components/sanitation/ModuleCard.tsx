@@ -29,17 +29,19 @@ type Props = {
   divided?: boolean
   /** Nilai total (subValue) ditaruh di bawah angka besar, bukan di sampingnya (untuk funnel lebar di samping angka). */
   stackSub?: boolean
+  /** Kelas tambahan untuk posisi di grid (mis. `lg:col-span-2`). */
+  className?: string
   children: ReactNode
 }
 
-export function ModuleCard({ title, value, unit, amountLabel, subValue, hint, tone, dimmed, note, divided, stackSub, children }: Props) {
+export function ModuleCard({ title, value, unit, amountLabel, subValue, hint, tone, dimmed, note, divided, stackSub, className, children }: Props) {
   const t = TONES[tone]
   return (
     <section
       aria-label={title}
-      className={`relative flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-opacity ${
+      className={`relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-opacity ${
         dimmed ? 'opacity-60' : ''
-      }`}
+      } ${className ?? ''}`}
     >
       <div className={`absolute inset-y-0 left-0 w-1 ${t.bar}`} />
       <div className={`flex min-h-0 flex-1 flex-col pl-4 pr-4 pt-2 ${divided ? 'gap-1 pb-3' : 'gap-1.5 pb-2.5'}`}>

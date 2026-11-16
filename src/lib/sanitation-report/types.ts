@@ -8,6 +8,7 @@ export type ModuleKey =
   | 'mps'
   | 'mpsReserved'
   | 'matc'
+  | 'siteTransfer'
   | 'fatp'
   | 'patp'
   | 'cac'
@@ -52,11 +53,12 @@ export type SanitationApiResponse = {
 /** Snapshot dianggap stale jika lebih tua dari ini (job berjalan per jam). */
 export const STALE_AFTER_MINUTES = 150
 
-/** 9 modul yang dihitung pada KEY FACT. */
+/** Modul yang dihitung pada KEY FACT. */
 export const CORE_MODULES: ModuleKey[] = [
   'baseline',
   'mps',
   'matc',
+  'siteTransfer',
   'fatp',
   'patp',
   'cac',

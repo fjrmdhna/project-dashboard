@@ -54,7 +54,7 @@ export function sumCount(rows: Row[], vendors: ReadonlySet<string>, range: DateR
   return aggregate(rows, vendors, range).created
 }
 
-/** Jumlah modul (dari 9) yang punya transaksi untuk vendor & tanggal terpilih. */
+/** Jumlah modul (dari CORE_MODULES) yang punya transaksi untuk vendor & tanggal terpilih. */
 export function modulesWithTransactions(
   snap: SanitationSnapshot,
   vendors: ReadonlySet<string>,
@@ -64,7 +64,7 @@ export function modulesWithTransactions(
     if (k === 'mps') {
       return aggregateCombined([snap.modules.mps, snap.modules.mpsReserved], vendors, range).created > 0
     }
-    return sumCount(snap.modules[k], vendors, range) > 0
+    return sumCount(snap.modules[k] ?? [], vendors, range) > 0
   }).length
 }
 

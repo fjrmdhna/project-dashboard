@@ -35,19 +35,29 @@ type CardDef = {
   tone: ModuleCardTone
   unit?: string
   hint: string
+  /** Lebar ~1,5× card biasa di grid lg (funnel Fusion multi-tahap). */
+  wide?: boolean
 }
 
+/** Grid 8 kolom di lg: card biasa span 2 (25%), PATP/CAC span 3 (~37,5%). */
 const CARDS: CardDef[] = [
   { key: 'mps', title: 'MPS', tone: 'cyan', hint: 'Counted per unique system key. Keys with an MPS transaction use the approval status of the latest transaction; keys without a transaction yet appear as Reserved/Ready. Rp = sum of mapped quantity x latest PO net price (IDR) over all lines of the system key (including Reserved/Ready).' },
   { key: 'baseline', title: 'Baseline', tone: 'navy', hint: 'Counted per unique system key (read from the baseline system key list), using its latest baseline (status of that baseline). Only system keys that already have an MPS transaction are counted; the "of" number is the total MPS system keys including Reserved/Ready.' },
   { key: 'matc', title: 'MATC / BABT', tone: 'violet', hint: 'Counted per unique system key, using its latest MATC/BABT BA (status of that BA). Only system keys that have an MPS transaction and at least one material line (not service-only) are counted; the "of" number is all such material-line system keys including Reserved/Ready. Rp beside the count = material-line PO value of those MATC system keys; Rp beside "of" = material-line PO value of the full material-line MPS universe (including Reserved/Ready).' },
+  { key: 'siteTransfer', title: 'Site Transfer', tone: 'orange', hint: 'Site-to-site transfer to Oracle Fusion (INTINV-007), material only. Counted per unique system key that has at least one transfer line (lines from any MPS transaction of the key; latest interface row per PO line). Status per system key from the latest ACK of each line: any ACK Error = ACK Error; all lines ACK Success = ACK Success; otherwise Waiting ACK. Not Sent = material-line system keys without any transfer line. The "of" number is all MPS system keys with at least one material line, including Reserved/Ready (same as MATC). Rp beside the count = transferred quantity x latest PO net price (IDR); Not Sent Rp = material-line PO value not yet transferred; Rp beside "of" = material-line PO value of the full universe.' },
   { key: 'caf', title: 'CAF', tone: 'orange', hint: 'Counted per caf_no, current CAF status.' },
   { key: 'crRelocation', title: 'Change Request', tone: 'red', hint: 'Counted per CR number (type Relocation), latest status; vendor via system key.' },
   { key: 'fatp', title: 'Acceptance - FATP', tone: 'cyan', hint: 'Counted per unique system key that Master Scope Acceptance requires for FATP, using its latest FATP acceptance (status of that acceptance). The "of" number is MPS system keys (including Reserved/Ready) that require FATP per Master Scope Acceptance (project type + scope category).' },
-  { key: 'patp', title: 'Acceptance - PATP', tone: 'violet', hint: 'Counted per unique system key that Master Scope Acceptance requires for PATP, using its latest PATP acceptance (status of that acceptance). The "of" number is MPS system keys (including Reserved/Ready) that require PATP per Master Scope Acceptance. Rp beside the count = Current Realisation on the latest PATP (mapped quantity x latest PO net price, IDR, PO-based lines only; WO-only has no value). Rp beside "of" = MPS/PO mapped value (all IDR lines) for every system key in that PATP-required universe when the snapshot includes that amount.' },
   { key: 'endorsement', title: 'Endorsement', tone: 'teal', hint: 'Counted per unique system key, using its latest endorsement (approval status of that system key).' },
-  { key: 'cac', title: 'CAC Acceptance / BAUT', tone: 'teal', hint: 'Counted per unique system key, using its latest CAC/BAUT BA (workflow status of that BA). The "of" number is the total MPS system keys including Reserved/Ready. Rp beside the count = Realisation of ATP Appendix 2 service lines only for those CAC system keys; Rp beside "of" = service-line PO value for the full MPS universe (including Reserved/Ready). Fusion funnel is per Fully Approved system key.' },
+  { key: 'patp', title: 'Acceptance - PATP', tone: 'violet', wide: true, hint: 'Counted per unique system key that Master Scope Acceptance requires for PATP, using its latest PATP acceptance (status of that acceptance). The "of" number is MPS system keys (including Reserved/Ready) that require PATP per Master Scope Acceptance. Rp beside the count = Current Realisation on the latest PATP (mapped quantity x latest PO net price, IDR, PO-based lines only; WO-only has no value). Rp beside "of" = MPS/PO mapped value (all IDR lines) for every system key in that PATP-required universe when the snapshot includes that amount.' },
+  { key: 'cac', title: 'CAC Acceptance / BAUT', tone: 'teal', wide: true, hint: 'Counted per unique system key, using its latest CAC/BAUT BA (workflow status of that BA). The "of" number is the total MPS system keys including Reserved/Ready. Rp beside the count = Realisation of ATP Appendix 2 service lines only for those CAC system keys; Rp beside "of" = service-line PO value for the full MPS universe (including Reserved/Ready). Fusion funnel is per Fully Approved system key.' },
 ]
+
+const NOT_SENT = 'Not Sent'
+const GRID = 'grid min-h-0 flex-1 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-8 lg:grid-rows-3'
+/** Card biasa span 2; PATP/CAC span 3. PATP mulai di kolom 2 agar pasangan terpusat (1 kosong + 3 + 3 + 1 kosong). */
+const cardSpan = (wide?: boolean, centerPairStart?: boolean) =>
+  wide ? `lg:col-span-3${centerPairStart ? ' lg:col-start-2' : ''}` : 'lg:col-span-2'
 
 function formatSince(iso: string) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -55,9 +65,9 @@ function formatSince(iso: string) {
 
 function Skeleton() {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 lg:grid-rows-3" aria-busy="true" aria-label="Loading">
-      {Array.from({ length: 9 }).map((_, i) => (
-        <div key={i} className="h-40 animate-pulse rounded-xl border border-slate-200 bg-white" />
+    <div className={GRID} aria-busy="true" aria-label="Loading">
+      {CARDS.map((c) => (
+        <div key={c.key} className={`h-40 animate-pulse rounded-xl border border-slate-200 bg-white ${cardSpan(c.wide, c.key === 'patp')}`} />
       ))}
     </div>
   )
@@ -224,12 +234,16 @@ function Report() {
             </div>
             </div>
 
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 lg:grid-rows-3">
+            <div className={GRID}>
               {CARDS.map((c) => {
                 const a =
                   c.key === 'mps'
                     ? aggregateCombined([snap.modules.mps, snap.modules.mpsReserved], vendorSet, range)
-                    : aggregate(snap.modules[c.key], vendorSet, range)
+                    : aggregate(snap.modules[c.key] ?? [], vendorSet, range)
+                // Site Transfer: X = system key yang sudah punya line transfer (tanpa Not Sent); bar tetap dari seluruh universe.
+                const notSent = c.key === 'siteTransfer' ? a.statuses.find((s) => s.label === NOT_SENT) : undefined
+                const xCount = a.created - (notSent?.count ?? 0)
+                const xAmount = a.amount !== undefined ? a.amount - (notSent?.amount ?? 0) : undefined
                 let note: React.ReactNode
                 if (c.key === 'matc' && snap.modules.matcGr) {
                   // Tetap tampil (0) saat filter menghasilkan 0 system key Fully Approved; hanya disembunyikan jika snapshot lama tanpa matcGr.
@@ -272,20 +286,21 @@ function Report() {
                   y.amount !== undefined
                     ? `of ${fmt(y.created)} · ${formatIdr(y.amount)}`
                     : `of ${fmt(y.created)} system key`
-                const xyAmount = c.key === 'matc' || c.key === 'patp' || c.key === 'cac'
+                const xyAmount = c.key === 'matc' || c.key === 'patp' || c.key === 'cac' || c.key === 'siteTransfer'
                 return (
                   <ModuleCard
                     key={c.key}
+                    className={cardSpan(c.wide, c.key === 'patp')}
                     title={c.title}
                     tone={c.tone}
                     unit={c.unit}
                     hint={c.hint}
-                    value={a.created}
-                    amountLabel={xyAmount && a.amount !== undefined ? formatIdr(a.amount) : undefined}
+                    value={xCount}
+                    amountLabel={xyAmount && xAmount !== undefined ? formatIdr(xAmount) : undefined}
                     subValue={
                       c.key === 'baseline'
                         ? `of ${fmt(aggregateCombined([snap.modules.mps, snap.modules.mpsReserved], vendorSet, range).created)} system key`
-                        : c.key === 'matc' && snap.modules.mpsMaterial
+                        : (c.key === 'matc' || c.key === 'siteTransfer') && snap.modules.mpsMaterial
                           ? ofLabel(aggregate(snap.modules.mpsMaterial, vendorSet, range))
                           : c.key === 'fatp' && snap.modules.fatpScope
                             ? `of ${fmt(aggregate(snap.modules.fatpScope, vendorSet, range).created)} system key`
@@ -302,10 +317,10 @@ function Report() {
                     }
                     note={note}
                     divided={c.key === 'matc' || c.key === 'patp' || c.key === 'cac'}
-                    stackSub={c.key === 'cac' || c.key === 'patp' || c.key === 'matc' || c.key === 'fatp'}
+                    stackSub={c.key === 'cac' || c.key === 'patp' || c.key === 'matc' || c.key === 'fatp' || c.key === 'siteTransfer'}
                     dimmed={a.created === 0}
                   >
-                    <StatusBreakdown statuses={a.statuses} total={a.created} title={c.title} tall={c.key === 'patp' ? true : c.key === 'cac' ? 'compact' : false} />
+                    <StatusBreakdown statuses={a.statuses} total={a.created} title={c.title} tall={c.key === 'patp' || c.key === 'cac' ? 'compact' : false} />
                   </ModuleCard>
                 )
               })}

@@ -501,6 +501,59 @@ const Q = {
     union all
     select * from res_mat`,
 
+  // Site Transfer (INTINV-007, khusus material) per system key di universe mpsMaterial (termasuk Reserved/Ready).
+  // Line transfer diambil dari semua transaksi system key; dedupe per (sk, po, line) memakai baris interface terbaru.
+  // Status dari ACK terbaru per baris (kolom i.ack_status tidak mencatat ERROR).
+  // a = qty transfer x net price PO terbaru (IDR); Not Sent = nilai line material yang belum ditransfer.
+  siteTransfer: `${MPS_SK_VAL(false)},
+      m as (select t.mps_transaction_id, max(nullif(t.vendor_code,'')) vc,
+          ${DT('greatest(max(t.created_date), max(okx.ut))')} d
+        from mps_transaction t join okx on okx.transaction_id = t.mps_transaction_id group by 1),
+      txsk as materialized (select distinct system_key from mapping_systemkey_po
+        where transaction_id is not null and transaction_id <> '' and system_key is not null),
+      u as materialized (
+        select val.system_key sk, m.vc v, m.d d, coalesce(val.a, 0) a
+        from val join m on m.mps_transaction_id = val.transaction_id where val.nm > 0
+        union all
+        select p.system_key, max(nullif(p.vendor_code,'')), ${DT('max(coalesce(p.update_time, p.create_time))')},
+          coalesce(sum(case when not ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0)
+        from mapping_systemkey_po p
+        left join lateral (select t.net_price::numeric np from transaction_po t where t.po_number = p.po and t.line_subline = p.material_line_item
+            and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+          order by t.created_at desc, t.id desc limit 1) tp on true
+        where p.status_id in (1,2) and ${IN_PO('p.po')} and p.system_key is not null and p.system_key <> ''
+          and not exists (select 1 from txsk where txsk.system_key = p.system_key)
+        group by p.system_key
+        having count(*) filter (where not ${IS_SVC('p')}) > 0),
+      st_line as materialized (
+        select distinct on (mp.system_key, mp.po, mp.material_line_item)
+          i.id, mp.system_key sk, mp.po, mp.material_line_item li, i.quantity_gi q, i.created_at ct
+        from oracle_fusion_intinv_007_interface i
+        join mapping_systemkey_po mp on mp.mps_id = i.mps_id
+        where coalesce(i.export_status,'') <> 'GATE_FILTERED' and mp.system_key in (select sk from u)
+        order by mp.system_key, mp.po, mp.material_line_item, i.id desc),
+      st_ack as materialized (
+        select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+        from oracle_fusion_intinv_007_ack a where a.interface_id_ref in (select id from st_line)
+        order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
+      st_agg as materialized (
+        select l.sk, count(*) lines,
+          count(*) filter (where k.ack_status = 'SUCCESS') ok,
+          count(*) filter (where k.ack_status = 'ERROR') err,
+          sum(case when l.q::text ~ ${NUM_RE} then l.q::numeric * tp.np end) a,
+          ${DT('max(l.ct)')} d
+        from st_line l
+        left join st_ack k on k.interface_id_ref = l.id
+        left join lateral (select t.net_price::numeric np from transaction_po t where t.po_number = l.po and t.line_subline = l.li
+            and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+          order by t.created_at desc, t.id desc limit 1) tp on true
+        group by l.sk)
+    select v, s, d, count(*) n, coalesce(sum(a), 0)::bigint a from (
+      select u.v, coalesce(g.d, u.d) d,
+        case when g.sk is null then u.a else coalesce(g.a, 0) end a,
+        ${FUNNEL_STATUS} s
+      from u left join st_agg g on g.sk = u.sk) x group by 1,2,3`,
+
   // Reserved/Ready: 1 system key = 1 baris (unik global). System key yang sudah punya transaksi MPS dikeluarkan.
   // Rp = sum(quanty_mapping x net_price PO terbaru, IDR) semua line; a_svc = service lines only (untuk of-Y CAC).
   mpsReserved: `with txsk as materialized (select distinct system_key from mapping_systemkey_po
@@ -966,6 +1019,7 @@ async function main() {
     mps: toRows(dropSvc(mpsRaw)),
     mpsReserved: toRows(dropSvc(mpsResRaw), { normalize: false }),
     mpsMaterial: toRows(raw.mpsMaterial),
+    siteTransfer: toRows(raw.siteTransfer),
     mpsService: toRows([...asService(mpsRaw), ...asService(mpsResRaw)], { normalize: false }),
     matc: toRows(raw.matc),
     matcGr: toRows(raw.matcGr),

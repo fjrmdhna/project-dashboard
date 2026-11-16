@@ -94,11 +94,20 @@ export function StatusBar({ statuses, total }: { statuses: StatusItem[]; total: 
       {BAR_ORDER.filter((g) => groups[g] > 0).map((g) => {
         const share = (groups[g] / total) * 100
         const value = hasAmount ? `, ${formatIdrFull(amounts[g])}` : ''
-        const label = hasAmount ? formatIdr(amounts[g]) : ''
-        // Dengan nilai: lebar mengikuti proporsi (flex-grow) tetapi minimal selebar teks Rp agar tetap terbaca.
-        // Tanpa nilai: lebar % murni.
+        // Segmen kecil (share < 8%): label ringkas (Rp 154 B) supaya muat di zoom/DPI Windows.
+        const label = hasAmount
+          ? share < 8
+            ? formatIdr(amounts[g]).replace(/(\d+)\.\d+/, (_, n) => n)
+            : formatIdr(amounts[g])
+          : ''
+        // Segmen kecil tidak menyusut; segmen besar menyerap lebih agresif.
         const sizing: CSSProperties = hasAmount
-          ? { flexGrow: share, flexShrink: 1, flexBasis: 0, minWidth: `calc(${label.length}ch + 8px)` }
+          ? {
+              flexGrow: Math.max(share, 0.01),
+              flexShrink: share < 8 ? 0 : 4,
+              flexBasis: 0,
+              minWidth: `calc(${label.length}ch + 6px)`,
+            }
           : { width: `${share}%` }
         return (
           <div
