@@ -80,7 +80,7 @@ export function PatpFusionMini({ legs, total, basis = 'Fully Approved PATP' }: {
     const m = rows[0]
     return (
       <div
-        className="ml-auto flex w-full min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-md bg-slate-50 px-1.5 py-1 ring-1 ring-inset ring-slate-200/70 text-[9px] leading-3 text-slate-700"
+        className="ml-auto flex w-full min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-md bg-slate-50 px-1.5 py-0.5 ring-1 ring-inset ring-slate-200/70 text-[8px] leading-3 text-slate-700"
         title={m.detail}
         aria-label={m.detail}
       >
@@ -93,7 +93,6 @@ export function PatpFusionMini({ legs, total, basis = 'Fully Approved PATP' }: {
         <span className={`shrink-0 tabular-nums ${m.success > 0 ? 'font-semibold text-emerald-700' : 'text-slate-400'}`}>
           {fmt(m.success)} ACK
         </span>
-        <span className="shrink-0 tabular-nums text-slate-500">{pct(m.success, m.sent)}</span>
         {hasAmount && (
           <span className="min-w-0 truncate tabular-nums text-slate-600" title={m.ackAmount > 0 ? formatIdrFull(m.ackAmount) : undefined}>
             {m.ackAmount > 0 ? formatIdr(m.ackAmount) : '—'}
@@ -103,15 +102,16 @@ export function PatpFusionMini({ legs, total, basis = 'Fully Approved PATP' }: {
     )
   }
 
+  // Kolom: label | bar | sent | ACK | (Rp optional). % tidak ditampilkan — ada di tooltip.
   const cols = hasAmount
-    ? 'grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto_auto_auto_auto]'
-    : 'grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto_auto_auto]'
+    ? 'grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto_auto_auto]'
+    : 'grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto_auto]'
   return (
     <div className={`grid ${cols} ml-auto w-full min-w-0 max-w-full items-center gap-x-1 gap-y-px overflow-hidden rounded-md bg-slate-50 px-1.5 py-0.5 ring-1 ring-inset ring-slate-200/70`}>
       {rows.map((m) => (
         <div
           key={m.leg.label}
-          className="col-span-full grid min-w-0 grid-cols-subgrid items-center text-[9px] font-normal leading-3 text-slate-700"
+          className="col-span-full grid min-w-0 grid-cols-subgrid items-center text-[8px] font-normal leading-3 text-slate-700"
           title={m.detail}
           aria-label={m.detail}
         >
@@ -124,7 +124,6 @@ export function PatpFusionMini({ legs, total, basis = 'Fully Approved PATP' }: {
           <span className={`shrink-0 whitespace-nowrap text-right tabular-nums ${m.success > 0 ? 'font-semibold text-emerald-700' : 'text-slate-400'}`}>
             {fmt(m.success)} ACK
           </span>
-          <span className="w-6 shrink-0 text-right tabular-nums text-slate-500">{pct(m.success, m.sent)}</span>
           {hasAmount && (
             <span className="max-w-[4.25rem] shrink-0 truncate text-right tabular-nums text-slate-600" title={m.ackAmount > 0 ? formatIdrFull(m.ackAmount) : undefined}>
               {m.ackAmount > 0 ? formatIdr(m.ackAmount) : '—'}

@@ -164,12 +164,21 @@ const PATP_BASE_CTE = (withMtSc) => `with tx as materialized (select p.transacti
     fatp_need as materialized (select sk, v, d from need where need_fatp),
     patp_need as materialized (select sk, v, d from need where need_patp),
     latest_patp as materialized (
-      select distinct on (la.system_key)
-        la.system_key sk, la.acceptance_number an, n.v, n.d, la.status st
-      from list_acceptance la
-      join patp_need n on n.sk = la.system_key
-      where la.acceptance_number like 'PATP-%'
-      order by la.system_key, coalesce(la.update_time, la.create_time) desc nulls last, la.acceptance_number desc),
+      select p.sk, coalesce(fa.an, p.an) an, p.v, p.d, coalesce(fa.st, p.st) st
+      from (
+        select distinct on (la.system_key)
+          la.system_key sk, la.acceptance_number an, n.v, n.d, la.status st
+        from list_acceptance la
+        join patp_need n on n.sk = la.system_key
+        where la.acceptance_number like 'PATP-%'
+        order by la.system_key, coalesce(la.update_time, la.create_time) desc nulls last, la.acceptance_number desc) p
+      left join lateral (
+        select x.acceptance_number an, x.status st
+        from list_acceptance x
+        where x.system_key = p.sk and x.acceptance_number like 'PATP-%'
+          and x.status like 'Acceptance Fully Approved%'
+        order by coalesce(x.update_time, x.create_time) desc nulls last, x.acceptance_number desc
+        limit 1) fa on true),
     latest_fatp as materialized (
       select distinct on (la.system_key)
         la.system_key sk, la.acceptance_number an, n.v, n.d, la.status st
@@ -197,19 +206,24 @@ const MPS_SK_VAL = (onlyMatc) => `with tx as materialized (select p.transaction_
           order by t.created_at desc, t.id desc limit 1) tp on true
         group by 1,2)`
 
-// MATC per SYSTEM KEY (bukan per BA): 1 system key = 1 baris, memakai BA MATC TERBARU bila ada di beberapa BA
-// (updated_date, fallback created_date, tie-break ba_number). Kolom tetap ba_number, sk, d, a agar query hilir tidak berubah.
-// Hanya system key yang punya MPS dan >= 1 line material; Rp (a) = line material saja (harga PO terbaru, IDR).
-const MATC_BA = (alias) => `select z.ba_number, z.sk, z.d, coalesce(v.a, 0) a from (
-              select ba_number, sk, d from (
-                select ${alias}.ba_number, dd.system_key sk, ${DT(`max(coalesce(${alias}.updated_date, ${alias}.created_date))`)} d,
-                  row_number() over (partition by dd.system_key
-                    order by max(coalesce(${alias}.updated_date, ${alias}.created_date)) desc nulls last, ${alias}.ba_number desc) rn
-                from material_certificates ${alias}
-                join material_certificate_details dd on dd.ba_number = ${alias}.ba_number
-                where ${BA_SCOPE('material_certificate_details', `${alias}.ba_number`)}
+// MATC per unique system key: 1 SK = 1 baris. Status = prioritas workflow lintas semua BA
+// (completed > in_progress > rejected > none). Rp (a) = line material MPS (harga PO terbaru, IDR).
+const MATC_SK = `select z.sk, z.d, coalesce(v.a, 0) a, z.wf from (
+              select b.sk, ${DT('max(b.ts)')} d,
+                case when bool_or(w.wf = 'completed') then 'completed'
+                     when bool_or(w.wf = 'in_progress') then 'in_progress'
+                     when bool_or(w.wf = 'rejected') then 'rejected'
+                     else null end wf
+              from (
+                select mc.ba_number, dd.system_key sk,
+                  max(coalesce(mc.updated_date, mc.created_date)) ts
+                from material_certificates mc
+                join material_certificate_details dd on dd.ba_number = mc.ba_number
+                where ${BA_SCOPE('material_certificate_details', 'mc.ba_number')}
                   and dd.system_key is not null and dd.system_key <> ''
-                group by ${alias}.ba_number, dd.system_key) r where rn = 1) z
+                group by mc.ba_number, dd.system_key) b
+              left join lateral (select ${WF_LATEST('material_certificates', 'b.ba_number')} wf) w on true
+              group by b.sk) z
             join (${MPS_SK_VAL(true)} select system_key, a from val where nm > 0) v on v.system_key = z.sk`
 
 // ---------- Query: semua mengembalikan baris (v = vendor_code, s = status, n = jumlah, x = extra) ----------
@@ -269,7 +283,12 @@ const PATP_QUERIES = (() => {
         group by lp.sk)`
   const funnelTail = `
     b as materialized (select sk, an, v, d, st from latest_patp where st like 'Acceptance Fully Approved%'),
-    b_an as materialized (select distinct an from b),
+    b_an as materialized (
+      select distinct la.system_key sk, la.acceptance_number an
+      from list_acceptance la
+      where la.acceptance_number like 'PATP-%'
+        and la.status like 'Acceptance Fully Approved%'
+        and la.system_key in (select sk from b)),
     gi_i as materialized (
       select i.id, i.system_key sk from oracle_fusion_intinv_006_interface i
       where coalesce(i.export_status,'') <> 'GATE_FILTERED' and i.system_key in (select sk from b)),
@@ -283,7 +302,7 @@ const PATP_QUERIES = (() => {
         count(*) filter (where k.ack_status = 'SUCCESS') ok
       from gi_i i left join gi_ack k on k.interface_id_ref = i.id group by i.sk),
     gr_i as materialized (
-      select distinct i.id, ba.an from b_an ba
+      select distinct i.id, ba.sk from b_an ba
       join oracle_fusion_intinv_005_interface i
         on (i.acceptance_number = ba.an or i.ba_reference = ba.an)
       where coalesce(i.file_type,'') ilike 'service%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
@@ -292,24 +311,25 @@ const PATP_QUERIES = (() => {
       from oracle_fusion_intinv_005_ack a where a.interface_id_ref in (select id from gr_i)
       order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
     gr_agg as materialized (
-      select i.an, count(*) lines,
+      select i.sk, count(*) lines,
         count(*) filter (where k.ack_status = 'ERROR') err,
         count(*) filter (where k.ack_status = 'SUCCESS') ok
-      from gr_i i left join gr_ack k on k.interface_id_ref = i.id group by i.an),
+      from gr_i i left join gr_ack k on k.interface_id_ref = i.id group by i.sk),
     fa as materialized (
-      select distinct i.id, kk.kx from oracle_fusion_intppm_002_interface i
-      cross join lateral (select distinct x kx from (values (i.receipt_number), (regexp_replace(i.receipt_number, '_[0-9]+$', ''))) v(x)) kk
-      where coalesce(i.export_status,'') <> 'GATE_FILTERED'
-        and i.receipt_number like 'PATP-%' and kk.kx in (select an from b_an)),
+      select distinct i.id, ba.sk from b_an ba
+      join oracle_fusion_intppm_002_interface i
+        on i.receipt_number like 'PATP-%'
+       and coalesce(i.export_status,'') <> 'GATE_FILTERED'
+       and (i.receipt_number = ba.an or regexp_replace(i.receipt_number, '_[0-9]+$', '') = ba.an)),
     fa_ack as materialized (
       select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
       from oracle_fusion_intppm_002_ack a where a.interface_id_ref in (select id from fa)
       order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
     fl as materialized (
-      select f.kx, count(*) lines,
+      select f.sk, count(*) lines,
         count(*) filter (where k.ack_status = 'ERROR') err,
         count(*) filter (where k.ack_status = 'SUCCESS') ok
-      from fa f left join fa_ack k on k.interface_id_ref = f.id group by f.kx)`
+      from fa f left join fa_ack k on k.interface_id_ref = f.id group by f.sk)`
   const coreSelect = `
     select 'patp' k, v, s, d, count(*) n, sum(a)::bigint a from (
       select lp.v, lp.st s, lp.d, coalesce(pv.a, 0) a
@@ -325,10 +345,10 @@ const PATP_QUERIES = (() => {
       from b left join pv on pv.sk = b.sk left join gi_agg g on g.sk = b.sk) x group by 2,3,4
     union all select 'patpGr' k, v, s, d, count(*) n, sum(a)::bigint a from (
       select b.v, b.d, coalesce(pv.a, 0) a, ${FUNNEL_STATUS} s
-      from b left join pv on pv.sk = b.sk left join gr_agg g on g.an = b.an) x group by 2,3,4
+      from b left join pv on pv.sk = b.sk left join gr_agg g on g.sk = b.sk) x group by 2,3,4
     union all select 'patpFa' k, v, s, d, count(*) n, sum(a)::bigint a from (
       select b.v, b.d, coalesce(pv.a, 0) a, ${FUNNEL_STATUS} s
-      from b left join pv on pv.sk = b.sk left join fl g on g.kx = b.an) x group by 2,3,4`
+      from b left join pv on pv.sk = b.sk left join fl g on g.sk = b.sk) x group by 2,3,4`
   // Query ringan of-Y saja (jalan di DBX meski patpAll di-skip).
   // Pakai withMtSc=true agar universe of-Y sama dengan jalur pg (~100rb; include Reserved via sitelist_mt).
   const patpScopeVal = `${PATP_BASE_CTE(true)},${scopeVal}
@@ -350,69 +370,8 @@ const PATP_QUERIES = (() => {
     ${coreSelect}`,
     patpScopeVal,
     patpFunnel: `${base},
-    b as materialized (select sk, an, v, d, st from latest_patp where st like 'Acceptance Fully Approved%'),
-    b_an as materialized (select distinct an from b),
-    l as materialized (
-      select s.acceptance_number, s.po_number, s.line_item, s.mapping_po_sk_quantity
-        from service_powo_acceptance s where s.acceptance_number in (select an from b_an)
-      union all
-      select m.acceptance_number, m.po_number, m.line_item, m.mapping_po_sk_quantity
-        from material_acceptance m where m.acceptance_number in (select an from b_an)),
-    mp as materialized (select distinct on (po, material_line_item, system_key) po, material_line_item, system_key, quanty_mapping
-      from mapping_systemkey_po where po in (select po_number from l) order by po, material_line_item, system_key, id desc),
-    pv as materialized (
-      select b.sk, sum(
-          case when l.mapping_po_sk_quantity ~ ${NUM_RE} then least(l.mapping_po_sk_quantity::numeric,
-                case when mp.quanty_mapping::text ~ ${NUM_RE} then mp.quanty_mapping::numeric else l.mapping_po_sk_quantity::numeric end) end
-          * case when tp.net_price ~ ${NUM_RE} then tp.net_price::numeric end) a
-        from b
-        join l on l.acceptance_number = b.an
-        left join mp on mp.po = l.po_number and mp.material_line_item = l.line_item and mp.system_key = b.sk
-        join lateral (select t.net_price, t.currency from transaction_po t
-          where t.po_number = l.po_number and t.line_subline = l.line_item
-          order by t.created_at desc, t.id desc limit 1) tp on true
-        where upper(trim(coalesce(tp.currency,''))) = 'IDR'
-        group by b.sk),
-    gi_i as materialized (
-      select i.id, i.system_key sk from oracle_fusion_intinv_006_interface i
-      where coalesce(i.export_status,'') <> 'GATE_FILTERED' and i.system_key in (select sk from b)),
-    gi_ack as materialized (
-      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
-      from oracle_fusion_intinv_006_ack a where a.interface_id_ref in (select id from gi_i)
-      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
-    gi_agg as materialized (
-      select i.sk, count(*) lines,
-        count(*) filter (where k.ack_status = 'ERROR') err,
-        count(*) filter (where k.ack_status = 'SUCCESS') ok
-      from gi_i i left join gi_ack k on k.interface_id_ref = i.id group by i.sk),
-    gr_i as materialized (
-      select distinct i.id, ba.an from b_an ba
-      join oracle_fusion_intinv_005_interface i
-        on (i.acceptance_number = ba.an or i.ba_reference = ba.an)
-      where coalesce(i.file_type,'') ilike 'service%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
-    gr_ack as materialized (
-      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
-      from oracle_fusion_intinv_005_ack a where a.interface_id_ref in (select id from gr_i)
-      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
-    gr_agg as materialized (
-      select i.an, count(*) lines,
-        count(*) filter (where k.ack_status = 'ERROR') err,
-        count(*) filter (where k.ack_status = 'SUCCESS') ok
-      from gr_i i left join gr_ack k on k.interface_id_ref = i.id group by i.an),
-    fa as materialized (
-      select distinct i.id, kk.kx from oracle_fusion_intppm_002_interface i
-      cross join lateral (select distinct x kx from (values (i.receipt_number), (regexp_replace(i.receipt_number, '_[0-9]+$', ''))) v(x)) kk
-      where coalesce(i.export_status,'') <> 'GATE_FILTERED'
-        and i.receipt_number like 'PATP-%' and kk.kx in (select an from b_an)),
-    fa_ack as materialized (
-      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
-      from oracle_fusion_intppm_002_ack a where a.interface_id_ref in (select id from fa)
-      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
-    fl as materialized (
-      select f.kx, count(*) lines,
-        count(*) filter (where k.ack_status = 'ERROR') err,
-        count(*) filter (where k.ack_status = 'SUCCESS') ok
-      from fa f left join fa_ack k on k.interface_id_ref = f.id group by f.kx)
+    ${funnelTail},
+    ${pvLatest}
     ${funnelSelect}`,
   }
 })()
@@ -572,36 +531,57 @@ const Q = {
       group by p.system_key) x group by 1,3`,
 
   matc: `select v, s, d, count(*) n, sum(a)::bigint a from (
-      select ${VENDOR_BY_SYSTEM_KEY('m.sk')} v, ${WF_LABEL} s, m.d d, m.a a
-      from (${MATC_BA('mc')}) m
-      cross join lateral (select ${WF_LATEST('material_certificates', 'm.ba_number')} wf) l) x group by 1,2,3`,
+      select ${VENDOR_BY_SYSTEM_KEY('m.sk')} v,
+        case m.wf when 'completed' then 'Fully Approved' when 'in_progress' then 'In Progress'
+          when 'rejected' then 'Rejected' else 'No Workflow' end s,
+        m.d d, m.a a
+      from (${MATC_SK}) m) x group by 1,2,3`,
 
-  // ACK dibaca dari tabel ack terbaru per baris (kolom i.ack_status di tabel interface tidak selalu ikut terisi).
-  // GR Material (INTINV-005) per BA MATC yang Fully Approved. Aturan sama dengan gate BAST di PMIS:
-  // hanya file_type non-service, line yang di-reject GR Control tidak dihitung.
-  matcGr: `select v, s, d, count(*) n, sum(a)::bigint a from (
-      select ${VENDOR_BY_SYSTEM_KEY('m.sk')} v, m.d d, m.a a,
-        case when g.ba_number is null then 'Not Sent' when g.err > 0 then 'ACK Error'
+  // GR Material (INTINV-005): basis = unique SK Fully Approved (prioritas workflow).
+  // Match material files across ALL completed BAs for that SK (bukan BA terbaru saja); ACK digabung per SK.
+  // Line GATE_FILTERED / GR-rejected tidak dihitung.
+  matcGr: `with fa as materialized (select sk, d, a from (${MATC_SK}) m where m.wf = 'completed'),
+    fa_ba as materialized (
+      select distinct b.ba, b.sk from (
+        select mc.ba_number ba, dd.system_key sk
+        from material_certificates mc
+        join material_certificate_details dd on dd.ba_number = mc.ba_number
+        where ${BA_SCOPE('material_certificate_details', 'mc.ba_number')}
+          and dd.system_key is not null and dd.system_key <> ''
+        group by mc.ba_number, dd.system_key) b
+      where b.sk in (select sk from fa)
+        and ${WF_LATEST('material_certificates', 'b.ba')} = 'completed'),
+    lines as materialized (
+      select fb.sk, i.id, i.export_status
+      from oracle_fusion_intinv_005_interface i
+      join fa_ba fb on fb.ba = i.ba_number
+      where coalesce(i.file_type,'') not ilike 'service%'
+        and coalesce(i.export_status,'') <> 'GATE_FILTERED'
+        and not exists (select 1 from material_certificate_details rej where rej.ba_number = i.ba_number
+          and rej.line_item = i.line_item::text and rej.gr_rejected_at is not null)),
+    ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intinv_005_ack a where a.interface_id_ref in (select id from lines)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
+    g as materialized (
+      select l.sk, count(*) lines,
+        count(*) filter (where l.export_status = 'EXPORTED' or k.ack_status is not null) sent,
+        count(*) filter (where k.ack_status = 'SUCCESS') ok,
+        count(*) filter (where k.ack_status = 'ERROR') err
+      from lines l left join ack k on k.interface_id_ref = l.id
+      group by l.sk)
+    select v, s, d, count(*) n, sum(a)::bigint a from (
+      select ${VENDOR_BY_SYSTEM_KEY('f.sk')} v, f.d d, f.a a,
+        case when g.sk is null then 'Not Sent' when g.err > 0 then 'ACK Error'
              when g.ok = g.lines then 'ACK Success' when g.sent > 0 then 'Waiting ACK' else 'Not Sent' end s
-      from (${MATC_BA('mcx')}) m
-      left join (select i.ba_number, count(*) lines,
-                   count(*) filter (where i.export_status = 'EXPORTED' or k.ack_status is not null) sent,
-                   count(*) filter (where k.ack_status = 'SUCCESS') ok,
-                   count(*) filter (where k.ack_status = 'ERROR') err
-                 from oracle_fusion_intinv_005_interface i
-                 left join lateral (select a.ack_status from oracle_fusion_intinv_005_ack a where a.interface_id_ref = i.id
-                   order by a.processing_date desc nulls last, a.id desc limit 1) k on true
-                 where coalesce(i.file_type,'') not ilike 'service%'
-                   and not exists (select 1 from material_certificate_details rej where rej.ba_number = i.ba_number
-                     and rej.line_item = i.line_item::text and rej.gr_rejected_at is not null)
-                 group by 1) g on g.ba_number = m.ba_number
-      where ${WF_LATEST('material_certificates', 'm.ba_number')} = 'completed') x group by 1,2,3`,
+      from fa f left join g on g.sk = f.sk) x group by 1,2,3`,
 
   // PATP: di pg = 1 query monolit (need CTE sekali). Di DBX default di-skip (lihat SKIP_PATP_ON_DBX).
   ...PATP_QUERIES,
 
-  // CAC: 1 system key = 1 (BA terbaru). Funnel GR/FA per Fully Approved SK
-  // (ACK dihitung per BA via hash-join, lalu di-join ke SK — sama pola PATP).
+  // CAC: 1 system key = 1. Status = prioritas workflow lintas semua BA
+  // (completed > in_progress > rejected > none). Rp dari BA preferensi (rank sama).
+  // Funnel GR/FA: basis SK Fully Approved; match interface ke semua BA completed milik SK.
   // Rp = realisation Appendix 2 SERVICE lines only (IS_SVC); material excluded.
   // SK tanpa line service tetap dihitung (n) dengan a = 0.
   cacAll: `with scoped_ba as materialized (
@@ -611,19 +591,36 @@ const Q = {
           bool_or(x.po_number is not null and x.po_number not in (select po from scope_po)) has_out
         from acceptance_certificate_detail x group by 1) t
       where has_in and not has_out),
-    latest as materialized (
-      select distinct on (d.system_key)
-        d.system_key sk, h.ba_number ba, nullif(h.vendor_code,'') v,
-        ${DT('coalesce(h.updated_at, h.created_at)')} d
+    ba_sk_all as materialized (
+      select distinct d.system_key sk, h.ba_number ba, nullif(h.vendor_code,'') v,
+        coalesce(h.updated_at, h.created_at) ts
       from acceptance_certificate_detail d
       join scoped_ba s on s.ba = d.ba_number
       join acceptance_certificate_header h on h.ba_number = d.ba_number
-      where d.system_key is not null and d.system_key <> ''
-      order by d.system_key, coalesce(h.updated_at, h.created_at) desc nulls last, h.ba_number desc),
+      where d.system_key is not null and d.system_key <> ''),
+    wf as materialized (
+      select distinct on (w.entity_id) w.entity_id ba, w.status wf
+      from workflow_instances w
+      where w.entity_type = 'acceptance_certificates' and w.entity_id in (select ba from ba_sk_all)
+      order by w.entity_id, w.version desc, w.id desc),
+    sk_status as materialized (
+      select b.sk, max(b.v) v, ${DT('max(b.ts)')} d,
+        case when bool_or(w.wf = 'completed') then 'completed'
+             when bool_or(w.wf = 'in_progress') then 'in_progress'
+             when bool_or(w.wf = 'rejected') then 'rejected'
+             else null end wf
+      from ba_sk_all b left join wf w on w.ba = b.ba
+      group by b.sk),
+    preferred as materialized (
+      select distinct on (b.sk) b.sk, b.ba
+      from ba_sk_all b left join wf w on w.ba = b.ba
+      order by b.sk,
+        case w.wf when 'completed' then 0 when 'in_progress' then 1 when 'rejected' then 2 else 3 end,
+        b.ts desc nulls last, b.ba desc),
     det as materialized (
-      select d.id, l.sk, d.mapping_id, d.po_number, d.line_item, d.network_header
-      from latest l
-      join acceptance_certificate_detail d on d.ba_number = l.ba and d.system_key = l.sk),
+      select d.id, p.sk, d.mapping_id, d.po_number, d.line_item, d.network_header
+      from preferred p
+      join acceptance_certificate_detail d on d.ba_number = p.ba and d.system_key = p.sk),
     mp as materialized (
       select d.id, m.quanty_mapping, m.po, m.material_line_item
       from det d join mapping_systemkey_po m on m.id = d.mapping_id
@@ -651,18 +648,16 @@ const Q = {
       join mp on mp.id = d.id
       join tp on tp.po_number = mp.po and tp.line_subline = mp.material_line_item
       group by d.sk),
-    wf as materialized (
-      select distinct on (w.entity_id) w.entity_id ba, w.status wf
-      from workflow_instances w
-      where w.entity_type = 'acceptance_certificates' and w.entity_id in (select ba from latest)
-      order by w.entity_id, w.version desc, w.id desc),
     latest_cac as materialized (
-      select l.sk, l.ba, l.v, l.d, coalesce(sv.a, 0) a, wf.wf
-      from latest l
-      left join sk_val sv on sv.sk = l.sk
-      left join wf on wf.ba = l.ba),
-    b as materialized (select sk, ba, v, d, a from latest_cac where wf = 'completed'),
-    ba_done as materialized (select distinct ba from b),
+      select s.sk, s.v, s.d, coalesce(sv.a, 0) a, s.wf
+      from sk_status s
+      left join sk_val sv on sv.sk = s.sk),
+    b as materialized (select sk, v, d, a from latest_cac where wf = 'completed'),
+    ba_done as materialized (
+      select distinct bsa.ba
+      from ba_sk_all bsa
+      join wf on wf.ba = bsa.ba and wf.wf = 'completed'
+      where bsa.sk in (select sk from b)),
     ba_sk as materialized (
       select distinct d.ba_number ba, d.system_key sk from acceptance_certificate_detail d
       where d.ba_number in (select ba from ba_done) and d.system_key is not null and d.system_key <> ''),
@@ -692,10 +687,13 @@ const Q = {
       from oracle_fusion_intinv_005_ack a where a.interface_id_ref in (select id from gr_match)
       order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
     gr_agg as materialized (
-      select g.ba, count(*) lines,
-        count(*) filter (where k.ack_status = 'ERROR') err,
-        count(*) filter (where k.ack_status = 'SUCCESS') ok
-      from gr_match g left join gr_ack k on k.interface_id_ref = g.id group by g.ba),
+      select bs.sk, count(distinct g.id) lines,
+        count(distinct g.id) filter (where k.ack_status = 'ERROR') err,
+        count(distinct g.id) filter (where k.ack_status = 'SUCCESS') ok
+      from gr_match g
+      join ba_sk bs on bs.ba = g.ba
+      left join gr_ack k on k.interface_id_ref = g.id
+      group by bs.sk),
     gr_an as materialized (select distinct ba, an from gr_match where an is not null),
     fa_i as materialized (
       select i.id, i.po_number po, i.receipt_number rn,
@@ -713,18 +711,21 @@ const Q = {
       from oracle_fusion_intppm_002_ack a where a.interface_id_ref in (select id from fa_match)
       order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
     fa_agg as materialized (
-      select f.ba, count(*) lines,
-        count(*) filter (where k.ack_status = 'ERROR') err,
-        count(*) filter (where k.ack_status = 'SUCCESS') ok
-      from fa_match f left join fa_ack k on k.interface_id_ref = f.id group by f.ba)
+      select bs.sk, count(distinct f.id) lines,
+        count(distinct f.id) filter (where k.ack_status = 'ERROR') err,
+        count(distinct f.id) filter (where k.ack_status = 'SUCCESS') ok
+      from fa_match f
+      join ba_sk bs on bs.ba = f.ba
+      left join fa_ack k on k.interface_id_ref = f.id
+      group by bs.sk)
     select 'cac' k, v, s, d, count(*) n, sum(a)::bigint a from (
       select v, ${WF_LABEL} s, d, a from latest_cac) x group by 2,3,4
     union all select 'cacGr' k, v, s, d, count(*) n, sum(a)::bigint a from (
       select b.v, b.d, b.a, ${FUNNEL_STATUS} s
-      from b left join gr_agg g on g.ba = b.ba) y group by 2,3,4
+      from b left join gr_agg g on g.sk = b.sk) y group by 2,3,4
     union all select 'cacFa' k, v, s, d, count(*) n, sum(a)::bigint a from (
       select b.v, b.d, b.a, ${FUNNEL_STATUS} s
-      from b left join fa_agg g on g.ba = b.ba) z group by 2,3,4`,
+      from b left join fa_agg g on g.sk = b.sk) z group by 2,3,4`,
 
   // 1 system key = 1 hitungan; status approval SK pada endorsement TERBARU.
   endorsement: `with e as materialized (

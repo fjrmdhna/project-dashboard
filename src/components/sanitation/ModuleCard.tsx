@@ -44,34 +44,34 @@ export function ModuleCard({ title, value, unit, amountLabel, subValue, hint, to
       } ${className ?? ''}`}
     >
       <div className={`absolute inset-y-0 left-0 w-1 ${t.bar}`} />
-      <div className={`flex min-h-0 flex-1 flex-col pl-4 pr-4 pt-2 ${divided ? 'gap-1 pb-3' : 'gap-1.5 pb-2.5'}`}>
-        <div className="flex shrink-0 items-center justify-between gap-2">
-          <h2 className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${t.chip}`}>{title}</h2>
+      <div className={`flex min-h-0 flex-1 flex-col pl-3 pr-3 pt-1.5 ${divided ? 'gap-0.5 pb-2.5' : 'gap-1 pb-2'}`}>
+        <div className="flex shrink-0 items-center justify-between gap-1.5">
+          <h2 className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${t.chip}`}>{title}</h2>
           <span
             tabIndex={0}
             title={hint}
             aria-label={`Counting unit: ${hint}`}
-            className="flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
+            className="flex h-3.5 w-3.5 shrink-0 cursor-help items-center justify-center rounded-full border border-slate-300 text-[9px] font-bold text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
           >
             i
           </span>
         </div>
         {/* note/funnel boleh menyusut agar StatusBar + 1 status + All statuses tidak terpotong */}
-        <div className={`flex min-h-0 min-w-0 justify-between gap-2 ${note ? 'min-h-0 shrink' : 'shrink-0'} ${divided ? 'items-center' : 'items-end'}`}>
+        <div className={`flex min-h-0 min-w-0 justify-between gap-1.5 ${note ? 'min-h-0 shrink' : 'shrink-0'} ${divided ? 'items-center' : 'items-end'}`}>
           <div className={`min-w-0 text-slate-900 ${note ? 'max-w-[40%] shrink' : 'shrink-0 whitespace-nowrap'}`}>
             <div className="truncate whitespace-nowrap">
-              <span className={`${note ? 'text-lg' : 'text-2xl'} font-extrabold tabular-nums leading-none`}>{fmt(value)}</span>
-              {unit && <span className="ml-1 text-xs font-bold">{unit}</span>}
-              {amountLabel && <span className="ml-1 text-[11px] font-semibold tabular-nums text-slate-600">· {amountLabel}</span>}
-              {subValue && !stackSub && <span className="ml-1 text-[10px] text-slate-600">({subValue})</span>}
+              <span className={`${note ? 'text-base' : 'text-xl'} font-extrabold tabular-nums leading-none`}>{fmt(value)}</span>
+              {unit && <span className="ml-1 text-[10px] font-bold">{unit}</span>}
+              {amountLabel && <span className="ml-1 text-[10px] font-semibold tabular-nums text-slate-600">· {amountLabel}</span>}
+              {subValue && !stackSub && <span className="ml-1 text-[9px] text-slate-600">({subValue})</span>}
             </div>
             {subValue && stackSub && (
-              <div className="mt-0.5 truncate text-[10px] font-normal leading-tight text-slate-600" title={subValue}>
+              <div className="mt-0.5 truncate text-[9px] font-normal leading-tight text-slate-600" title={subValue}>
                 ({subValue})
               </div>
             )}
           </div>
-          {note && <div className="min-h-0 min-w-0 flex-1 overflow-hidden text-right text-[11px] font-semibold leading-tight text-slate-600">{note}</div>}
+          {note && <div className="min-h-0 min-w-0 flex-1 overflow-hidden text-right text-[10px] font-semibold leading-tight text-slate-600">{note}</div>}
         </div>
         {/* min-h: StatusBar + 1 row + All statuses harus selalu muat */}
         <div className={`flex min-h-[3.25rem] flex-1 flex-col overflow-hidden ${divided ? 'border-t border-slate-200 pt-1' : ''}`}>{children}</div>

@@ -35,29 +35,26 @@ type CardDef = {
   tone: ModuleCardTone
   unit?: string
   hint: string
-  /** Lebar ~1,5× card biasa di grid lg (funnel Fusion multi-tahap). */
-  wide?: boolean
 }
 
-/** Grid 8 kolom di lg: card biasa span 2 (25%), PATP/CAC span 3 (~37,5%). */
+/** Urutan tampilan = alur bisnis. Grid lg 12 kolom: baris 1 = 4 card, baris 2–3 = 3 card. */
 const CARDS: CardDef[] = [
   { key: 'mps', title: 'MPS', tone: 'cyan', hint: 'Counted per unique system key. Keys with an MPS transaction use the approval status of the latest transaction; keys without a transaction yet appear as Reserved/Ready. Rp = sum of mapped quantity x latest PO net price (IDR) over all lines of the system key (including Reserved/Ready).' },
   { key: 'baseline', title: 'Baseline', tone: 'navy', hint: 'Counted per unique system key (read from the baseline system key list), using its latest baseline (status of that baseline). Only system keys that already have an MPS transaction are counted; the "of" number is the total MPS system keys including Reserved/Ready.' },
-  { key: 'matc', title: 'MATC / BABT', tone: 'violet', hint: 'Counted per unique system key, using its latest MATC/BABT BA (status of that BA). Only system keys that have an MPS transaction and at least one material line (not service-only) are counted; the "of" number is all such material-line system keys including Reserved/Ready. Rp beside the count = material-line PO value of those MATC system keys; Rp beside "of" = material-line PO value of the full material-line MPS universe (including Reserved/Ready).' },
-  { key: 'siteTransfer', title: 'Site Transfer', tone: 'orange', hint: 'Site-to-site transfer to Oracle Fusion (INTINV-007), material only. Counted per unique system key that has at least one transfer line (lines from any MPS transaction of the key; latest interface row per PO line). Status per system key from the latest ACK of each line: any ACK Error = ACK Error; all lines ACK Success = ACK Success; otherwise Waiting ACK. Not Sent = material-line system keys without any transfer line. The "of" number is all MPS system keys with at least one material line, including Reserved/Ready (same as MATC). Rp beside the count = transferred quantity x latest PO net price (IDR); Not Sent Rp = material-line PO value not yet transferred; Rp beside "of" = material-line PO value of the full universe.' },
   { key: 'caf', title: 'CAF', tone: 'orange', hint: 'Counted per caf_no, current CAF status.' },
   { key: 'crRelocation', title: 'Change Request', tone: 'red', hint: 'Counted per CR number (type Relocation), latest status; vendor via system key.' },
+  { key: 'matc', title: 'MATC / BABT', tone: 'violet', hint: 'Counted per unique system key. Status uses workflow priority across all MATC/BABT BAs for that key (Fully Approved > In Progress > Rejected > No Workflow). Only system keys that have an MPS transaction and at least one material line (not service-only) are counted; the "of" number is all such material-line system keys including Reserved/Ready. Rp beside the count = material-line PO value of those MATC system keys; Rp beside "of" = material-line PO value of the full material-line MPS universe (including Reserved/Ready). Fusion GR Material matches material INTINV-005 files across all Fully Approved MATC BAs for each system key.' },
+  { key: 'siteTransfer', title: 'Site Transfer', tone: 'orange', hint: 'Site-to-site transfer to Oracle Fusion (INTINV-007), material only. Counted per unique system key that has at least one transfer line (lines from any MPS transaction of the key; latest interface row per PO line). Status per system key from the latest ACK of each line: any ACK Error = ACK Error; all lines ACK Success = ACK Success; otherwise Waiting ACK. Not Sent = material-line system keys without any transfer line. The "of" number is all MPS system keys with at least one material line, including Reserved/Ready (same as MATC). Rp beside the count = transferred quantity x latest PO net price (IDR); Not Sent Rp = material-line PO value not yet transferred; Rp beside "of" = material-line PO value of the full universe.' },
+  { key: 'patp', title: 'Acceptance - PATP', tone: 'violet', hint: 'Counted per unique system key that Master Scope Acceptance requires for PATP. If any PATP for the key was Fully Approved, status stays Fully Approved; otherwise the latest acceptance status is used. The "of" number is MPS system keys (including Reserved/Ready) that require PATP per Master Scope Acceptance. Rp beside the count = Current Realisation on the preferred PATP (Fully Approved when present, else latest; mapped quantity x latest PO net price, IDR, PO-based lines only; WO-only has no value). Rp beside "of" = MPS/PO mapped value (all IDR lines) for every system key in that PATP-required universe when the snapshot includes that amount. Fusion funnel matches all Fully Approved acceptance numbers for each system key.' },
   { key: 'fatp', title: 'Acceptance - FATP', tone: 'cyan', hint: 'Counted per unique system key that Master Scope Acceptance requires for FATP, using its latest FATP acceptance (status of that acceptance). The "of" number is MPS system keys (including Reserved/Ready) that require FATP per Master Scope Acceptance (project type + scope category).' },
   { key: 'endorsement', title: 'Endorsement', tone: 'teal', hint: 'Counted per unique system key, using its latest endorsement (approval status of that system key).' },
-  { key: 'patp', title: 'Acceptance - PATP', tone: 'violet', wide: true, hint: 'Counted per unique system key that Master Scope Acceptance requires for PATP, using its latest PATP acceptance (status of that acceptance). The "of" number is MPS system keys (including Reserved/Ready) that require PATP per Master Scope Acceptance. Rp beside the count = Current Realisation on the latest PATP (mapped quantity x latest PO net price, IDR, PO-based lines only; WO-only has no value). Rp beside "of" = MPS/PO mapped value (all IDR lines) for every system key in that PATP-required universe when the snapshot includes that amount.' },
-  { key: 'cac', title: 'CAC Acceptance / BAUT', tone: 'teal', wide: true, hint: 'Counted per unique system key, using its latest CAC/BAUT BA (workflow status of that BA). The "of" number is the total MPS system keys including Reserved/Ready. Rp beside the count = Realisation of ATP Appendix 2 service lines only for those CAC system keys; Rp beside "of" = service-line PO value for the full MPS universe (including Reserved/Ready). Fusion funnel is per Fully Approved system key.' },
+  { key: 'cac', title: 'CAC Acceptance / BAUT', tone: 'teal', hint: 'Counted per unique system key. Status uses workflow priority across all CAC/BAUT BAs for that key (Fully Approved > In Progress > Rejected > No Workflow). The "of" number is the total MPS system keys including Reserved/Ready. Rp beside the count = Realisation of ATP Appendix 2 service lines only on the preferred BA for those CAC system keys; Rp beside "of" = service-line PO value for the full MPS universe (including Reserved/Ready). Fusion funnel matches all Fully Approved BAs for each system key.' },
 ]
 
 const NOT_SENT = 'Not Sent'
-const GRID = 'grid min-h-0 flex-1 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-8 lg:grid-rows-3'
-/** Card biasa span 2; PATP/CAC span 3. PATP mulai di kolom 2 agar pasangan terpusat (1 kosong + 3 + 3 + 1 kosong). */
-const cardSpan = (wide?: boolean, centerPairStart?: boolean) =>
-  wide ? `lg:col-span-3${centerPairStart ? ' lg:col-start-2' : ''}` : 'lg:col-span-2'
+const GRID = 'grid min-h-0 flex-1 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-12 lg:grid-rows-3'
+/** Baris 1 (index 0–3): span 3 → 4 card. Baris 2–3: span 4 → 3 card. String utuh untuk Tailwind JIT. */
+const cardSpan = (index: number) => (index < 4 ? 'lg:col-span-3' : 'lg:col-span-4')
 
 function formatSince(iso: string) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -66,8 +63,8 @@ function formatSince(iso: string) {
 function Skeleton() {
   return (
     <div className={GRID} aria-busy="true" aria-label="Loading">
-      {CARDS.map((c) => (
-        <div key={c.key} className={`h-40 animate-pulse rounded-xl border border-slate-200 bg-white ${cardSpan(c.wide, c.key === 'patp')}`} />
+      {CARDS.map((c, i) => (
+        <div key={c.key} className={`h-40 animate-pulse rounded-xl border border-slate-200 bg-white ${cardSpan(i)}`} />
       ))}
     </div>
   )
@@ -179,7 +176,7 @@ function Report() {
     <div className="flex min-h-dvh flex-col bg-slate-50 text-slate-900 lg:h-dvh lg:overflow-hidden">
       <header className="z-20 shrink-0 border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-2 px-4 py-2 md:flex-nowrap">
-          <h1 className="min-w-0 text-base font-extrabold md:truncate sm:text-lg" title={`${scope} Transactions on PMIS ${periodText}`}>
+          <h1 className="min-w-0 text-sm font-extrabold md:truncate sm:text-base" title={`${scope} Transactions on PMIS ${periodText}`}>
             {scope} Transactions on PMIS {periodText}
           </h1>
           <div className="flex shrink-0 flex-wrap items-center gap-2 md:flex-nowrap">
@@ -223,19 +220,19 @@ function Report() {
 
         {snap && (
           <>
-            <div className="grid shrink-0 grid-cols-1 gap-2 lg:grid-cols-2"><div className="min-w-0 rounded-lg border-l-4 border-teal-600 bg-slate-900 px-3 py-1.5 text-xs font-bold text-white sm:text-sm lg:truncate">
+            <div className="grid shrink-0 grid-cols-1 gap-2 lg:grid-cols-2"><div className="min-w-0 rounded-lg border-l-4 border-teal-600 bg-slate-900 px-3 py-1 text-[11px] font-bold text-white sm:text-xs lg:truncate">
               KEY FACT &nbsp;|&nbsp;{' '}
               {active === CORE_MODULES.length
                 ? `${scope === 'All Vendor' ? 'All vendors have' : `${scope} has`} recorded transactions in all ${CORE_MODULES.length} modules.`
                 : `${scope === 'All Vendor' ? 'All vendors have' : `${scope} has`} recorded transactions in ${active} of ${CORE_MODULES.length} modules.`}
             </div>
-            <div className="min-w-0 rounded-lg border-l-4 border-rose-500 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 sm:text-sm lg:truncate">
+            <div className="min-w-0 rounded-lg border-l-4 border-rose-500 bg-rose-50 px-3 py-1 text-[11px] font-bold text-rose-700 sm:text-xs lg:truncate">
               CAF ACTION &nbsp;|&nbsp; {fmt(cafWaiting)} waiting submit Pictorial Reports <span className="font-normal">({selection.preset === 'all' ? 'all time' : rangeLabel.toLowerCase()})</span>.
             </div>
             </div>
 
             <div className={GRID}>
-              {CARDS.map((c) => {
+              {CARDS.map((c, i) => {
                 const a =
                   c.key === 'mps'
                     ? aggregateCombined([snap.modules.mps, snap.modules.mpsReserved], vendorSet, range)
@@ -251,7 +248,7 @@ function Report() {
                   note = <PatpFusionMini total={gr.created} basis="Fully Approved system key" legs={[{ label: 'GR Material', interfaceId: 'INTINV-005', statuses: gr.statuses }]} />
                 }
                 if (c.key === 'cac' && snap.modules.cacGr && snap.modules.cacFa) {
-                  // Basis = Fully Approved system key (BA terbaru completed); tampil 0 saat filter kosong.
+                  // Basis = Fully Approved system key (prioritas workflow); tampil 0 saat filter kosong.
                   const grs = aggregate(snap.modules.cacGr, vendorSet, range)
                   const fa = aggregate(snap.modules.cacFa, vendorSet, range)
                   note = (
@@ -266,7 +263,7 @@ function Report() {
                   )
                 }
                 if (c.key === 'patp' && snap.modules.patpGi && snap.modules.patpGr && snap.modules.patpFa) {
-                  // Basis = Fully Approved system key (status PATP terbaru); tampil 0 saat filter kosong; hilang hanya snapshot lama.
+                  // Basis = Fully Approved system key (pernah FA); tampil 0 saat filter kosong; hilang hanya snapshot lama.
                   const gi = aggregate(snap.modules.patpGi, vendorSet, range)
                   const grs = aggregate(snap.modules.patpGr, vendorSet, range)
                   const fa = aggregate(snap.modules.patpFa, vendorSet, range)
@@ -290,7 +287,7 @@ function Report() {
                 return (
                   <ModuleCard
                     key={c.key}
-                    className={cardSpan(c.wide, c.key === 'patp')}
+                    className={cardSpan(i)}
                     title={c.title}
                     tone={c.tone}
                     unit={c.unit}
@@ -327,7 +324,7 @@ function Report() {
             </div>
 
 
-            <footer className="flex shrink-0 items-center justify-between text-[11px] text-slate-500">
+            <footer className="flex shrink-0 items-center justify-between text-[10px] text-slate-500">
               <span>
                 Snapshot {new Date(snap.generatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
               </span>

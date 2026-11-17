@@ -53,16 +53,16 @@ export type SanitationApiResponse = {
 /** Snapshot dianggap stale jika lebih tua dari ini (job berjalan per jam). */
 export const STALE_AFTER_MINUTES = 150
 
-/** Modul yang dihitung pada KEY FACT. */
+/** Modul yang dihitung pada KEY FACT (urutan = tampilan card). */
 export const CORE_MODULES: ModuleKey[] = [
-  'baseline',
   'mps',
-  'matc',
-  'siteTransfer',
-  'fatp',
-  'patp',
-  'cac',
-  'endorsement',
+  'baseline',
   'caf',
   'crRelocation',
+  'matc',
+  'siteTransfer',
+  'patp',
+  'fatp',
+  'endorsement',
+  'cac',
 ]
