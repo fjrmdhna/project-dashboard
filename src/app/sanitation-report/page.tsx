@@ -338,8 +338,27 @@ function Report() {
 
 export default function SanitationReportPage() {
   return (
-    <Suspense fallback={null}>
-      <Report />
-    </Suspense>
+    <>
+      <div inert>
+        <Suspense fallback={null}>
+          <Report />
+        </Suspense>
+      </div>
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="sanitation-maintenance-title"
+        aria-describedby="sanitation-maintenance-description"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-md"
+      >
+        <div className="w-full max-w-md rounded-2xl bg-white px-8 py-10 text-center shadow-2xl">
+          <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-teal-700">Sanitation Report</p>
+          <h1 id="sanitation-maintenance-title" className="text-3xl font-bold text-slate-900">Under Maintenance</h1>
+          <p id="sanitation-maintenance-description" className="mt-4 text-sm leading-6 text-slate-600">
+            Halaman ini sedang dalam pemeliharaan. Silakan kembali lagi nanti.
+          </p>
+        </div>
+      </div>
+    </>
   )
 }
