@@ -378,22 +378,59 @@ const PATP_QUERIES = (() => {
 
 const Q = {
   // Hanya system key yang SUDAH punya MPS (set sama dengan card MPS); yang belum punya MPS tidak dihitung.
-  // 1 system key = 1 baris (unik global): dibaca dari daftar baseline.system_key (json array), memakai baseline TERBARU
-  // (update_time, fallback create_time, tie-break baseline_id) bila system key ada di beberapa baseline. x = jumlah project pembawa.
+  // 1 system key = 1 baris (unik global). Punya baseline = modul baseline ATAU header *_bf terisi di sitelist_mt.
+  // Prioritas status: modul Baseline terbaru (update_time/create_time, tie-break baseline_id); MT-only = Has BF on Master tracker.
+  // baseline.po_number sering CSV multi-PO: masuk modul bila minimal 1 PO Fusion (po kosong/null tidak masuk).
+  // Scan MT dibatasi mpssk agar ringan. x = jumlah project pembawa (hanya dari modul; MT-only tidak menambah).
   baseline: `with tx as materialized (select p.transaction_id from mapping_systemkey_po p
           where ${IN_PO('p.po')} and p.transaction_id is not null group by 1),
       okx as materialized (select tx.transaction_id from tx where not exists (select 1 from mapping_systemkey_po q
           where q.transaction_id = tx.transaction_id and q.po is not null and q.po not in (select po from scope_po))),
       mpssk as materialized (select distinct p.system_key from mapping_systemkey_po p join okx on okx.transaction_id = p.transaction_id
-        where p.system_key is not null and p.system_key <> '')
-    select v, s, d, count(*) n, count(distinct baseline_id) x from (
-      select b.baseline_id, nullif(b.vendor_code,'') v, regexp_replace(b.baseline_status, '\\s*:.*$', '') s,
-        ${DT('coalesce(b.update_time, b.create_time)')} d,
-        row_number() over (partition by k.v order by coalesce(b.update_time, b.create_time) desc nulls last, b.baseline_id desc) rn
-      from baseline b cross join lateral json_array_elements_text(b.system_key) k(v)
-      where json_typeof(b.system_key) = 'array' and ${IN_PO('b.po_number')} and k.v <> ''
-        and k.v in (select system_key from mpssk)) z
-    where rn = 1 group by 1,2,3`,
+        where p.system_key is not null and p.system_key <> ''),
+      from_module as materialized (
+        select sk, baseline_id, v, s, d from (
+          select k.v as sk, b.baseline_id::text as baseline_id, nullif(b.vendor_code,'')::text v,
+            regexp_replace(b.baseline_status, '\\s*:.*$', '')::text s,
+            ${DT('coalesce(b.update_time, b.create_time)')} d,
+            row_number() over (partition by k.v order by coalesce(b.update_time, b.create_time) desc nulls last, b.baseline_id desc) rn
+          from baseline b cross join lateral json_array_elements_text(b.system_key) k(v)
+          where json_typeof(b.system_key) = 'array' and k.v <> ''
+            and k.v in (select system_key from mpssk)
+            and exists (
+              select 1 from regexp_split_to_table(coalesce(b.po_number, ''), '\\s*,\\s*') as x(po)
+              where nullif(btrim(x.po), '') in (select po from scope_po))) z
+        where rn = 1),
+      from_mt_bf as materialized (
+        select m.system_key as sk
+        from mpssk m
+        join sitelist_mt sm on sm.system_key = m.system_key
+        where exists (
+          select 1
+          from jsonb_array_elements(
+            case
+              when sm.content_column is null then '[]'::jsonb
+              when jsonb_typeof(sm.content_column::jsonb) = 'array' then sm.content_column::jsonb
+              when jsonb_typeof(sm.content_column::jsonb) = 'object' then jsonb_build_array(sm.content_column::jsonb)
+              else '[]'::jsonb
+            end) obj
+          cross join lateral jsonb_each(
+            case when jsonb_typeof(obj) = 'object' then obj else '{}'::jsonb end) e(k, val)
+          where e.k ilike '%\\_bf%' escape '\\'
+            and nullif(btrim(e.val #>> '{}'), '') is not null)),
+      mt_only as materialized (
+        select bf.sk, null::text as baseline_id, max(nullif(p.vendor_code,''))::text as v,
+          'Has BF on Master tracker'::text as s,
+          ${DT('max(coalesce(p.update_time, p.create_time))')} as d
+        from from_mt_bf bf
+        join mapping_systemkey_po p on p.system_key = bf.sk
+        where not exists (select 1 from from_module fm where fm.sk = bf.sk)
+        group by bf.sk),
+      merged as (
+        select sk, baseline_id, v, s, d from from_module
+        union all
+        select sk, baseline_id, v, s, d from mt_only)
+    select v, s, d, count(*) n, count(distinct baseline_id) x from merged group by 1,2,3`,
 
   // Modified = max(mapping_systemkey_po.update_time) per transaksi (kolom Modified Date list MPS PMIS), fallback created_date.
   // Transaksi yang punya PO legacy dikeluarkan.
@@ -895,7 +932,7 @@ function normalizeStatus(raw) {
 function toneOf(label) {
   const l = label.toLowerCase()
   if (/reject|cancel|dropped|ack error/.test(l)) return 'bad'
-  if (/fully approved|fully implemented|^approved|ack success/.test(l)) return 'ok'
+  if (/fully approved|fully implemented|^approved|ack success|has bf on master tracker/.test(l)) return 'ok'
   if (/waiting|progress|draft|reserved|ready|await|pending|no workflow|not sent/.test(l)) return 'wait'
   return 'neutral'
 }
