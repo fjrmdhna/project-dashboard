@@ -16,6 +16,14 @@ export type ModuleKey =
   | 'caf'
   | 'crRelocation'
   | 'cafAction'
+  /** Page 2 — Netgear outbound MPS Approved (ack_status on export rows). */
+  | 'netgearMpsApproved'
+  /** Page 2 — Netgear inbound mps_approved_ack. */
+  | 'netgearMpsApprovedAck'
+  /** Page 2 — Netgear tagging MOS. */
+  | 'netgearTaggingMos'
+  /** Page 2 — Netgear tagging GREEN. */
+  | 'netgearTaggingGreen'
 
 export type SanitationSnapshot = {
   version: 3
@@ -27,8 +35,9 @@ export type SanitationSnapshot = {
    * Opsional: snapshot yang dibuat sebelum fitur GR/Fusion belum memilikinya.
    * `patpGi`/`patpGr`/`patpFa` = progres Fusion per Fully Approved system key.
    * `fatpScope`/`patpScope` = penyebut "of Y" (MPS universe ∩ master_scope_acceptance).
+   * Page 2 also uses `netgear*` modules plus existing Fusion funnel modules as first-class cards.
    */
-  modules: Record<ModuleKey, Row[]> & {
+  modules: Record<Exclude<ModuleKey, 'netgearMpsApproved' | 'netgearMpsApprovedAck' | 'netgearTaggingMos' | 'netgearTaggingGreen'>, Row[]> & {
     mpsMaterial?: Row[]
     /** Populasi MPS+Reserved dengan a = service lines only (Rp of-Y CAC). */
     mpsService?: Row[]
@@ -40,6 +49,11 @@ export type SanitationSnapshot = {
     cacFa?: Row[]
     fatpScope?: Row[]
     patpScope?: Row[]
+    /** Page 2 Netgear — optional until snapshot refresh includes them. */
+    netgearMpsApproved?: Row[]
+    netgearMpsApprovedAck?: Row[]
+    netgearTaggingMos?: Row[]
+    netgearTaggingGreen?: Row[]
   }
 }
 

@@ -54,7 +54,16 @@ function Row({
 }
 
 /** Bar proporsi per kelompok warna (hijau, kuning, merah), bukan per status, supaya urutan dan warna konsisten di semua card. */
-export function StatusBar({ statuses, total }: { statuses: StatusItem[]; total: number }) {
+export function StatusBar({
+  statuses,
+  total,
+  showAmounts = true,
+}: {
+  statuses: StatusItem[]
+  total: number
+  /** false = bar proporsi saja (tanpa label Rp di dalam segmen; dipakai Page 2 yang card-nya lebih sempit). */
+  showAmounts?: boolean
+}) {
   // Tinggi bar seragam; sedikit lebih tinggi saat ada label Rp agar teks muat.
   if (!total) return <div className="h-3 shrink-0 rounded-full bg-slate-100" aria-hidden />
   const groups = { green: 0, yellow: 0, red: 0 }
@@ -62,7 +71,7 @@ export function StatusBar({ statuses, total }: { statuses: StatusItem[]; total: 
   let hasAmount = false
   for (const s of statuses) {
     groups[TONE_GROUP[s.tone]] += s.count
-    if (s.amount !== undefined) {
+    if (showAmounts && s.amount !== undefined) {
       amounts[TONE_GROUP[s.tone]] += s.amount
       hasAmount = true
     }
@@ -96,9 +105,11 @@ export function StatusBar({ statuses, total }: { statuses: StatusItem[]; total: 
             style={sizing}
             title={`${names[g]}: ${fmt(groups[g])} (${pct(groups[g], total)})${value}`}
           >
-            <span className="flex w-full items-center justify-center overflow-hidden px-0.5 whitespace-nowrap text-[8px] font-semibold leading-none tabular-nums">
-              {label}
-            </span>
+            {hasAmount && (
+              <span className="flex w-full items-center justify-center overflow-hidden px-0.5 whitespace-nowrap text-[8px] font-semibold leading-none tabular-nums">
+                {label}
+              </span>
+            )}
           </div>
         )
       })}
@@ -111,7 +122,23 @@ export function StatusBar({ statuses, total }: { statuses: StatusItem[]; total: 
  * Tombol "All statuses" tetap di bawah (selalu klikable) untuk popover penuh.
  * `tall` dipertahankan agar pemanggil lama tidak rusak (tidak lagi membatasi jumlah baris).
  */
-export function StatusBreakdown({ statuses, total, title, tall: _tall = false }: { statuses: StatusItem[]; total: number; title: string; tall?: boolean | 'compact' }) {
+export function StatusBreakdown({
+  statuses,
+  total,
+  title,
+  tall: _tall = false,
+  showBarAmounts = true,
+  showAmountCol: showAmountColProp,
+}: {
+  statuses: StatusItem[]
+  total: number
+  title: string
+  tall?: boolean | 'compact'
+  /** false = jangan tampilkan Rp di dalam status bar (Page 2). */
+  showBarAmounts?: boolean
+  /** Override kolom Rp di list; default = ada amount di statuses. */
+  showAmountCol?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const id = useId()
   useEffect(() => {
@@ -123,11 +150,11 @@ export function StatusBreakdown({ statuses, total, title, tall: _tall = false }:
 
   if (!total) return <p className="text-[10px] text-slate-500">No transactions for the selected vendors.</p>
 
-  const showAmountCol = statuses.some((s) => s.amount !== undefined)
+  const showAmountCol = showAmountColProp ?? statuses.some((s) => s.amount !== undefined)
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-0.5 overflow-hidden">
-      <StatusBar statuses={statuses} total={total} />
+      <StatusBar statuses={statuses} total={total} showAmounts={showBarAmounts} />
       {/* List penuh + clip; tombol All statuses di luar overflow supaya tidak ikut terpotong. */}
       <div className="min-h-0 flex-1 overflow-hidden">
         <ul className="space-y-0.5">

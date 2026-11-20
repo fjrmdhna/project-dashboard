@@ -376,6 +376,67 @@ const PATP_QUERIES = (() => {
   }
 })()
 
+/**
+ * Universe system key Page 2 = SAMA dengan card MPS Page 1 (transaksi MPS bersih Fusion):
+ * transaksi yang punya PO di luar scope dikeluarkan; 1 system key = transaksi terbaru-nya.
+ * Dipakai semua card Netgear supaya angkanya bisa dibandingkan langsung dengan Page 1.
+ * Kolom: sk, vc (vendor transaksi), ut (modified, untuk tanggal bila belum ada baris Netgear).
+ */
+const MPS_UNIVERSE_CTE = `mtx as materialized (select p.transaction_id, max(p.update_time) ut from mapping_systemkey_po p
+          where ${IN_PO('p.po')} and p.transaction_id is not null group by 1),
+      mokx as materialized (select mtx.transaction_id, mtx.ut from mtx where not exists (select 1 from mapping_systemkey_po q
+          where q.transaction_id = mtx.transaction_id and q.po is not null and q.po not in (select po from scope_po))),
+      msk as materialized (select distinct on (p.system_key) p.system_key, p.transaction_id
+        from mapping_systemkey_po p join mokx on mokx.transaction_id = p.transaction_id
+        where p.system_key is not null and p.system_key <> ''
+        order by p.system_key, p.update_time desc nulls last, p.transaction_id desc),
+      uni as materialized (
+        select msk.system_key sk, mokx.ut,
+          (select max(nullif(t.vendor_code,'')) from mps_transaction t where t.mps_transaction_id = msk.transaction_id) vc,
+          coalesce((select ms.name = 'MPS Fully Approved' from mps_transaction t
+              left join mps_status ms on ms.id = t.status_approval
+            where t.mps_transaction_id = msk.transaction_id order by t.id desc limit 1), false) fa
+        from msk join mokx on mokx.transaction_id = msk.transaction_id
+        where exists (select 1 from mps_transaction t where t.mps_transaction_id = msk.transaction_id)
+          and exists (select 1 from mapping_systemkey_po p where p.system_key = msk.system_key
+            and p.transaction_id = msk.transaction_id and p.quanty_mapping ~ ${NUM_RE}))`
+
+/**
+ * Tagging Netgear per SYSTEM KEY (universe MPS di atas). Task terbaru per (sk, task) dulu; lalu 1 status per system key:
+ * prioritas status belum selesai (terbaru) > Fully Approved > Cancelled.
+ */
+const NETGEAR_TAGGING = (type) => `with ${MPS_UNIVERSE_CTE},
+    ${type === 'GREEN'
+  // GREEN tidak membawa system_key (matched_by po_line): petakan PO + line item -> system key lewat mapping_systemkey_po.
+  ? `task as materialized (
+      select distinct on (coalesce(t.task_id,''), coalesce(t.activity_counter,''))
+        t.po_number po, t.po_line_item li, coalesce(nullif(t.task_status_normalized,''), 'Unknown') st,
+        coalesce(t.task_last_update, t.received_at, t.task_date::timestamptz) ts
+      from netgear_task_tagging t
+      where t.task_type = 'GREEN' and t.po_number is not null and t.po_number <> '' and ${IN_PO('t.po_number')}
+      order by coalesce(t.task_id,''), coalesce(t.activity_counter,''),
+        coalesce(t.task_last_update, t.received_at, t.task_date::timestamptz) desc nulls last, t.id desc),
+    latest as materialized (
+      select mp.system_key sk, k.st, k.ts
+      from task k
+      join (select distinct po, material_line_item, system_key from mapping_systemkey_po
+            where system_key in (select sk from uni)) mp
+        on mp.po = k.po and mp.material_line_item = k.li)`
+  : `latest as materialized (
+      select distinct on (t.system_key, coalesce(t.task_id,''))
+        t.system_key sk, coalesce(nullif(t.task_status_normalized,''), 'Unknown') st,
+        coalesce(t.task_last_update, t.received_at, t.task_date::timestamptz) ts
+      from netgear_task_tagging t
+      where t.task_type = '${type}' and t.system_key in (select sk from uni)
+      order by t.system_key, coalesce(t.task_id,''),
+        coalesce(t.task_last_update, t.received_at, t.task_date::timestamptz) desc nulls last, t.id desc)`},
+    per_sk as materialized (
+      select distinct on (sk) sk, st, ts from latest
+      order by sk, (case when st = 'Fully Approved' then 2 when st = 'Cancelled' then 3 else 1 end), ts desc nulls last)
+    select v, s, d, count(*) n from (
+      select coalesce(u.vc, ${VENDOR_BY_SYSTEM_KEY('g.sk')}) v, g.st s, ${DT('g.ts')} d
+      from per_sk g join uni u on u.sk = g.sk) x group by 1,2,3`
+
 const Q = {
   // Hanya system key yang SUDAH punya MPS (set sama dengan card MPS); yang belum punya MPS tidak dihitung.
   // 1 system key = 1 baris (unik global). Punya baseline = modul baseline ATAU header *_bf terisi di sitelist_mt.
@@ -804,6 +865,67 @@ const Q = {
               ${DT('coalesce((select max(h.date_status) from cr_history h where h.cr_number = c.cr_number), max(c.created_date))')} dt
             from cr_document c where c.cr_type = 'Relocation' and ${IN_PO('c.po_number')} group by c.cr_number) d) x group by 1,2,3`,
 
+  // Page 2 MPS Approved: sumber = CTE yang sama dengan card MPS Page 1 (tx/okx/m/b/sk),
+  // hanya "MPS Fully Approved" (+ syarat quanty_mapping numerik, sama filter val di mps).
+  // Tanpa valuasi Rp (lateral net_price) supaya ringan; Netgear hanya overlay ACK / Not Sent.
+  // Tanggal (d) = tanggal MPS Page 1 supaya filter Modified sama.
+  netgearMpsApproved: `with tx as materialized (select p.transaction_id, max(p.update_time) ut from mapping_systemkey_po p
+          where ${IN_PO('p.po')} and p.transaction_id is not null group by 1),
+      okx as materialized (select tx.transaction_id, tx.ut from tx where not exists (select 1 from mapping_systemkey_po q
+          where q.transaction_id = tx.transaction_id and q.po is not null and q.po not in (select po from scope_po))),
+      m as (select t.mps_transaction_id, max(nullif(t.vendor_code,'')) vc,
+          ${DT('greatest(max(t.created_date), max(okx.ut))')} d
+        from mps_transaction t join okx on okx.transaction_id = t.mps_transaction_id group by 1),
+      b as (select distinct on (t.mps_transaction_id) t.mps_transaction_id, t.status_approval
+        from mps_transaction t join m using (mps_transaction_id) order by t.mps_transaction_id, t.id desc),
+      sk as materialized (select distinct on (p.system_key) p.system_key, p.transaction_id
+        from mapping_systemkey_po p join okx on okx.transaction_id = p.transaction_id
+        where p.system_key is not null and p.system_key <> ''
+        order by p.system_key, p.update_time desc nulls last, p.transaction_id desc),
+      fa as materialized (
+        select sk.system_key sk, m.vc v, m.d d
+        from sk join b on b.mps_transaction_id = sk.transaction_id
+        join m on m.mps_transaction_id = sk.transaction_id
+        left join mps_status ms on ms.id = b.status_approval
+        where coalesce(ms.name, 'Status ' || b.status_approval) = 'MPS Fully Approved'
+          and exists (select 1 from mapping_systemkey_po p
+            where p.system_key = sk.system_key and p.transaction_id = sk.transaction_id
+              and p.quanty_mapping ~ ${NUM_RE})),
+      latest as materialized (
+        select distinct on (r.system_key, coalesce(r.transaction_id,''), coalesce(r.po,''), coalesce(r.material_line_item,''))
+          r.system_key sk, r.ack_status
+        from netgear_mps_approved_rows r
+        where r.superseded_at is null and r.system_key in (select sk from fa)
+        order by r.system_key, coalesce(r.transaction_id,''), coalesce(r.po,''), coalesce(r.material_line_item,''),
+          r.exported_at desc nulls last, r.id desc),
+      agg as materialized (
+        select sk, count(*) lines,
+          count(*) filter (where lower(coalesce(ack_status,'')) in ('true','t','1','success')) ok,
+          count(*) filter (where lower(coalesce(ack_status,'')) in ('false','f','0','error')) err
+        from latest group by sk)
+    select v, s, d, count(*) n from (
+      select f.v, f.d,
+        case when g.sk is null then 'Not Sent'
+             when g.err > 0 then 'ACK Error' when g.ok = g.lines then 'ACK Success' else 'Waiting ACK' end s
+      from fa f left join agg g on g.sk = f.sk) x group by 1,2,3`,
+
+  // Netgear -> PMIS ACK: ACK terbaru (received_at) per system key di universe MPS; status dari payload.status.
+  netgearMpsApprovedAck: `with ${MPS_UNIVERSE_CTE},
+    latest as materialized (
+      select distinct on (a.system_key) a.system_key sk, a.payload, a.received_at
+      from netgear_ack_rows a
+      where a.interface_name = 'mps_approved_ack' and a.system_key in (select sk from uni)
+      order by a.system_key, a.received_at desc nulls last, a.id desc)
+    select v, s, d, count(*) n from (
+      select coalesce(u.vc, ${VENDOR_BY_SYSTEM_KEY('l.sk')}) v, ${DT('l.received_at')} d,
+        case when lower(coalesce(l.payload->>'status','')) in ('true','t','1','success') then 'ACK Success'
+             when lower(coalesce(l.payload->>'status','')) in ('false','f','0','error') then 'ACK Error'
+             else 'Waiting ACK' end s
+      from latest l join uni u on u.sk = l.sk) x group by 1,2,3`,
+
+  netgearTaggingMos: NETGEAR_TAGGING('MOS'),
+  netgearTaggingGreen: NETGEAR_TAGGING('GREEN'),
+
   // Dibangun dinamis di main(): hanya vendor yang dipakai (DBX memotong sel >200 karakter, jadi jangan string_agg).
 }
 
@@ -933,7 +1055,7 @@ function toneOf(label) {
   const l = label.toLowerCase()
   if (/reject|cancel|dropped|ack error/.test(l)) return 'bad'
   if (/fully approved|fully implemented|^approved|ack success|has bf on master tracker/.test(l)) return 'ok'
-  if (/waiting|progress|draft|reserved|ready|await|pending|no workflow|not sent/.test(l)) return 'wait'
+  if (/waiting|progress|draft|reserved|ready|await|pending|no workflow|not sent|not approved|\bneed\b/.test(l)) return 'wait'
   return 'neutral'
 }
 
@@ -1079,6 +1201,11 @@ async function main() {
     caf: toRows(raw.caf),
     crRelocation: toRows(raw.cr),
     cafAction: toRows(raw.cafAction, { normalize: false }),
+    // Page 2 — Netgear interface legs (Fusion legs reuse siteTransfer/matcGr/patpGi/patpGr/patpFa above).
+    netgearMpsApproved: toRows(raw.netgearMpsApproved),
+    netgearMpsApprovedAck: toRows(raw.netgearMpsApprovedAck),
+    netgearTaggingMos: toRows(raw.netgearTaggingMos),
+    netgearTaggingGreen: toRows(raw.netgearTaggingGreen),
   }
 
   // Inherit modul kosong dari snapshot sebelumnya (query timeout DBX / SANITATION_ONLY).
