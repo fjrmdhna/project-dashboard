@@ -875,6 +875,140 @@ const Q = {
       select b.v, b.d, b.a, ${FUNNEL_STATUS} s
       from b left join fa_agg g on g.sk = b.sk) z group by 2,3,4`,
 
+  // Page 2 Fixed Asset: universe = Fully Approved PATP ∪ Fully Approved CAC (1 SK sekali).
+  // Line INTPPM-002 dari kedua sumber digabung lalu rollup ACK per SK.
+  // Rp = full MPS PO (material + service); Page 1 patpFa/cacFa tetap terpisah.
+  fusionFa: `${PATP_BASE_CTE(USE_PG)},
+    patp_b as materialized (select sk, v, d from latest_patp where st like 'Acceptance Fully Approved%'),
+    scoped_ba as materialized (
+      select ba from (
+        select x.ba_number ba,
+          bool_or(${IN_PO('x.po_number')}) has_in,
+          bool_or(x.po_number is not null and x.po_number not in (select po from scope_po)) has_out
+        from acceptance_certificate_detail x group by 1) t
+      where has_in and not has_out),
+    ba_sk_all as materialized (
+      select distinct d.system_key sk, h.ba_number ba, nullif(h.vendor_code,'') v,
+        coalesce(h.updated_at, h.created_at) ts
+      from acceptance_certificate_detail d
+      join scoped_ba s on s.ba = d.ba_number
+      join acceptance_certificate_header h on h.ba_number = d.ba_number
+      where d.system_key is not null and d.system_key <> ''),
+    wf as materialized (
+      select distinct on (w.entity_id) w.entity_id ba, w.status wf
+      from workflow_instances w
+      where w.entity_type = 'acceptance_certificates' and w.entity_id in (select ba from ba_sk_all)
+      order by w.entity_id, w.version desc, w.id desc),
+    cac_b as materialized (
+      select b.sk, max(b.v) v, ${DT('max(b.ts)')} d
+      from ba_sk_all b left join wf w on w.ba = b.ba
+      group by b.sk
+      having bool_or(w.wf = 'completed')),
+    u as materialized (
+      select sk, max(v) v, max(d) d from (
+        select sk, v, d from patp_b
+        union all
+        select sk, v, d from cac_b) x
+      group by sk),
+    mps_fa_val as materialized (
+      select sk.system_key sk,
+        coalesce(sum(case when p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0) a
+      from sk
+      join u on u.sk = sk.system_key
+      join mapping_systemkey_po p on p.system_key = sk.system_key and p.transaction_id = sk.transaction_id
+      left join lateral (select t.net_price::numeric np from transaction_po t
+        where t.po_number = p.po and t.line_subline = p.material_line_item
+          and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+        order by t.created_at desc, t.id desc limit 1) tp on true
+      group by sk.system_key
+      union all
+      select p.system_key sk,
+        coalesce(sum(case when p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0)
+      from mapping_systemkey_po p
+      join u on u.sk = p.system_key
+      left join lateral (select t.net_price::numeric np from transaction_po t
+        where t.po_number = p.po and t.line_subline = p.material_line_item
+          and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+        order by t.created_at desc, t.id desc limit 1) tp on true
+      where p.status_id in (1,2) and ${IN_PO('p.po')}
+        and not exists (select 1 from sk where sk.system_key = p.system_key)
+      group by p.system_key),
+    patp_an as materialized (
+      select distinct la.system_key sk, la.acceptance_number an
+      from list_acceptance la
+      where la.acceptance_number like 'PATP-%'
+        and la.status like 'Acceptance Fully Approved%'
+        and la.system_key in (select sk from patp_b)),
+    fa_patp as materialized (
+      select distinct i.id, ba.sk
+      from patp_an ba
+      join oracle_fusion_intppm_002_interface i
+        on i.receipt_number like 'PATP-%'
+       and coalesce(i.export_status,'') <> 'GATE_FILTERED'
+       and (i.receipt_number = ba.an or regexp_replace(i.receipt_number, '_[0-9]+$', '') = ba.an)),
+    ba_done as materialized (
+      select distinct bsa.ba
+      from ba_sk_all bsa
+      join wf on wf.ba = bsa.ba and wf.wf = 'completed'
+      where bsa.sk in (select sk from cac_b)),
+    ba_sk as materialized (
+      select distinct d.ba_number ba, d.system_key sk from acceptance_certificate_detail d
+      where d.ba_number in (select ba from ba_done) and d.system_key is not null and d.system_key <> ''),
+    ba_po as materialized (
+      select distinct d.ba_number ba, d.po_number po from acceptance_certificate_detail d
+      where d.ba_number in (select ba from ba_done) and d.po_number is not null),
+    ba_patp as materialized (
+      select distinct bs.ba, la.acceptance_number an from ba_sk bs
+      join list_acceptance la on la.system_key = bs.sk and la.acceptance_category = 'PATP'),
+    gr_i as materialized (
+      select i.id, nullif(trim(i.system_key),'') sk, i.po_numbers po, i.acceptance_number an, i.ba_reference br
+      from oracle_fusion_intinv_005_interface i
+      where coalesce(i.file_type,'') ilike 'service%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
+    gr_match as materialized (
+      select distinct i.id, bp.ba, i.an
+      from gr_i i join ba_sk bs on bs.sk = i.sk join ba_po bp on bp.ba = bs.ba and bp.po = i.po
+      union
+      select distinct i.id, p.ba, i.an from gr_i i join ba_patp p on i.an = p.an
+      union
+      select distinct i.id, p.ba, i.an from gr_i i join ba_patp p on i.br = p.an
+      union
+      select distinct i.id, bd.ba, i.an from gr_i i join ba_done bd on i.an = bd.ba where i.sk is null
+      union
+      select distinct i.id, bd.ba, i.an from gr_i i join ba_done bd on i.br = bd.ba where i.sk is null),
+    gr_an as materialized (select distinct ba, an from gr_match where an is not null),
+    fa_i as materialized (
+      select i.id, i.po_number po, i.receipt_number rn,
+        regexp_replace(regexp_replace(i.receipt_number, '_[0-9]+$', ''), '_v[0-9]+[.][0-9]+$', '') rs
+      from oracle_fusion_intppm_002_interface i
+      where coalesce(i.export_status,'') <> 'GATE_FILTERED'
+        and i.po_number in (select po from ba_po)),
+    fa_cac as materialized (
+      select distinct f.id, bs.sk
+      from fa_i f
+      join ba_po bp on bp.po = f.po
+      join gr_an g on g.ba = bp.ba and (f.rn = g.an or f.rs = g.an)
+      join ba_sk bs on bs.ba = g.ba),
+    fa_all as materialized (
+      select id, sk from fa_patp
+      union
+      select id, sk from fa_cac),
+    fa_ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intppm_002_ack a where a.interface_id_ref in (select id from fa_all)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
+    g as materialized (
+      select f.sk, count(distinct f.id) lines,
+        count(distinct f.id) filter (where k.ack_status = 'ERROR') err,
+        count(distinct f.id) filter (where k.ack_status = 'SUCCESS') ok
+      from fa_all f
+      left join fa_ack k on k.interface_id_ref = f.id
+      group by f.sk)
+    select v, s, d, count(*) n, sum(a)::bigint a from (
+      select u.v, u.d, coalesce(mv.a, 0) a, ${FUNNEL_STATUS} s
+      from u
+      left join mps_fa_val mv on mv.sk = u.sk
+      left join g on g.sk = u.sk) x group by 1,2,3`,
+
   // 1 system key = 1 hitungan; status approval SK pada endorsement TERBARU.
   endorsement: `with e as materialized (
       select distinct on (system_key)
@@ -1246,6 +1380,8 @@ async function main() {
     cac: toRows(cacPart('cac')),
     cacGr: toRows(cacPart('cacGr')),
     cacFa: toRows(cacPart('cacFa')),
+    // Page 2 Fixed Asset = PATP ∪ CAC Fully Approved (line INTPPM-002 digabung; Rp full MPS).
+    fusionFa: toRows(raw.fusionFa || []),
     endorsement: toRows(raw.endorsement),
     caf: toRows(raw.caf),
     crRelocation: toRows(raw.cr),
