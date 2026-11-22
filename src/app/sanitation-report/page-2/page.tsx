@@ -11,7 +11,7 @@ import { useSanitationReport } from '@/lib/sanitation-report/useSanitationReport
 
 type CardDef = {
   /** Snapshot module key, or optional funnel key stored outside ModuleKey. */
-  key: ModuleKey | 'matcGr' | 'patpGi' | 'patpGr' | 'patpFa' | 'fusionFa'
+  key: ModuleKey | 'matcGr' | 'patpGi' | 'patpGr' | 'patpFa' | 'fusionFa' | 'fusionGr'
   title: string
   tone: ModuleCardTone
   hint: string
@@ -87,12 +87,12 @@ const FUSION_CARDS: CardDef[] = [
     hint: 'Oracle Fusion INTINV-006 for Fully Approved PATP system keys. Rp = material-line MPS PO value only (qty × latest IDR net price on the latest MPS transaction). Status: Not Sent / Waiting ACK / ACK Success / ACK Error.',
   },
   {
-    key: 'patpGr',
+    key: 'fusionGr',
     title: 'GR Service',
     tone: 'teal',
     excludeNotSent: true,
     showAmounts: true,
-    hint: 'Oracle Fusion INTINV-005 service files for Fully Approved PATP system keys. Rp = service-line MPS PO value only (qty × latest IDR net price on the latest MPS transaction). Status: Not Sent / Waiting ACK / ACK Success / ACK Error.',
+    hint: 'Oracle Fusion INTINV-005 service files for Fully Approved PATP ∪ CAC system keys (each key once). Service lines from both sources are merged, then rolled up per key (ACK Error > Waiting ACK > ACK Success > Not Sent). Rp = service-line MPS PO value only. Page 1 PATP/CAC mini-funnels stay separate.',
   },
   {
     key: 'fusionFa',

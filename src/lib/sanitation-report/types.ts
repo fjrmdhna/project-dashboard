@@ -49,6 +49,8 @@ export type SanitationSnapshot = {
     cacFa?: Row[]
     /** Page 2 Fixed Asset — PATP ∪ CAC Fully Approved, merged INTPPM-002 lines, full MPS Rp. */
     fusionFa?: Row[]
+    /** Page 2 GR Service — PATP ∪ CAC Fully Approved, merged INTINV-005 service lines, MPS service Rp. */
+    fusionGr?: Row[]
     fatpScope?: Row[]
     patpScope?: Row[]
     /** Page 2 Netgear — optional until snapshot refresh includes them. */
