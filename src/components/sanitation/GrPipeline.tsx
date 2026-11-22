@@ -43,7 +43,7 @@ function legMetrics(leg: FusionLeg, total: number, basis: string, hasAmount: boo
     `Waiting ACK: ${fmt(waiting)}`,
     `ACK Error: ${fmt(error)}`,
     `Not sent: ${fmt(notSent)}`,
-    ...(hasAmount ? [`BA Value of ACK Success: ${formatIdrFull(ackAmount)}`] : []),
+    ...(hasAmount ? [`Value of ACK Success: ${formatIdrFull(ackAmount)}`] : []),
   ].join('\n')
   return { leg, success, waiting, error, notSent, sent, ackAmount, detail }
 }

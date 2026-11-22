@@ -7,6 +7,12 @@ import { BAR_ORDER, COLOR, TONE_BG, TONE_GROUP } from './tones'
 
 /** Prefiks panjang dipotong di UI; label penuh tetap di tooltip. */
 function shortStatusLabel(label: string): string {
+  {
+    const m = label.match(/^Anomaly: (?:MOS|GREEN) without MPS ACK Success \((.+)\)$/)
+    if (m) return `Anomaly · ${m[1]}`
+  }
+  if (/^Anomaly: (?:MOS|GREEN) without MPS export$/.test(label)) return 'Anomaly · No MPS export'
+  if (label.startsWith('Anomaly: ')) return `Anomaly · ${label.slice('Anomaly: '.length)}`
   if (label.startsWith('Approved with Punchlist - ')) return `Punchlist · ${label.slice('Approved with Punchlist - '.length)}`
   const prefixes = [
     'Acceptance Fully Approved - ',
@@ -129,6 +135,7 @@ export function StatusBreakdown({
   tall: _tall = false,
   showBarAmounts = true,
   showAmountCol: showAmountColProp,
+  anomalyPrefix,
 }: {
   statuses: StatusItem[]
   total: number
@@ -138,6 +145,8 @@ export function StatusBreakdown({
   showBarAmounts?: boolean
   /** Override kolom Rp di list; default = ada amount di statuses. */
   showAmountCol?: boolean
+  /** Prefiks label anomali — digroup di bawah daftar utama dengan heading Anomalies. */
+  anomalyPrefix?: string
 }) {
   const [open, setOpen] = useState(false)
   const id = useId()
@@ -151,18 +160,30 @@ export function StatusBreakdown({
   if (!total) return <p className="text-[10px] text-slate-500">No transactions for the selected vendors.</p>
 
   const showAmountCol = showAmountColProp ?? statuses.some((s) => s.amount !== undefined)
+  const main = anomalyPrefix ? statuses.filter((s) => !s.label.startsWith(anomalyPrefix)) : statuses
+  const anomalies = anomalyPrefix ? statuses.filter((s) => s.label.startsWith(anomalyPrefix)) : []
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-0.5 overflow-hidden">
       <StatusBar statuses={statuses} total={total} showAmounts={showBarAmounts} />
-      {/* List penuh + clip; tombol All statuses di luar overflow supaya tidak ikut terpotong. */}
+      {/* Status normal boleh ter-clip; grup Anomalies + All statuses tetap terlihat di bawah. */}
       <div className="min-h-0 flex-1 overflow-hidden">
         <ul className="space-y-0.5">
-          {statuses.map((s) => (
+          {main.map((s) => (
             <Row key={s.label} s={s} total={total} showAmountCol={showAmountCol} className="flex" />
           ))}
         </ul>
       </div>
+      {anomalies.length > 0 && (
+        <div className="shrink-0 space-y-0.5 border-t border-slate-100 pt-1">
+          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Anomalies</p>
+          <ul className="space-y-0.5">
+            {anomalies.map((s) => (
+              <Row key={s.label} s={s} total={total} showAmountCol={showAmountCol} className="flex" />
+            ))}
+          </ul>
+        </div>
+      )}
       {statuses.length > 2 && (
         <button
           type="button"
@@ -195,11 +216,23 @@ export function StatusBreakdown({
               ×
             </button>
           </div>
-          <ul className="min-h-0 flex-1 space-y-1 overflow-auto">
-            {statuses.map((s) => (
-              <Row key={s.label} s={s} total={total} showAmountCol={showAmountCol} />
-            ))}
-          </ul>
+          <div className="min-h-0 flex-1 space-y-1 overflow-auto">
+            <ul className="space-y-1">
+              {main.map((s) => (
+                <Row key={s.label} s={s} total={total} showAmountCol={showAmountCol} />
+              ))}
+            </ul>
+            {anomalies.length > 0 && (
+              <div className="space-y-1 border-t border-slate-100 pt-1">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Anomalies</p>
+                <ul className="space-y-1">
+                  {anomalies.map((s) => (
+                    <Row key={s.label} s={s} total={total} showAmountCol={showAmountCol} />
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

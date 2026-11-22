@@ -20,6 +20,10 @@ type Props = {
   /** Nilai Rp format siap tampil di samping angka besar (mis. "Rp 652.08 B"). */
   amountLabel?: string
   subValue?: string
+  /** Teks setelah `(subValue)`, mis. `sent` → `(of 12) sent`. */
+  subSuffix?: string
+  /** Baris kedua di bawah angka besar, tanpa kurung otomatis (untuk caption panjang di card sempit). */
+  stackLabel?: string
   /** Definisi satuan hitung (tooltip). */
   hint: string
   tone: ModuleCardTone
@@ -34,7 +38,7 @@ type Props = {
   children: ReactNode
 }
 
-export function ModuleCard({ title, value, unit, amountLabel, subValue, hint, tone, dimmed, note, divided, stackSub, className, children }: Props) {
+export function ModuleCard({ title, value, unit, amountLabel, subValue, subSuffix, stackLabel, hint, tone, dimmed, note, divided, stackSub, className, children }: Props) {
   const t = TONES[tone]
   return (
     <section
@@ -58,16 +62,22 @@ export function ModuleCard({ title, value, unit, amountLabel, subValue, hint, to
         </div>
         {/* note/funnel boleh menyusut agar StatusBar + 1 status + All statuses tidak terpotong */}
         <div className={`flex min-h-0 min-w-0 justify-between gap-1.5 ${note ? 'min-h-0 shrink' : 'shrink-0'} ${divided ? 'items-center' : 'items-end'}`}>
-          <div className={`min-w-0 text-slate-900 ${note ? 'max-w-[40%] shrink' : 'shrink-0 whitespace-nowrap'}`}>
+          <div className={`min-w-0 text-slate-900 ${note ? 'max-w-[40%] shrink' : stackLabel || stackSub ? 'min-w-0 flex-1' : 'shrink-0 whitespace-nowrap'}`}>
             <div className="truncate whitespace-nowrap">
               <span className={`${note ? 'text-base' : 'text-xl'} font-extrabold tabular-nums leading-none`}>{fmt(value)}</span>
               {unit && <span className="ml-1 text-[10px] font-bold">{unit}</span>}
               {amountLabel && <span className="ml-1 text-[10px] font-semibold tabular-nums text-slate-600">· {amountLabel}</span>}
-              {subValue && !stackSub && <span className="ml-1 text-[9px] text-slate-600">({subValue})</span>}
+              {subValue && !stackSub && !stackLabel && <span className="ml-1 text-[9px] text-slate-600">({subValue})</span>}
+              {subSuffix && <span className="ml-1 text-[9px] font-semibold text-slate-600">{subSuffix}</span>}
             </div>
-            {subValue && stackSub && (
+            {stackLabel && (
+              <div className="mt-0.5 truncate text-[9px] font-medium leading-tight text-slate-600" title={stackLabel}>
+                {stackLabel}
+              </div>
+            )}
+            {subValue && stackSub && !stackLabel && (
               <div className="mt-0.5 truncate text-[9px] font-normal leading-tight text-slate-600" title={subValue}>
-                ({subValue})
+                ({subValue}){subSuffix ? ` ${subSuffix}` : ''}
               </div>
             )}
           </div>

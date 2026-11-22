@@ -281,8 +281,38 @@ const PATP_QUERIES = (() => {
           order by t.created_at desc, t.id desc limit 1) tp on true
         where upper(trim(coalesce(tp.currency,''))) = 'IDR'
         group by lp.sk)`
+  // Funnel Rp = MPS PO mapping (qty x latest IDR net price) scoped ke Fully Approved PATP saja
+  // (ringan: hanya SK di `b`). GI = material, GR Service = service, FA = material+service.
+  // Card PATP utama tetap pakai pv (Current Realisation acceptance).
   const funnelTail = `
     b as materialized (select sk, an, v, d, st from latest_patp where st like 'Acceptance Fully Approved%'),
+    mps_funnel_val as materialized (
+      select sk.system_key sk,
+        coalesce(sum(case when not ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0) a_mat,
+        coalesce(sum(case when ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0) a_svc,
+        coalesce(sum(case when p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0) a_all
+      from sk
+      join b on b.sk = sk.system_key
+      join mapping_systemkey_po p on p.system_key = sk.system_key and p.transaction_id = sk.transaction_id
+      left join lateral (select t.net_price::numeric np from transaction_po t
+        where t.po_number = p.po and t.line_subline = p.material_line_item
+          and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+        order by t.created_at desc, t.id desc limit 1) tp on true
+      group by sk.system_key
+      union all
+      select p.system_key sk,
+        coalesce(sum(case when not ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0),
+        coalesce(sum(case when ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0),
+        coalesce(sum(case when p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0)
+      from mapping_systemkey_po p
+      join b on b.sk = p.system_key
+      left join lateral (select t.net_price::numeric np from transaction_po t
+        where t.po_number = p.po and t.line_subline = p.material_line_item
+          and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+        order by t.created_at desc, t.id desc limit 1) tp on true
+      where p.status_id in (1,2) and ${IN_PO('p.po')}
+        and not exists (select 1 from sk where sk.system_key = p.system_key)
+      group by p.system_key),
     b_an as materialized (
       select distinct la.system_key sk, la.acceptance_number an
       from list_acceptance la
@@ -341,14 +371,14 @@ const PATP_QUERIES = (() => {
       select n.v, n.d, coalesce(sv.a, 0) a from patp_need n left join scope_val sv on sv.sk = n.sk) z group by v, d`
   const funnelSelect = `
     select 'patpGi' k, v, s, d, count(*) n, sum(a)::bigint a from (
-      select b.v, b.d, coalesce(pv.a, 0) a, ${FUNNEL_STATUS} s
-      from b left join pv on pv.sk = b.sk left join gi_agg g on g.sk = b.sk) x group by 2,3,4
+      select b.v, b.d, coalesce(mv.a_mat, 0) a, ${FUNNEL_STATUS} s
+      from b left join mps_funnel_val mv on mv.sk = b.sk left join gi_agg g on g.sk = b.sk) x group by 2,3,4
     union all select 'patpGr' k, v, s, d, count(*) n, sum(a)::bigint a from (
-      select b.v, b.d, coalesce(pv.a, 0) a, ${FUNNEL_STATUS} s
-      from b left join pv on pv.sk = b.sk left join gr_agg g on g.sk = b.sk) x group by 2,3,4
+      select b.v, b.d, coalesce(mv.a_svc, 0) a, ${FUNNEL_STATUS} s
+      from b left join mps_funnel_val mv on mv.sk = b.sk left join gr_agg g on g.sk = b.sk) x group by 2,3,4
     union all select 'patpFa' k, v, s, d, count(*) n, sum(a)::bigint a from (
-      select b.v, b.d, coalesce(pv.a, 0) a, ${FUNNEL_STATUS} s
-      from b left join pv on pv.sk = b.sk left join fl g on g.sk = b.sk) x group by 2,3,4`
+      select b.v, b.d, coalesce(mv.a_all, 0) a, ${FUNNEL_STATUS} s
+      from b left join mps_funnel_val mv on mv.sk = b.sk left join fl g on g.sk = b.sk) x group by 2,3,4`
   // Query ringan of-Y saja (jalan di DBX meski patpAll di-skip).
   // Pakai withMtSc=true agar universe of-Y sama dengan jalur pg (~100rb; include Reserved via sitelist_mt).
   const patpScopeVal = `${PATP_BASE_CTE(true)},${scopeVal}
@@ -364,14 +394,13 @@ const PATP_QUERIES = (() => {
       patpScopeVal,
     }
   }
-  // DBX: pecah (core vs funnel). Default tetap di-skip lewat SKIP_PATP_ON_DBX.
+  // DBX: pecah (core vs funnel). Funnel tidak butuh pvLatest (pakai mps_funnel_val).
   return {
     patpAll: `${base},${scopeVal},${pvLatest}
     ${coreSelect}`,
     patpScopeVal,
     patpFunnel: `${base},
-    ${funnelTail},
-    ${pvLatest}
+    ${funnelTail}
     ${funnelSelect}`,
   }
 })()
@@ -402,12 +431,13 @@ const MPS_UNIVERSE_CTE = `mtx as materialized (select p.transaction_id, max(p.up
             and p.transaction_id = msk.transaction_id and p.quanty_mapping ~ ${NUM_RE}))`
 
 /**
- * Tagging Netgear per SYSTEM KEY (universe MPS di atas). Task terbaru per (sk, task) dulu; lalu 1 status per system key:
- * prioritas status belum selesai (terbaru) > Fully Approved > Cancelled.
+ * Tagging MOS/GREEN + overlay ACK MPS Approved (rollup sama card MPS Approved).
+ * Status normal hanya untuk key yang ACK Success; selain itu Anomaly:* supaya
+ * angka besar card = tagging ∩ ACK Success, anomali tetap terlihat.
+ * GREEN: map PO+line → system key (task tidak membawa system_key).
  */
-const NETGEAR_TAGGING = (type) => `with ${MPS_UNIVERSE_CTE},
+const NETGEAR_TAGGING_WITH_MPS_ACK = (type) => `with ${MPS_UNIVERSE_CTE},
     ${type === 'GREEN'
-  // GREEN tidak membawa system_key (matched_by po_line): petakan PO + line item -> system key lewat mapping_systemkey_po.
   ? `task as materialized (
       select distinct on (coalesce(t.task_id,''), coalesce(t.activity_counter,''))
         t.po_number po, t.po_line_item li, coalesce(nullif(t.task_status_normalized,''), 'Unknown') st,
@@ -432,10 +462,30 @@ const NETGEAR_TAGGING = (type) => `with ${MPS_UNIVERSE_CTE},
         coalesce(t.task_last_update, t.received_at, t.task_date::timestamptz) desc nulls last, t.id desc)`},
     per_sk as materialized (
       select distinct on (sk) sk, st, ts from latest
-      order by sk, (case when st = 'Fully Approved' then 2 when st = 'Cancelled' then 3 else 1 end), ts desc nulls last)
+      order by sk, (case when st = 'Fully Approved' then 2 when st = 'Cancelled' then 3 else 1 end), ts desc nulls last),
+    exp_latest as materialized (
+      select distinct on (r.system_key, coalesce(r.transaction_id,''), coalesce(r.po,''), coalesce(r.material_line_item,''))
+        r.system_key sk, r.ack_status
+      from netgear_mps_approved_rows r
+      where r.superseded_at is null and r.system_key in (select sk from per_sk)
+      order by r.system_key, coalesce(r.transaction_id,''), coalesce(r.po,''), coalesce(r.material_line_item,''),
+        r.exported_at desc nulls last, r.id desc),
+    exp_agg as materialized (
+      select sk, count(*) lines,
+        count(*) filter (where lower(coalesce(ack_status,'')) in ('true','t','1','success')) ok,
+        count(*) filter (where lower(coalesce(ack_status,'')) in ('false','f','0','error')) err
+      from exp_latest group by sk)
     select v, s, d, count(*) n from (
-      select coalesce(u.vc, ${VENDOR_BY_SYSTEM_KEY('g.sk')}) v, g.st s, ${DT('g.ts')} d
-      from per_sk g join uni u on u.sk = g.sk) x group by 1,2,3`
+      select coalesce(u.vc, ${VENDOR_BY_SYSTEM_KEY('g.sk')}) v, ${DT('g.ts')} d,
+        case
+          when e.sk is null then 'Anomaly: ${type} without MPS export'
+          when e.err > 0 then 'Anomaly: ${type} without MPS ACK Success (ACK Error)'
+          when e.ok = e.lines then g.st
+          else 'Anomaly: ${type} without MPS ACK Success (Waiting ACK MPS)'
+        end s
+      from per_sk g
+      join uni u on u.sk = g.sk
+      left join exp_agg e on e.sk = g.sk) x group by 1,2,3`
 
 const Q = {
   // Hanya system key yang SUDAH punya MPS (set sama dengan card MPS); yang belum punya MPS tidak dihitung.
@@ -865,11 +915,14 @@ const Q = {
               ${DT('coalesce((select max(h.date_status) from cr_history h where h.cr_number = c.cr_number), max(c.created_date))')} dt
             from cr_document c where c.cr_type = 'Relocation' and ${IN_PO('c.po_number')} group by c.cr_number) d) x group by 1,2,3`,
 
-  // Page 2 MPS Approved: sumber = CTE yang sama dengan card MPS Page 1 (tx/okx/m/b/sk),
-  // hanya "MPS Fully Approved" (+ syarat quanty_mapping numerik, sama filter val di mps).
-  // Tanpa valuasi Rp (lateral net_price) supaya ringan; Netgear hanya overlay ACK / Not Sent.
-  // Tanggal (d) = tanggal MPS Page 1 supaya filter Modified sama.
-  netgearMpsApproved: `with tx as materialized (select p.transaction_id, max(p.update_time) ut from mapping_systemkey_po p
+  // Page 2 MPS Approved (+ ACK outcomes): satu sumber = netgear_mps_approved_rows.ack_status
+  // di-stamp ke baris export. Universe = MPS Fully Approved (CTE sama Page 1 + quanty_mapping numerik).
+  // Status per system key dari semua line export terbaru (non-superseded):
+  //   any Error → ACK Error; all Success → ACK Success; else Waiting ACK; no export → Not Sent.
+  // netgearMpsApprovedAck = subset exported (Success/Waiting/Error) dari CTE yang sama — jangan baca
+  // netgear_ack_rows (log inbound) supaya angka tidak bisa drift dari card MPS Approved Sent.
+  ...(() => {
+    const base = `tx as materialized (select p.transaction_id, max(p.update_time) ut from mapping_systemkey_po p
           where ${IN_PO('p.po')} and p.transaction_id is not null group by 1),
       okx as materialized (select tx.transaction_id, tx.ut from tx where not exists (select 1 from mapping_systemkey_po q
           where q.transaction_id = tx.transaction_id and q.po is not null and q.po not in (select po from scope_po))),
@@ -902,29 +955,22 @@ const Q = {
         select sk, count(*) lines,
           count(*) filter (where lower(coalesce(ack_status,'')) in ('true','t','1','success')) ok,
           count(*) filter (where lower(coalesce(ack_status,'')) in ('false','f','0','error')) err
-        from latest group by sk)
-    select v, s, d, count(*) n from (
-      select f.v, f.d,
-        case when g.sk is null then 'Not Sent'
-             when g.err > 0 then 'ACK Error' when g.ok = g.lines then 'ACK Success' else 'Waiting ACK' end s
-      from fa f left join agg g on g.sk = f.sk) x group by 1,2,3`,
+        from latest group by sk),
+      st as materialized (
+        select f.v, f.d, f.sk,
+          case when g.sk is null then 'Not Sent'
+               when g.err > 0 then 'ACK Error' when g.ok = g.lines then 'ACK Success' else 'Waiting ACK' end s
+        from fa f left join agg g on g.sk = f.sk)`
+    return {
+      netgearMpsApproved: `with ${base}
+    select v, s, d, count(*) n from st group by 1,2,3`,
+      netgearMpsApprovedAck: `with ${base}
+    select v, s, d, count(*) n from st where s in ('ACK Success', 'Waiting ACK', 'ACK Error') group by 1,2,3`,
+    }
+  })(),
 
-  // Netgear -> PMIS ACK: ACK terbaru (received_at) per system key di universe MPS; status dari payload.status.
-  netgearMpsApprovedAck: `with ${MPS_UNIVERSE_CTE},
-    latest as materialized (
-      select distinct on (a.system_key) a.system_key sk, a.payload, a.received_at
-      from netgear_ack_rows a
-      where a.interface_name = 'mps_approved_ack' and a.system_key in (select sk from uni)
-      order by a.system_key, a.received_at desc nulls last, a.id desc)
-    select v, s, d, count(*) n from (
-      select coalesce(u.vc, ${VENDOR_BY_SYSTEM_KEY('l.sk')}) v, ${DT('l.received_at')} d,
-        case when lower(coalesce(l.payload->>'status','')) in ('true','t','1','success') then 'ACK Success'
-             when lower(coalesce(l.payload->>'status','')) in ('false','f','0','error') then 'ACK Error'
-             else 'Waiting ACK' end s
-      from latest l join uni u on u.sk = l.sk) x group by 1,2,3`,
-
-  netgearTaggingMos: NETGEAR_TAGGING('MOS'),
-  netgearTaggingGreen: NETGEAR_TAGGING('GREEN'),
+  netgearTaggingMos: NETGEAR_TAGGING_WITH_MPS_ACK('MOS'),
+  netgearTaggingGreen: NETGEAR_TAGGING_WITH_MPS_ACK('GREEN'),
 
   // Dibangun dinamis di main(): hanya vendor yang dipakai (DBX memotong sel >200 karakter, jadi jangan string_agg).
 }
@@ -1053,6 +1099,9 @@ function normalizeStatus(raw) {
 }
 function toneOf(label) {
   const l = label.toLowerCase()
+  // Anomaly rows first — labels may contain "ACK Success" as negated text.
+  if (/^anomaly:/.test(l) && /ack error|without mps export/.test(l)) return 'bad'
+  if (/^anomaly:/.test(l)) return 'wait'
   if (/reject|cancel|dropped|ack error/.test(l)) return 'bad'
   if (/fully approved|fully implemented|^approved|ack success|has bf on master tracker/.test(l)) return 'ok'
   if (/waiting|progress|draft|reserved|ready|await|pending|no workflow|not sent|not approved|\bneed\b/.test(l)) return 'wait'
@@ -1204,7 +1253,7 @@ async function main() {
     // Page 2 — Netgear interface legs (Fusion legs reuse siteTransfer/matcGr/patpGi/patpGr/patpFa above).
     netgearMpsApproved: toRows(raw.netgearMpsApproved),
     netgearMpsApprovedAck: toRows(raw.netgearMpsApprovedAck),
-    netgearTaggingMos: toRows(raw.netgearTaggingMos),
+    netgearTaggingMos: toRows(raw.netgearTaggingMos, { normalize: false }),
     netgearTaggingGreen: toRows(raw.netgearTaggingGreen),
   }
 
