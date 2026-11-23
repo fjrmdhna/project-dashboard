@@ -2,13 +2,19 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import net from 'node:net'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const server = net.createServer(() => {})
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const server = net.createServer((socket) => {
+  socket.on('error', () => {})
+})
+server.on('error', () => {})
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
 const { port } = server.address()
 const started = Date.now()
 const child = spawn(process.execPath, ['scripts/sanitation-snapshot.mjs', '--dry-run'], {
-  cwd: new URL('..', import.meta.url).pathname,
+  cwd: ROOT,
   env: {
     ...process.env,
     PMIS_DATABASE_URL: `postgresql://test:test@127.0.0.1:${port}/test`,
@@ -19,6 +25,7 @@ const child = spawn(process.execPath, ['scripts/sanitation-snapshot.mjs', '--dry
 let output = ''
 child.stdout.on('data', (chunk) => { output += chunk })
 child.stderr.on('data', (chunk) => { output += chunk })
+child.on('error', (err) => { output += String(err) })
 const watchdog = setTimeout(() => child.kill('SIGTERM'), 4_000)
 const code = await new Promise((resolve) => child.once('close', resolve))
 clearTimeout(watchdog)

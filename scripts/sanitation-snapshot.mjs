@@ -44,9 +44,13 @@ const REQUIRE_VPN = process.argv.includes('--require-vpn')
 const DBX_PATH = process.env.DBX_MCP_PATH || 'C:\\Users\\ACER\\.dbx\\bin\\dbx-mcp.exe'
 const DBX_CONNECTION = process.env.DBX_CONNECTION || 'PMIS Prod'
 const PMIS_DB = process.env.PMIS_DB_NAME || 'pmisdb_20261008'
-// Default 5 mnt/query ringan; query berat (patp/fusion/cac) pakai SANITATION_HEAVY_TIMEOUT_MS (default 10 mnt).
-// Default 5 mnt/query ringan; query berat (patp/fusion/cac) pakai SANITATION_HEAVY_TIMEOUT_MS (default 10 mnt).
+// Default 5 mnt/query ringan; query berat (patp/fusion/cac) default 10 mnt.
+// Tes CI set SANITATION_QUERY_TIMEOUT_MS pendek → heavy/connect ikut pendek (jangan floor 600s).
 const QUERY_TIMEOUT_MS = Math.max(1, Number(process.env.SANITATION_QUERY_TIMEOUT_MS) || 300_000)
+const HEAVY_TIMEOUT_MS = Math.max(
+  QUERY_TIMEOUT_MS,
+  Number(process.env.SANITATION_HEAVY_TIMEOUT_MS) || (QUERY_TIMEOUT_MS < 60_000 ? QUERY_TIMEOUT_MS : 600_000),
+)
 const UNKNOWN_VENDOR = 'UNKNOWN'
 
 /** true = driver pg (paralel, timeout panjang). false = DBX sekuensial. */
@@ -1152,13 +1156,12 @@ function assertReadOnly(sql) {
 // ---------- Runner: pg (pool + paralel untuk query independen) ----------
 async function makePgRunner() {
   const { default: pg } = await import('pg')
-  // Pool kecil. Concurrency job default 2 agar query berat tidak berebut I/O.
-  // connectionTimeout >= statement timeout supaya antrian slot tidak dianggap connect timeout.
+  // Pool kecil. connectionTimeout >= heavy statement timeout (antrian slot = connect time).
   const poolSize = Math.min(6, Math.max(2, Number(process.env.SANITATION_PG_POOL) || 4))
   const pool = new pg.Pool({
     connectionString: process.env.PMIS_DATABASE_URL,
     max: poolSize,
-    connectionTimeoutMillis: Math.max(QUERY_TIMEOUT_MS, 600_000),
+    connectionTimeoutMillis: HEAVY_TIMEOUT_MS,
     idleTimeoutMillis: 60_000,
     allowExitOnIdle: true,
   })
@@ -1167,6 +1170,11 @@ async function makePgRunner() {
   })
   return {
     parallel: true,
+    /** Satu connect dulu — DB mati gagal 1× timeout, bukan N query × timeout. */
+    async ping() {
+      const client = await pool.connect()
+      client.release()
+    },
     /** @param {string} sql @param {{ timeoutMs?: number }} [opts] */
     async rows(sql, opts = {}) {
       const timeoutMs = Math.max(1, Number(opts.timeoutMs) || QUERY_TIMEOUT_MS)
@@ -1352,6 +1360,7 @@ async function main() {
   const raw = {}
   const failed = []
   try {
+    if (typeof runner.ping === 'function') await runner.ping()
     if (SKIP_PATP_ON_DBX) console.error('[sanitation] DBX: skip patpAll/patpFunnel (timeout 60s) — inherit snapshot lama; paksa: SANITATION_FORCE_PATP=1')
     // Alias: fusionFa/Gr → fusionAll; ACK Netgear → query Sent (ACK di-derive di Node).
     const onlySet = ONLY
@@ -1366,7 +1375,6 @@ async function main() {
       'patpAll', 'patpFunnel', 'cacAll', 'fusionAll', 'baseline', 'endorsement',
       'patpScopeVal', 'netgearTaggingMos', 'netgearTaggingGreen', 'netgearMpsApproved',
     ])
-    const HEAVY_TIMEOUT_MS = Math.max(QUERY_TIMEOUT_MS, Number(process.env.SANITATION_HEAVY_TIMEOUT_MS) || 600_000)
     // PG full run: patpScope sudah di patpAll — skip patpScopeVal agar tidak dobel PATP_BASE.
     const skipScopeVal = USE_PG && !onlySet
     const lightLimit = Math.max(1, Number(process.env.SANITATION_PG_CONCURRENCY) || 4)
