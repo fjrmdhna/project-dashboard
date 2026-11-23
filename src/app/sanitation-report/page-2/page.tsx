@@ -269,7 +269,9 @@ function Section({
             xCount = sentCount
             sentAnomalyPrefix = backfillCount > 0 ? 'Backfill' : undefined
             sentStackLabel =
-              backfillCount > 0 ? `${BACKFILL_LABEL}: ${fmt(backfillCount)} excluded from of` : undefined
+              backfillCount > 0
+                ? `excl. Backfill ${fmt(backfillCount)} · no ACK expected`
+                : undefined
           } else if (c.key === 'netgearMpsApprovedAck') {
             // List = ACK funnel for real Sent only; big number = received only.
             statuses = statuses.filter((s) => NETGEAR_ACK_STATUSES.has(s.label))

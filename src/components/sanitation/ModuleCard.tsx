@@ -70,14 +70,14 @@ export function ModuleCard({ title, value, unit, amountLabel, subValue, subSuffi
               {subValue && !stackSub && !stackLabel && <span className="ml-1 text-[9px] text-slate-600">({subValue})</span>}
               {subSuffix && <span className="ml-1 text-[9px] font-semibold text-slate-600">{subSuffix}</span>}
             </div>
+            {subValue && stackSub && (
+              <div className="mt-0.5 truncate text-[9px] font-normal leading-tight text-slate-600" title={subValue}>
+                ({subValue}){subSuffix ? ` ${subSuffix}` : ''}
+              </div>
+            )}
             {stackLabel && (
               <div className="mt-0.5 truncate text-[9px] font-medium leading-tight text-slate-600" title={stackLabel}>
                 {stackLabel}
-              </div>
-            )}
-            {subValue && stackSub && !stackLabel && (
-              <div className="mt-0.5 truncate text-[9px] font-normal leading-tight text-slate-600" title={subValue}>
-                ({subValue}){subSuffix ? ` ${subSuffix}` : ''}
               </div>
             )}
           </div>
