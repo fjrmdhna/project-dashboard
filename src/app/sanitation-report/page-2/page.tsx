@@ -38,14 +38,14 @@ const NETGEAR_CARDS: CardDef[] = [
     excludeNotSent: true,
     /** of-Y locked to Page 1 MPS Fully Approved (same module rows). */
     ofFromPage1MpsFullyApproved: true,
-    hint: 'PMIS → Netgear outbound. The "of" number is MPS Fully Approved from Page 1 (same source). Big number / Sent (green) = Fully Approved keys already exported to Netgear. Not Sent = Fully Approved but not exported. ACK Success / Waiting ACK / ACK Error detail is on MPS Approved ACK.',
+    hint: 'PMIS → Netgear outbound. The "of" number is MPS Fully Approved from Page 1 (same source). Big number / Sent = Fully Approved keys with a real (non-backfill) export. Backfill = export file_name starts with backfill- only (not counted as Sent). Not Sent = Fully Approved with no export. ACK detail is on MPS Approved ACK.',
   },
   {
     key: 'netgearMpsApprovedAck',
     title: 'MPS Approved ACK',
     tone: 'teal',
     /** Same outbound source as Sent; big number = received ACK only. */
-    hint: 'ACK for keys already sent to Netgear (same source as MPS Approved Sent: ack_status on netgear_mps_approved_rows). Big number = ACK already received (Success + Error). "of" = Sent count from MPS Approved Sent. Breakdown still shows Waiting ACK.',
+    hint: 'ACK for keys with a real (non-backfill) Netgear export. Backfill exports are excluded. Big number = ACK already received (Success + Error). "of" = Sent count from MPS Approved Sent. Breakdown still shows Waiting ACK.',
   },
   {
     key: 'netgearTaggingMos',
@@ -105,9 +105,10 @@ const FUSION_CARDS: CardDef[] = [
 ]
 
 const NOT_SENT_LABELS = new Set(['Not Sent'])
+const BACKFILL_LABEL = 'Backfill'
 const MPS_FA = 'MPS Fully Approved'
-const NETGEAR_MPS_STATUSES = new Set(['ACK Success', 'Waiting ACK', 'ACK Error', 'Not Sent'])
-/** ACK card list: exported keys only (matches Sent count). */
+const NETGEAR_MPS_STATUSES = new Set(['ACK Success', 'Waiting ACK', 'ACK Error', 'Backfill', 'Not Sent'])
+/** Real Sent / ACK funnel (excludes Backfill). */
 const NETGEAR_ACK_STATUSES = new Set(['ACK Success', 'Waiting ACK', 'ACK Error'])
 /** ACK card big number: jawaban Netgear sudah masuk. */
 const NETGEAR_RECEIVED_ACK = new Set(['ACK Success', 'ACK Error'])
@@ -220,32 +221,36 @@ function Section({
               : a.statuses
           let statusTotal =
             c.ofFromPage1MpsFullyApproved || isNetgearMpsPair ? (page1Fa ?? a.created) : a.created
-          // Not Sent = Page1 FA − exported, so Sent + Not Sent = of-Y.
+          // Not Sent = Page1 FA − (real Sent + Backfill).
           if ((c.ofFromPage1MpsFullyApproved || isNetgearMpsPair) && page1Fa !== null) {
-            const exported = statuses
+            const accounted = statuses
               .filter((s) => s.label !== 'Not Sent')
               .reduce((sum, s) => sum + s.count, 0)
-            const notSent = Math.max(0, page1Fa - exported)
+            const notSent = Math.max(0, page1Fa - accounted)
             const rest = statuses.filter((s) => s.label !== 'Not Sent')
             statuses = notSent > 0 ? [...rest, { label: 'Not Sent', count: notSent, tone: 'wait' as const }] : rest
           }
-          const notSentCount = statuses
-            .filter((s) => NOT_SENT_LABELS.has(s.label))
+          // Real Sent = non-backfill export only (ACK Success / Waiting / Error).
+          const sentCount = statuses
+            .filter((s) => NETGEAR_ACK_STATUSES.has(s.label))
             .reduce((sum, s) => sum + s.count, 0)
-          const sentCount = Math.max(0, statusTotal - notSentCount)
           const ofCount = statusTotal
           let xCount = c.excludeNotSent ? sentCount : a.created
 
           if (c.key === 'netgearMpsApproved') {
-            // Export funnel only: Sent (all exported) + Not Sent.
+            // Sent (real) + Backfill + Not Sent. Big number = real Sent only.
             const notSent = statuses.find((s) => NOT_SENT_LABELS.has(s.label))
+            const backfill = statuses.find((s) => s.label === BACKFILL_LABEL)
             statuses = [
               ...(sentCount > 0 ? [{ label: 'Sent', count: sentCount, tone: 'ok' as const }] : []),
+              ...(backfill && backfill.count > 0
+                ? [{ label: BACKFILL_LABEL, count: backfill.count, tone: 'neutral' as const }]
+                : []),
               ...(notSent && notSent.count > 0 ? [notSent] : []),
             ]
             xCount = sentCount
           } else if (c.key === 'netgearMpsApprovedAck') {
-            // List = full ACK funnel for Sent bucket; big number = received only.
+            // List = ACK funnel for real Sent only; big number = received only.
             statuses = statuses.filter((s) => NETGEAR_ACK_STATUSES.has(s.label))
             statusTotal = sentCount
             xCount = statuses

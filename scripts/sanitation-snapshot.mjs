@@ -44,6 +44,8 @@ const REQUIRE_VPN = process.argv.includes('--require-vpn')
 const DBX_PATH = process.env.DBX_MCP_PATH || 'C:\\Users\\ACER\\.dbx\\bin\\dbx-mcp.exe'
 const DBX_CONNECTION = process.env.DBX_CONNECTION || 'PMIS Prod'
 const PMIS_DB = process.env.PMIS_DB_NAME || 'pmisdb_20261008'
+// Default 5 mnt/query ringan; query berat (patp/fusion/cac) pakai SANITATION_HEAVY_TIMEOUT_MS (default 10 mnt).
+// Default 5 mnt/query ringan; query berat (patp/fusion/cac) pakai SANITATION_HEAVY_TIMEOUT_MS (default 10 mnt).
 const QUERY_TIMEOUT_MS = Math.max(1, Number(process.env.SANITATION_QUERY_TIMEOUT_MS) || 300_000)
 const UNKNOWN_VENDOR = 'UNKNOWN'
 
@@ -384,20 +386,12 @@ const PATP_QUERIES = (() => {
   const patpScopeVal = `${PATP_BASE_CTE(true)},${scopeVal}
     select v, 'Required' s, d, count(*) n, coalesce(sum(a), 0)::bigint a from (
       select n.v, n.d, coalesce(sv.a, 0) a from patp_need n left join scope_val sv on sv.sk = n.sk) z group by v, d`
-  if (USE_PG) {
-    // Satu query: need CTE hanya sekali (hindari dobel beban DB saat paralel).
-    return {
-      patpAll: `${base},${scopeVal},${pvLatest},${funnelTail}
-    ${funnelSelect}
-    union all${coreSelect}`,
-      // Fallback of-Y bila SANITATION_ONLY=patpScopeVal.
-      patpScopeVal,
-    }
-  }
-  // DBX: pecah (core vs funnel). Funnel tidak butuh pvLatest (pakai mps_funnel_val).
+  // Core vs funnel dipisah (PG + DBX): monolit patpAll sering >5 mnt + timeout saat
+  // berebut CPU dengan fusion/cac. Data sama — digabung di part() setelah query.
   return {
     patpAll: `${base},${scopeVal},${pvLatest}
     ${coreSelect}`,
+    // Fallback of-Y bila SANITATION_ONLY=patpScopeVal / patpAll di-skip di DBX.
     patpScopeVal,
     patpFunnel: `${base},
     ${funnelTail}
@@ -467,7 +461,9 @@ const NETGEAR_TAGGING_WITH_MPS_ACK = (type) => `with ${MPS_UNIVERSE_CTE},
       select distinct on (r.system_key, coalesce(r.transaction_id,''), coalesce(r.po,''), coalesce(r.material_line_item,''))
         r.system_key sk, r.ack_status
       from netgear_mps_approved_rows r
+      left join netgear_upload_logs u on u.id = r.upload_log_id
       where r.superseded_at is null and r.system_key in (select sk from per_sk)
+        and coalesce(u.file_name,'') not ilike 'backfill%'
       order by r.system_key, coalesce(r.transaction_id,''), coalesce(r.po,''), coalesce(r.material_line_item,''),
         r.exported_at desc nulls last, r.id desc),
     exp_agg as materialized (
@@ -875,10 +871,9 @@ const Q = {
       select b.v, b.d, b.a, ${FUNNEL_STATUS} s
       from b left join fa_agg g on g.sk = b.sk) z group by 2,3,4`,
 
-  // Page 2 Fixed Asset: universe = Fully Approved PATP ∪ Fully Approved CAC (1 SK sekali).
-  // Line INTPPM-002 dari kedua sumber digabung lalu rollup ACK per SK.
-  // Rp = full MPS PO (material + service); Page 1 patpFa/cacFa tetap terpisah.
-  fusionFa: `${PATP_BASE_CTE(USE_PG)},
+  // Page 2 fusionFa + fusionGr: 1 query (CTE universe PATP∪CAC sekali).
+  // Data identik query terpisah sebelumnya — hemat ~1× PATP_BASE + CAC di full run.
+  fusionAll: `${PATP_BASE_CTE(USE_PG)},
     patp_b as materialized (select sk, v, d from latest_patp where st like 'Acceptance Fully Approved%'),
     scoped_ba as materialized (
       select ba from (
@@ -910,9 +905,10 @@ const Q = {
         union all
         select sk, v, d from cac_b) x
       group by sk),
-    mps_fa_val as materialized (
+    mps_val as materialized (
       select sk.system_key sk,
-        coalesce(sum(case when p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0) a
+        coalesce(sum(case when ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0) a_svc,
+        coalesce(sum(case when p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0) a_all
       from sk
       join u on u.sk = sk.system_key
       join mapping_systemkey_po p on p.system_key = sk.system_key and p.transaction_id = sk.transaction_id
@@ -923,6 +919,7 @@ const Q = {
       group by sk.system_key
       union all
       select p.system_key sk,
+        coalesce(sum(case when ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0),
         coalesce(sum(case when p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0)
       from mapping_systemkey_po p
       join u on u.sk = p.system_key
@@ -939,6 +936,13 @@ const Q = {
       where la.acceptance_number like 'PATP-%'
         and la.status like 'Acceptance Fully Approved%'
         and la.system_key in (select sk from patp_b)),
+    gr_patp as materialized (
+      select distinct i.id, ba.sk
+      from patp_an ba
+      join oracle_fusion_intinv_005_interface i
+        on (i.acceptance_number = ba.an or i.ba_reference = ba.an)
+      where coalesce(i.file_type,'') ilike 'service%'
+        and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
     fa_patp as materialized (
       select distinct i.id, ba.sk
       from patp_an ba
@@ -975,7 +979,10 @@ const Q = {
       select distinct i.id, bd.ba, i.an from gr_i i join ba_done bd on i.an = bd.ba where i.sk is null
       union
       select distinct i.id, bd.ba, i.an from gr_i i join ba_done bd on i.br = bd.ba where i.sk is null),
-    gr_an as materialized (select distinct ba, an from gr_match where an is not null),
+    gr_cac as materialized (
+      select distinct g.id, bs.sk
+      from gr_match g
+      join ba_sk bs on bs.ba = g.ba),
     fa_i as materialized (
       select i.id, i.po_number po, i.receipt_number rn,
         regexp_replace(regexp_replace(i.receipt_number, '_[0-9]+$', ''), '_v[0-9]+[.][0-9]+$', '') rs
@@ -986,153 +993,48 @@ const Q = {
       select distinct f.id, bs.sk
       from fa_i f
       join ba_po bp on bp.po = f.po
-      join gr_an g on g.ba = bp.ba and (f.rn = g.an or f.rs = g.an)
+      join gr_match g on g.ba = bp.ba and (f.rn = g.an or f.rs = g.an)
       join ba_sk bs on bs.ba = g.ba),
+    gr_all as materialized (
+      select id, sk from gr_patp
+      union
+      select id, sk from gr_cac),
     fa_all as materialized (
       select id, sk from fa_patp
       union
       select id, sk from fa_cac),
+    gr_ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intinv_005_ack a where a.interface_id_ref in (select id from gr_all)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
     fa_ack as materialized (
       select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
       from oracle_fusion_intppm_002_ack a where a.interface_id_ref in (select id from fa_all)
       order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
-    g as materialized (
+    g_gr as materialized (
+      select f.sk, count(distinct f.id) lines,
+        count(distinct f.id) filter (where k.ack_status = 'ERROR') err,
+        count(distinct f.id) filter (where k.ack_status = 'SUCCESS') ok
+      from gr_all f
+      left join gr_ack k on k.interface_id_ref = f.id
+      group by f.sk),
+    g_fa as materialized (
       select f.sk, count(distinct f.id) lines,
         count(distinct f.id) filter (where k.ack_status = 'ERROR') err,
         count(distinct f.id) filter (where k.ack_status = 'SUCCESS') ok
       from fa_all f
       left join fa_ack k on k.interface_id_ref = f.id
       group by f.sk)
-    select v, s, d, count(*) n, sum(a)::bigint a from (
-      select u.v, u.d, coalesce(mv.a, 0) a, ${FUNNEL_STATUS} s
+    select 'fusionGr' k, v, s, d, count(*) n, sum(a)::bigint a from (
+      select u.v, u.d, coalesce(mv.a_svc, 0) a, ${FUNNEL_STATUS} s
       from u
-      left join mps_fa_val mv on mv.sk = u.sk
-      left join g on g.sk = u.sk) x group by 1,2,3`,
-
-  // Page 2 GR Service: universe = Fully Approved PATP ∪ Fully Approved CAC (1 SK sekali).
-  // Line INTINV-005 service dari kedua sumber digabung lalu rollup ACK per SK.
-  // Rp = service-line MPS PO only; Page 1 patpGr/cacGr tetap terpisah.
-  fusionGr: `${PATP_BASE_CTE(USE_PG)},
-    patp_b as materialized (select sk, v, d from latest_patp where st like 'Acceptance Fully Approved%'),
-    scoped_ba as materialized (
-      select ba from (
-        select x.ba_number ba,
-          bool_or(${IN_PO('x.po_number')}) has_in,
-          bool_or(x.po_number is not null and x.po_number not in (select po from scope_po)) has_out
-        from acceptance_certificate_detail x group by 1) t
-      where has_in and not has_out),
-    ba_sk_all as materialized (
-      select distinct d.system_key sk, h.ba_number ba, nullif(h.vendor_code,'') v,
-        coalesce(h.updated_at, h.created_at) ts
-      from acceptance_certificate_detail d
-      join scoped_ba s on s.ba = d.ba_number
-      join acceptance_certificate_header h on h.ba_number = d.ba_number
-      where d.system_key is not null and d.system_key <> ''),
-    wf as materialized (
-      select distinct on (w.entity_id) w.entity_id ba, w.status wf
-      from workflow_instances w
-      where w.entity_type = 'acceptance_certificates' and w.entity_id in (select ba from ba_sk_all)
-      order by w.entity_id, w.version desc, w.id desc),
-    cac_b as materialized (
-      select b.sk, max(b.v) v, ${DT('max(b.ts)')} d
-      from ba_sk_all b left join wf w on w.ba = b.ba
-      group by b.sk
-      having bool_or(w.wf = 'completed')),
-    u as materialized (
-      select sk, max(v) v, max(d) d from (
-        select sk, v, d from patp_b
-        union all
-        select sk, v, d from cac_b) x
-      group by sk),
-    mps_gr_val as materialized (
-      select sk.system_key sk,
-        coalesce(sum(case when ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0) a
-      from sk
-      join u on u.sk = sk.system_key
-      join mapping_systemkey_po p on p.system_key = sk.system_key and p.transaction_id = sk.transaction_id
-      left join lateral (select t.net_price::numeric np from transaction_po t
-        where t.po_number = p.po and t.line_subline = p.material_line_item
-          and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
-        order by t.created_at desc, t.id desc limit 1) tp on true
-      group by sk.system_key
-      union all
-      select p.system_key sk,
-        coalesce(sum(case when ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0)
-      from mapping_systemkey_po p
-      join u on u.sk = p.system_key
-      left join lateral (select t.net_price::numeric np from transaction_po t
-        where t.po_number = p.po and t.line_subline = p.material_line_item
-          and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
-        order by t.created_at desc, t.id desc limit 1) tp on true
-      where p.status_id in (1,2) and ${IN_PO('p.po')}
-        and not exists (select 1 from sk where sk.system_key = p.system_key)
-      group by p.system_key),
-    patp_an as materialized (
-      select distinct la.system_key sk, la.acceptance_number an
-      from list_acceptance la
-      where la.acceptance_number like 'PATP-%'
-        and la.status like 'Acceptance Fully Approved%'
-        and la.system_key in (select sk from patp_b)),
-    gr_patp as materialized (
-      select distinct i.id, ba.sk
-      from patp_an ba
-      join oracle_fusion_intinv_005_interface i
-        on (i.acceptance_number = ba.an or i.ba_reference = ba.an)
-      where coalesce(i.file_type,'') ilike 'service%'
-        and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
-    ba_done as materialized (
-      select distinct bsa.ba
-      from ba_sk_all bsa
-      join wf on wf.ba = bsa.ba and wf.wf = 'completed'
-      where bsa.sk in (select sk from cac_b)),
-    ba_sk as materialized (
-      select distinct d.ba_number ba, d.system_key sk from acceptance_certificate_detail d
-      where d.ba_number in (select ba from ba_done) and d.system_key is not null and d.system_key <> ''),
-    ba_po as materialized (
-      select distinct d.ba_number ba, d.po_number po from acceptance_certificate_detail d
-      where d.ba_number in (select ba from ba_done) and d.po_number is not null),
-    ba_patp as materialized (
-      select distinct bs.ba, la.acceptance_number an from ba_sk bs
-      join list_acceptance la on la.system_key = bs.sk and la.acceptance_category = 'PATP'),
-    gr_i as materialized (
-      select i.id, nullif(trim(i.system_key),'') sk, i.po_numbers po, i.acceptance_number an, i.ba_reference br
-      from oracle_fusion_intinv_005_interface i
-      where coalesce(i.file_type,'') ilike 'service%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
-    gr_match as materialized (
-      select distinct i.id, bp.ba, i.an
-      from gr_i i join ba_sk bs on bs.sk = i.sk join ba_po bp on bp.ba = bs.ba and bp.po = i.po
-      union
-      select distinct i.id, p.ba, i.an from gr_i i join ba_patp p on i.an = p.an
-      union
-      select distinct i.id, p.ba, i.an from gr_i i join ba_patp p on i.br = p.an
-      union
-      select distinct i.id, bd.ba, i.an from gr_i i join ba_done bd on i.an = bd.ba where i.sk is null
-      union
-      select distinct i.id, bd.ba, i.an from gr_i i join ba_done bd on i.br = bd.ba where i.sk is null),
-    gr_cac as materialized (
-      select distinct g.id, bs.sk
-      from gr_match g
-      join ba_sk bs on bs.ba = g.ba),
-    gr_all as materialized (
-      select id, sk from gr_patp
-      union
-      select id, sk from gr_cac),
-    gr_ack as materialized (
-      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
-      from oracle_fusion_intinv_005_ack a where a.interface_id_ref in (select id from gr_all)
-      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
-    g as materialized (
-      select f.sk, count(distinct f.id) lines,
-        count(distinct f.id) filter (where k.ack_status = 'ERROR') err,
-        count(distinct f.id) filter (where k.ack_status = 'SUCCESS') ok
-      from gr_all f
-      left join gr_ack k on k.interface_id_ref = f.id
-      group by f.sk)
-    select v, s, d, count(*) n, sum(a)::bigint a from (
-      select u.v, u.d, coalesce(mv.a, 0) a, ${FUNNEL_STATUS} s
+      left join mps_val mv on mv.sk = u.sk
+      left join g_gr g on g.sk = u.sk) x group by 2,3,4
+    union all select 'fusionFa' k, v, s, d, count(*) n, sum(a)::bigint a from (
+      select u.v, u.d, coalesce(mv.a_all, 0) a, ${FUNNEL_STATUS} s
       from u
-      left join mps_gr_val mv on mv.sk = u.sk
-      left join g on g.sk = u.sk) x group by 1,2,3`,
+      left join mps_val mv on mv.sk = u.sk
+      left join g_fa g on g.sk = u.sk) y group by 2,3,4`,
 
   // 1 system key = 1 hitungan; status approval SK pada endorsement TERBARU.
   endorsement: `with e as materialized (
@@ -1174,12 +1076,10 @@ const Q = {
               ${DT('coalesce((select max(h.date_status) from cr_history h where h.cr_number = c.cr_number), max(c.created_date))')} dt
             from cr_document c where c.cr_type = 'Relocation' and ${IN_PO('c.po_number')} group by c.cr_number) d) x group by 1,2,3`,
 
-  // Page 2 MPS Approved (+ ACK outcomes): satu sumber = netgear_mps_approved_rows.ack_status
-  // di-stamp ke baris export. Universe = MPS Fully Approved (CTE sama Page 1 + quanty_mapping numerik).
-  // Status per system key dari semua line export terbaru (non-superseded):
-  //   any Error → ACK Error; all Success → ACK Success; else Waiting ACK; no export → Not Sent.
-  // netgearMpsApprovedAck = subset exported (Success/Waiting/Error) dari CTE yang sama — jangan baca
-  // netgear_ack_rows (log inbound) supaya angka tidak bisa drift dari card MPS Approved Sent.
+  // Page 2 MPS Approved (+ ACK outcomes): netgear_mps_approved_rows + upload file_name.
+  // Backfill (file_name ilike 'backfill%') BUKAN Sent — status "Backfill".
+  // ACK rollup hanya dari line non-backfill. Ada normal+backfill → pakai normal.
+  // netgearMpsApprovedAck = subset Success/Waiting/Error (derived di Node).
   ...(() => {
     const base = `tx as materialized (select p.transaction_id, max(p.update_time) ut from mapping_systemkey_po p
           where ${IN_PO('p.po')} and p.transaction_id is not null group by 1),
@@ -1205,26 +1105,34 @@ const Q = {
               and p.quanty_mapping ~ ${NUM_RE})),
       latest as materialized (
         select distinct on (r.system_key, coalesce(r.transaction_id,''), coalesce(r.po,''), coalesce(r.material_line_item,''))
-          r.system_key sk, r.ack_status
+          r.system_key sk, r.ack_status,
+          (coalesce(u.file_name,'') ilike 'backfill%') as is_backfill
         from netgear_mps_approved_rows r
+        left join netgear_upload_logs u on u.id = r.upload_log_id
         where r.superseded_at is null and r.system_key in (select sk from fa)
         order by r.system_key, coalesce(r.transaction_id,''), coalesce(r.po,''), coalesce(r.material_line_item,''),
           r.exported_at desc nulls last, r.id desc),
-      agg as materialized (
+      agg_normal as materialized (
         select sk, count(*) lines,
           count(*) filter (where lower(coalesce(ack_status,'')) in ('true','t','1','success')) ok,
           count(*) filter (where lower(coalesce(ack_status,'')) in ('false','f','0','error')) err
-        from latest group by sk),
+        from latest where not is_backfill group by sk),
+      agg_bf as materialized (
+        select sk, count(*) lines from latest where is_backfill group by sk),
       st as materialized (
         select f.v, f.d, f.sk,
-          case when g.sk is null then 'Not Sent'
-               when g.err > 0 then 'ACK Error' when g.ok = g.lines then 'ACK Success' else 'Waiting ACK' end s
-        from fa f left join agg g on g.sk = f.sk)`
+          case
+            when n.sk is not null then
+              case when n.err > 0 then 'ACK Error' when n.ok = n.lines then 'ACK Success' else 'Waiting ACK' end
+            when b.sk is not null then 'Backfill'
+            else 'Not Sent'
+          end s
+        from fa f
+        left join agg_normal n on n.sk = f.sk
+        left join agg_bf b on b.sk = f.sk)`
     return {
       netgearMpsApproved: `with ${base}
     select v, s, d, count(*) n from st group by 1,2,3`,
-      netgearMpsApprovedAck: `with ${base}
-    select v, s, d, count(*) n from st where s in ('ACK Success', 'Waiting ACK', 'ACK Error') group by 1,2,3`,
     }
   })(),
 
@@ -1244,13 +1152,13 @@ function assertReadOnly(sql) {
 // ---------- Runner: pg (pool + paralel untuk query independen) ----------
 async function makePgRunner() {
   const { default: pg } = await import('pg')
-  // Pool kecil + query paralel: menunggu slot bisa selama query terberat (patpAll ~5 mnt).
-  // connectionTimeout harus >= statement timeout, bukan 15 dtk — kalau tidak, antrian slot dianggap "connect timeout".
+  // Pool kecil. Concurrency job default 2 agar query berat tidak berebut I/O.
+  // connectionTimeout >= statement timeout supaya antrian slot tidak dianggap connect timeout.
   const poolSize = Math.min(6, Math.max(2, Number(process.env.SANITATION_PG_POOL) || 4))
   const pool = new pg.Pool({
     connectionString: process.env.PMIS_DATABASE_URL,
     max: poolSize,
-    connectionTimeoutMillis: QUERY_TIMEOUT_MS,
+    connectionTimeoutMillis: Math.max(QUERY_TIMEOUT_MS, 600_000),
     idleTimeoutMillis: 60_000,
     allowExitOnIdle: true,
   })
@@ -1259,17 +1167,18 @@ async function makePgRunner() {
   })
   return {
     parallel: true,
-    async rows(sql) {
+    /** @param {string} sql @param {{ timeoutMs?: number }} [opts] */
+    async rows(sql, opts = {}) {
+      const timeoutMs = Math.max(1, Number(opts.timeoutMs) || QUERY_TIMEOUT_MS)
       const client = await pool.connect()
       const onErr = (err) => {
         if (VERBOSE) console.error('[sanitation] client error:', err.message)
       }
       client.on('error', onErr)
       try {
-        await client.query(`set statement_timeout = ${QUERY_TIMEOUT_MS}`)
+        await client.query(`set statement_timeout = ${timeoutMs}`)
         await client.query('set lock_timeout = 2000')
         await client.query('begin read only')
-        // Bantu sort/hash CTE besar (patp/mps); set local harus di dalam transaksi.
         await client.query("set local work_mem = '256MB'")
         await client.query('set local jit = off')
         const res = await client.query(sql)
@@ -1284,6 +1193,18 @@ async function makePgRunner() {
       await pool.end()
     },
   }
+}
+
+/** Jalankan job dengan batas concurrency (hindari N query berat paralel ke DB yang sama). */
+async function runWithConcurrency(fns, limit) {
+  const n = Math.max(1, Math.min(limit, fns.length || 1))
+  let i = 0
+  await Promise.all(Array.from({ length: n }, async () => {
+    while (i < fns.length) {
+      const idx = i++
+      await fns[idx]()
+    }
+  }))
 }
 
 // ---------- Runner: DBX (stdio JSON-RPC) ----------
@@ -1363,6 +1284,7 @@ function toneOf(label) {
   if (/^anomaly:/.test(l)) return 'wait'
   if (/reject|cancel|dropped|ack error/.test(l)) return 'bad'
   if (/fully approved|fully implemented|^approved|ack success|has bf on master tracker/.test(l)) return 'ok'
+  if (/^backfill$/.test(l)) return 'neutral'
   if (/waiting|progress|draft|reserved|ready|await|pending|no workflow|not sent|not approved|\bneed\b/.test(l)) return 'wait'
   return 'neutral'
 }
@@ -1431,22 +1353,55 @@ async function main() {
   const failed = []
   try {
     if (SKIP_PATP_ON_DBX) console.error('[sanitation] DBX: skip patpAll/patpFunnel (timeout 60s) — inherit snapshot lama; paksa: SANITATION_FORCE_PATP=1')
-    const jobs = Object.entries(Q).map(([name, rawSql]) => {
-      if (ONLY && !ONLY.includes(name)) return async () => { raw[name] = []; timings[name] = 0 }
+    // Alias: fusionFa/Gr → fusionAll; ACK Netgear → query Sent (ACK di-derive di Node).
+    const onlySet = ONLY
+      ? new Set(ONLY.flatMap((n) => {
+          if (n === 'fusionFa' || n === 'fusionGr') return ['fusionAll']
+          if (n === 'netgearMpsApprovedAck') return ['netgearMpsApproved']
+          return [n]
+        }))
+      : null
+    // Query berat: timeout longgar. Wave 1 = ringan (cepat paralel), wave 2 = berat (aman).
+    const HEAVY = new Set([
+      'patpAll', 'patpFunnel', 'cacAll', 'fusionAll', 'baseline', 'endorsement',
+      'patpScopeVal', 'netgearTaggingMos', 'netgearTaggingGreen', 'netgearMpsApproved',
+    ])
+    const HEAVY_TIMEOUT_MS = Math.max(QUERY_TIMEOUT_MS, Number(process.env.SANITATION_HEAVY_TIMEOUT_MS) || 600_000)
+    // PG full run: patpScope sudah di patpAll — skip patpScopeVal agar tidak dobel PATP_BASE.
+    const skipScopeVal = USE_PG && !onlySet
+    const lightLimit = Math.max(1, Number(process.env.SANITATION_PG_CONCURRENCY) || 4)
+    const heavyLimit = Math.max(1, Number(process.env.SANITATION_PG_HEAVY_CONCURRENCY) || 2)
+    if (VERBOSE && runner.parallel) {
+      console.error(`[sanitation] pg light=${lightLimit} heavy=${heavyLimit}, heavy timeout=${HEAVY_TIMEOUT_MS}ms`)
+    }
+    const lightJobs = []
+    const heavyJobs = []
+    for (const [name, rawSql] of Object.entries(Q)) {
+      if (onlySet && !onlySet.has(name)) {
+        raw[name] = []
+        timings[name] = 0
+        continue
+      }
+      if (skipScopeVal && name === 'patpScopeVal') {
+        raw[name] = []
+        timings[name] = 0
+        if (VERBOSE) console.error('[sanitation] patpScopeVal: skip (sudah di patpAll)')
+        continue
+      }
       if (SKIP_PATP_ON_DBX && (name === 'patpAll' || name === 'patpFunnel')) {
-        return async () => {
-          raw[name] = []
-          timings[name] = 0
-          failed.push(name)
-          if (VERBOSE) console.error(`[sanitation] ${name}: skip (DBX)`)
-        }
+        raw[name] = []
+        timings[name] = 0
+        failed.push(name)
+        if (VERBOSE) console.error(`[sanitation] ${name}: skip (DBX)`)
+        continue
       }
       const sql = withScope(rawSql)
       assertReadOnly(sql)
-      return async () => {
+      const timeoutMs = HEAVY.has(name) ? HEAVY_TIMEOUT_MS : QUERY_TIMEOUT_MS
+      const job = async () => {
         const t = Date.now()
         try {
-          raw[name] = await runner.rows(sql)
+          raw[name] = await runner.rows(sql, { timeoutMs })
           timings[name] = Date.now() - t
           if (VERBOSE) console.error(`[sanitation] ${name}: ${process.env.SANITATION_COUNT ? JSON.stringify(raw[name]) : raw[name].length + ' baris'}, ${timings[name]} ms`)
         } catch (e) {
@@ -1456,9 +1411,26 @@ async function main() {
           console.error(`[sanitation] ${name}: GAGAL (${timings[name]} ms) — ${e.message}`)
         }
       }
-    })
-    if (runner.parallel) await Promise.all(jobs.map((fn) => fn()))
-    else for (const fn of jobs) await fn()
+      ;(HEAVY.has(name) ? heavyJobs : lightJobs).push(job)
+    }
+    if (runner.parallel) {
+      if (lightJobs.length) await runWithConcurrency(lightJobs, lightLimit)
+      if (heavyJobs.length) await runWithConcurrency(heavyJobs, heavyLimit)
+    } else {
+      for (const fn of lightJobs) await fn()
+      for (const fn of heavyJobs) await fn()
+    }
+    // ACK = subset Sent (tanpa query kedua; data identik filter status).
+    if ((!onlySet || onlySet.has('netgearMpsApproved') || onlySet.has('netgearMpsApprovedAck'))
+      && Array.isArray(raw.netgearMpsApproved) && raw.netgearMpsApproved.length) {
+      const tAck = Date.now()
+      raw.netgearMpsApprovedAck = raw.netgearMpsApproved.filter((r) =>
+        r.s === 'ACK Success' || r.s === 'Waiting ACK' || r.s === 'ACK Error')
+      timings.netgearMpsApprovedAck = Date.now() - tAck
+      if (VERBOSE) console.error(`[sanitation] netgearMpsApprovedAck: ${raw.netgearMpsApprovedAck.length} baris (derived), ${timings.netgearMpsApprovedAck} ms`)
+    } else if (!raw.netgearMpsApprovedAck) {
+      raw.netgearMpsApprovedAck = []
+    }
     const codes = [...new Set(Object.values(raw).flat().map((r) => r.v).filter(Boolean))]
     const t0 = Date.now()
     const vendorSql = codes.length
@@ -1479,6 +1451,7 @@ async function main() {
 
   const part = (k) => [...(raw.patpAll || []), ...(raw.patpFunnel || [])].filter((r) => r.k === k)
   const cacPart = (k) => (raw.cacAll || []).filter((r) => r.k === k)
+  const fusionPart = (k) => (raw.fusionAll || []).filter((r) => r.k === k)
   // a_svc dihitung sekali di query mps/mpsReserved (hindari query mpsService terpisah ~4 mnt di DBX).
   const mpsRaw = raw.mps || []
   const mpsResRaw = raw.mpsReserved || []
@@ -1505,10 +1478,9 @@ async function main() {
     cac: toRows(cacPart('cac')),
     cacGr: toRows(cacPart('cacGr')),
     cacFa: toRows(cacPart('cacFa')),
-    // Page 2 Fixed Asset = PATP ∪ CAC Fully Approved (line INTPPM-002 digabung; Rp full MPS).
-    fusionFa: toRows(raw.fusionFa || []),
-    // Page 2 GR Service = PATP ∪ CAC Fully Approved (line INTINV-005 service digabung; Rp MPS service).
-    fusionGr: toRows(raw.fusionGr || []),
+    // Page 2 Fixed Asset / GR Service = PATP ∪ CAC (dari fusionAll; fallback nama lama).
+    fusionFa: toRows(fusionPart('fusionFa').length ? fusionPart('fusionFa') : (raw.fusionFa || [])),
+    fusionGr: toRows(fusionPart('fusionGr').length ? fusionPart('fusionGr') : (raw.fusionGr || [])),
     endorsement: toRows(raw.endorsement),
     caf: toRows(raw.caf),
     crRelocation: toRows(raw.cr),
