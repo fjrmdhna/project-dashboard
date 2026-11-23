@@ -38,7 +38,7 @@ const NETGEAR_CARDS: CardDef[] = [
     excludeNotSent: true,
     /** of-Y locked to Page 1 MPS Fully Approved (same module rows). */
     ofFromPage1MpsFullyApproved: true,
-    hint: 'PMIS → Netgear outbound. The "of" number is MPS Fully Approved from Page 1 (same source). Big number / Sent = Fully Approved keys with a real (non-backfill) export. Backfill = export file_name starts with backfill- only (not counted as Sent). Not Sent = Fully Approved with no export. ACK detail is on MPS Approved ACK.',
+            hint: 'PMIS → Netgear outbound. Big number / Sent = Fully Approved keys with a real (non-backfill) export. The "of" number is Page 1 MPS Fully Approved minus Backfill (no ACK expected), so Sent + Not Sent = of. Backfill keys (file_name starts with backfill-) are excluded from of and listed separately under the card. ACK detail is on MPS Approved ACK.',
   },
   {
     key: 'netgearMpsApprovedAck',
@@ -105,9 +105,18 @@ const FUSION_CARDS: CardDef[] = [
 ]
 
 const NOT_SENT_LABELS = new Set(['Not Sent'])
-const BACKFILL_LABEL = 'Backfill'
+const BACKFILL_LABEL = 'Backfill (no ACK expected)'
+/** Accept old snapshot label "Backfill" until refresh. */
+const isBackfillStatus = (label: string) => label === BACKFILL_LABEL || label === 'Backfill'
 const MPS_FA = 'MPS Fully Approved'
-const NETGEAR_MPS_STATUSES = new Set(['ACK Success', 'Waiting ACK', 'ACK Error', 'Backfill', 'Not Sent'])
+const NETGEAR_MPS_STATUSES = new Set([
+  'ACK Success',
+  'Waiting ACK',
+  'ACK Error',
+  'Backfill',
+  BACKFILL_LABEL,
+  'Not Sent',
+])
 /** Real Sent / ACK funnel (excludes Backfill). */
 const NETGEAR_ACK_STATUSES = new Set(['ACK Success', 'Waiting ACK', 'ACK Error'])
 /** ACK card big number: jawaban Netgear sudah masuk. */
@@ -234,21 +243,33 @@ function Section({
           const sentCount = statuses
             .filter((s) => NETGEAR_ACK_STATUSES.has(s.label))
             .reduce((sum, s) => sum + s.count, 0)
-          const ofCount = statusTotal
+          const backfillCount = statuses
+            .filter((s) => isBackfillStatus(s.label))
+            .reduce((sum, s) => sum + s.count, 0)
+          // Sent card of-Y = FA − Backfill (Sent + Not Sent). ACK of-Y stays Sent.
+          const ofCount =
+            c.key === 'netgearMpsApproved' && page1Fa !== null
+              ? Math.max(0, page1Fa - backfillCount)
+              : statusTotal
           let xCount = c.excludeNotSent ? sentCount : a.created
+          let sentStackLabel: string | undefined
+          let sentAnomalyPrefix: string | undefined
 
           if (c.key === 'netgearMpsApproved') {
-            // Sent (real) + Backfill + Not Sent. Big number = real Sent only.
+            // Funnel = Sent + Not Sent (= of). Backfill listed separately (excluded from of).
             const notSent = statuses.find((s) => NOT_SENT_LABELS.has(s.label))
-            const backfill = statuses.find((s) => s.label === BACKFILL_LABEL)
             statuses = [
               ...(sentCount > 0 ? [{ label: 'Sent', count: sentCount, tone: 'ok' as const }] : []),
-              ...(backfill && backfill.count > 0
-                ? [{ label: BACKFILL_LABEL, count: backfill.count, tone: 'neutral' as const }]
-                : []),
               ...(notSent && notSent.count > 0 ? [notSent] : []),
+              ...(backfillCount > 0
+                ? [{ label: BACKFILL_LABEL, count: backfillCount, tone: 'neutral' as const }]
+                : []),
             ]
+            statusTotal = ofCount
             xCount = sentCount
+            sentAnomalyPrefix = backfillCount > 0 ? 'Backfill' : undefined
+            sentStackLabel =
+              backfillCount > 0 ? `${BACKFILL_LABEL}: ${fmt(backfillCount)} excluded from of` : undefined
           } else if (c.key === 'netgearMpsApprovedAck') {
             // List = ACK funnel for real Sent only; big number = received only.
             statuses = statuses.filter((s) => NETGEAR_ACK_STATUSES.has(s.label))
@@ -290,7 +311,8 @@ function Section({
                     ? ofLabel
                     : undefined
               }
-              stackSub={showRp}
+              stackLabel={sentStackLabel}
+              stackSub={showRp || Boolean(sentStackLabel)}
               dimmed={xCount === 0 && !c.ofFromPage1MpsFullyApproved && !isNetgearMpsPair}
             >
               <StatusBreakdown
@@ -300,6 +322,7 @@ function Section({
                 tall="compact"
                 showBarAmounts={showRp}
                 showAmountCol={showRp}
+                anomalyPrefix={sentAnomalyPrefix}
               />
             </ModuleCard>
           )

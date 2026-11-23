@@ -1077,7 +1077,7 @@ const Q = {
             from cr_document c where c.cr_type = 'Relocation' and ${IN_PO('c.po_number')} group by c.cr_number) d) x group by 1,2,3`,
 
   // Page 2 MPS Approved (+ ACK outcomes): netgear_mps_approved_rows + upload file_name.
-  // Backfill (file_name ilike 'backfill%') BUKAN Sent — status "Backfill".
+  // Backfill (file_name ilike 'backfill%') BUKAN Sent — status "Backfill (no ACK expected)".
   // ACK rollup hanya dari line non-backfill. Ada normal+backfill → pakai normal.
   // netgearMpsApprovedAck = subset Success/Waiting/Error (derived di Node).
   ...(() => {
@@ -1124,7 +1124,7 @@ const Q = {
           case
             when n.sk is not null then
               case when n.err > 0 then 'ACK Error' when n.ok = n.lines then 'ACK Success' else 'Waiting ACK' end
-            when b.sk is not null then 'Backfill'
+            when b.sk is not null then 'Backfill (no ACK expected)'
             else 'Not Sent'
           end s
         from fa f
@@ -1284,7 +1284,7 @@ function toneOf(label) {
   if (/^anomaly:/.test(l)) return 'wait'
   if (/reject|cancel|dropped|ack error/.test(l)) return 'bad'
   if (/fully approved|fully implemented|^approved|ack success|has bf on master tracker/.test(l)) return 'ok'
-  if (/^backfill$/.test(l)) return 'neutral'
+  if (/^backfill\b/.test(l)) return 'neutral'
   if (/waiting|progress|draft|reserved|ready|await|pending|no workflow|not sent|not approved|\bneed\b/.test(l)) return 'wait'
   return 'neutral'
 }

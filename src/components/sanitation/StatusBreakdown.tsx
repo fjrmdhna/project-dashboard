@@ -13,6 +13,7 @@ function shortStatusLabel(label: string): string {
   }
   if (/^Anomaly: (?:MOS|GREEN) without MPS export$/.test(label)) return 'Anomaly · No MPS export'
   if (label.startsWith('Anomaly: ')) return `Anomaly · ${label.slice('Anomaly: '.length)}`
+  if (label === 'Backfill (no ACK expected)') return 'Backfill · no ACK expected'
   if (label.startsWith('Approved with Punchlist - ')) return `Punchlist · ${label.slice('Approved with Punchlist - '.length)}`
   const prefixes = [
     'Acceptance Fully Approved - ',
@@ -162,24 +163,39 @@ export function StatusBreakdown({
   const showAmountCol = showAmountColProp ?? statuses.some((s) => s.amount !== undefined)
   const main = anomalyPrefix ? statuses.filter((s) => !s.label.startsWith(anomalyPrefix)) : statuses
   const anomalies = anomalyPrefix ? statuses.filter((s) => s.label.startsWith(anomalyPrefix)) : []
+  // Bar/% hanya dari funnel utama; anomali/backfill tidak menggelembungkan proporsi.
+  const barStatuses = main
+  const barTotal = Math.max(
+    total,
+    barStatuses.reduce((sum, s) => sum + s.count, 0),
+  )
+  const anomalyTotal = anomalies.reduce((sum, s) => sum + s.count, 0)
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-0.5 overflow-hidden">
-      <StatusBar statuses={statuses} total={total} showAmounts={showBarAmounts} />
+      <StatusBar statuses={barStatuses} total={barTotal} showAmounts={showBarAmounts} />
       {/* Status normal boleh ter-clip; grup Anomalies + All statuses tetap terlihat di bawah. */}
       <div className="min-h-0 flex-1 overflow-hidden">
         <ul className="space-y-0.5">
           {main.map((s) => (
-            <Row key={s.label} s={s} total={total} showAmountCol={showAmountCol} className="flex" />
+            <Row key={s.label} s={s} total={barTotal} showAmountCol={showAmountCol} className="flex" />
           ))}
         </ul>
       </div>
       {anomalies.length > 0 && (
         <div className="shrink-0 space-y-0.5 border-t border-slate-100 pt-1">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Anomalies</p>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+            {anomalies.every((s) => s.label.startsWith('Backfill')) ? 'Excluded' : 'Anomalies'}
+          </p>
           <ul className="space-y-0.5">
             {anomalies.map((s) => (
-              <Row key={s.label} s={s} total={total} showAmountCol={showAmountCol} className="flex" />
+              <Row
+                key={s.label}
+                s={s}
+                total={anomalyTotal || s.count}
+                showAmountCol={showAmountCol}
+                className="flex"
+              />
             ))}
           </ul>
         </div>
