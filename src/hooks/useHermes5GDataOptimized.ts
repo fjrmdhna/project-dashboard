@@ -59,6 +59,8 @@ export interface Hermes5GSiteData extends MatrixRow {
   issue_category?: string | null
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
+  readiness_700_af?: string | null
+  activation_700_af?: string | null
   ftr_submit?: string | null
   site_id?: string | null
   site_name?: string | null
@@ -773,7 +775,7 @@ export function useHermes5GDataOptimized(options: UseHermes5GDataOptions = {}): 
       : "none"
 
   // Scoped dashboards fetch a smaller server-filtered dataset; unscoped pages keep the full cache.
-  const cacheKey = `hermes-site-data-${getDataScopeCacheKey(dataScope)}-${supplementalScopeKey}-${ranFilterMode}-v5`
+  const cacheKey = `hermes-site-data-${getDataScopeCacheKey(dataScope)}-${supplementalScopeKey}-${ranFilterMode}-v6`
 
   // Track if this is initial load vs filter change
   const hasLoadedOnceRef = useRef(false)

@@ -65,6 +65,8 @@ export const SITE_DATA_5G_SELECT_COLUMNS = [
   'ic_000040_af',
   'readiness_2600_af',
   'activation_2600_af',
+  'readiness_700_af',
+  'activation_700_af',
   'ftr_submit',
 ] as const;
 
@@ -135,6 +137,8 @@ export const SITE_DATA_5G_HEADERS = [
   'ic_000040_af',
   'readiness_2600_af',
   'activation_2600_af',
+  'readiness_700_af',
+  'activation_700_af',
   'ftr_submit',
 ] as const;
 

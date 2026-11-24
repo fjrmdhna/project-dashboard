@@ -31,6 +31,8 @@ export interface Row {
   patp_accepted_af?: string | null
   readiness_2600_af?: string | null
   activation_2600_af?: string | null
+  readiness_700_af?: string | null
+  activation_700_af?: string | null
   ftr_submit?: string | null
   site_id?: string | null
   site_name?: string | null

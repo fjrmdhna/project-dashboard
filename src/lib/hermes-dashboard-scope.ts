@@ -182,6 +182,32 @@ export function parseDataScopeFromSearchParams(
   }
 }
 
+/** Parse parallel supplemental_program_report(+_match) query params into scopes */
+export function parseSupplementalScopesFromSearchParams(
+  searchParams: URLSearchParams
+): HermesDashboardDataScope[] {
+  const programReports = searchParams
+    .getAll("supplemental_program_report")
+    .map((value) => value.trim())
+    .filter(Boolean)
+  const matchModes = searchParams.getAll("supplemental_program_report_match")
+
+  return programReports.map((programReport, index) => {
+    const match = matchModes[index]
+    return {
+      program_report: programReport,
+      ...(match === "contains" ? { program_report_match: "contains" as const } : {}),
+    }
+  })
+}
+
+export function getSupplementalScopesCacheKey(
+  scopes: readonly HermesDashboardDataScope[]
+): string {
+  if (scopes.length === 0) return "none"
+  return scopes.map((scope) => getDataScopeCacheKey(scope)).join("|")
+}
+
 type ScopedSupabaseQuery = {
   ilike: (column: string, pattern: string) => unknown
   eq: (column: string, value: string) => unknown

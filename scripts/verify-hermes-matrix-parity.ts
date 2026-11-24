@@ -48,13 +48,20 @@ const sampleMainRows = [
 const sampleSupplementalRows = [
   {
     system_key: 'N1',
-    program_report: 'NR700',
+    program_report: 'NR700 - NR700 (5G): Jakarta',
     ic_000040_af: '2025-02-01',
     rfs_af: '2025-02-02',
   },
   {
     system_key: 'N2',
-    program_report: 'NR700',
+    program_report: 'NR700 - NR700 (5G): Bandung',
+    // no milestone dates → should not count
+  },
+  {
+    system_key: 'N3',
+    program_report: 'Other Program',
+    ic_000040_af: '2025-02-03',
+    rfs_af: '2025-02-04',
   },
 ]
 
@@ -91,8 +98,14 @@ function testMatrixStats() {
   assert(byLabel['TOTAL SITES'] === 2, 'TOTAL SITES should equal main row count')
   assert(byLabel['READINESS 2600'] === 1, 'READINESS 2600 should count achieved rows in main scope')
   assert(byLabel['FTR'] === 1, 'FTR should count ftr_submit in main scope')
-  assert(byLabel['READINESS 700'] === 1, 'READINESS 700 should count NR700 ic_000040_af rows')
-  assert(byLabel['ACTIVATED 700'] === 1, 'ACTIVATED 700 should count NR700 rfs_af rows')
+  assert(
+    byLabel['READINESS 700'] === 1,
+    'READINESS 700 should count NR700* ic_000040_af rows (contains match)'
+  )
+  assert(
+    byLabel['ACTIVATED 700'] === 1,
+    'ACTIVATED 700 should count NR700* rfs_af rows (contains match)'
+  )
   assert(byLabel['SSV Released'] === 1, 'SSV Released should use rfc_approved column')
 }
 

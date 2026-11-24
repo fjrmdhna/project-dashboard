@@ -3,8 +3,10 @@ export interface HermesExtraMatrixMilestone {
   key: string
   column: string
   label: string
-  /** When set, only rows with this exact program_report are counted */
+  /** When set, only rows matching this program_report are counted */
   programReport?: string
+  /** Match mode for programReport; defaults to exact equality */
+  programReportMatch?: "exact" | "contains"
 }
 
 export interface HermesMilestoneFields {
@@ -37,6 +39,7 @@ export const NR_2600_READINESS_700_MILESTONE: HermesExtraMatrixMilestone = {
   column: "ic_000040_af",
   label: "READINESS 700",
   programReport: "NR700",
+  programReportMatch: "contains",
 }
 
 export const NR_2600_ACTIVATED_700_MILESTONE: HermesExtraMatrixMilestone = {
@@ -44,6 +47,7 @@ export const NR_2600_ACTIVATED_700_MILESTONE: HermesExtraMatrixMilestone = {
   column: "rfs_af",
   label: "ACTIVATED 700",
   programReport: "NR700",
+  programReportMatch: "contains",
 }
 
 export const NR_2600_MILESTONE_FIELDS: HermesMilestoneFields = {
@@ -127,12 +131,35 @@ export function isMilestoneAchieved(row: object, column: string): boolean {
   return value != null && String(value).trim() !== ""
 }
 
+function matchesExtraMilestoneProgramReport(
+  programReport: string | null | undefined,
+  extra: HermesExtraMatrixMilestone
+): boolean {
+  if (!extra.programReport) return true
+
+  if (extra.programReportMatch === "contains") {
+    return (programReport ?? "")
+      .toLowerCase()
+      .includes(extra.programReport.toLowerCase())
+  }
+
+  return programReport === extra.programReport
+}
+
 export function matchesExtraMilestoneRow(row: object, extra: HermesExtraMatrixMilestone): boolean {
   if (extra.programReport) {
     const programReport = (row as { program_report?: string | null }).program_report
-    if (programReport !== extra.programReport) return false
+    if (!matchesExtraMilestoneProgramReport(programReport, extra)) return false
   }
   return isMilestoneAchieved(row, extra.column)
+}
+
+export function describeExtraMilestoneScope(extra: HermesExtraMatrixMilestone): string {
+  if (!extra.programReport) return "Dashboard scope"
+  if (extra.programReportMatch === "contains") {
+    return `program_report contains ${extra.programReport}`
+  }
+  return `program_report = ${extra.programReport}`
 }
 
 export function getExtraMatrixMilestones(

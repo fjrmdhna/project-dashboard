@@ -28,14 +28,21 @@ function buildFilterQuery(searchParams: URLSearchParams) {
   return applyHermesSharedFilters(query, parseHermesSharedFilterParams(searchParams))
 }
 
-function buildSupplementalFilterQuery(searchParams: URLSearchParams, programReport: string) {
-  const query = supabase
+function buildSupplementalFilterQuery(
+  searchParams: URLSearchParams,
+  scope: { programReport: string; match: 'eq' | 'contains' }
+) {
+  let query = supabase
     .from('site_data_5g')
     .select(SITE_DATA_5G_SELECT_COLUMNS.join(','))
-    .eq('program_report', programReport) as unknown as HermesFilterQuery
+
+  query =
+    scope.match === 'contains'
+      ? query.ilike('program_report', `%${scope.programReport}%`)
+      : query.eq('program_report', scope.programReport)
 
   return applyHermesSharedFilters(
-    query,
+    query as unknown as HermesFilterQuery,
     parseHermesSharedFilterParams(searchParams),
     { skipProgramReportFilters: true }
   )
@@ -159,12 +166,19 @@ export async function GET(request: NextRequest) {
       .getAll('supplemental_program_report')
       .map((value) => value.trim())
       .filter(Boolean)
+    const supplementalMatchModes = searchParams.getAll('supplemental_program_report_match')
+    const supplementalScopes = supplementalProgramReports.map((programReport, index) => ({
+      programReport,
+      match: (supplementalMatchModes[index] === 'contains' ? 'contains' : 'eq') as
+        | 'eq'
+        | 'contains',
+    }))
     const matrixExportId = searchParams.get('matrix_export') || ''
     const milestoneFields = MATRIX_EXPORT_MILESTONE_FIELDS[matrixExportId]
 
     const mainQuery = buildFilterQuery(searchParams).range(0, EXPORT_ROW_LIMIT - 1)
-    const supplementalQueries = supplementalProgramReports.map((programReport) =>
-      buildSupplementalFilterQuery(searchParams, programReport).range(0, EXPORT_ROW_LIMIT - 1)
+    const supplementalQueries = supplementalScopes.map((scope) =>
+      buildSupplementalFilterQuery(searchParams, scope).range(0, EXPORT_ROW_LIMIT - 1)
     )
 
     const [mainResult, ...supplementalResults] = await Promise.all([
@@ -191,8 +205,8 @@ export async function GET(request: NextRequest) {
     }
 
     const mainRows = (mainResult.data || []) as unknown as Record<string, unknown>[]
-    const supplementalRowsByProgram = supplementalProgramReports.map((programReport, index) => ({
-      programReport,
+    const supplementalRowsByProgram = supplementalScopes.map((scope, index) => ({
+      programReport: scope.programReport,
       rows: (supplementalResults[index]?.data || []) as unknown as Record<string, unknown>[],
     }))
 

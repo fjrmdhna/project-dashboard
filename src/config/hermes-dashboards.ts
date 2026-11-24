@@ -30,7 +30,7 @@ export const NR_2600_PROGRAM_REPORT_SCOPE: HermesDashboardDataScope = {
 
 /** Supplemental scope for NR 700 matrix milestones (not part of main 13k scope) */
 export const NR_2600_SUPPLEMENTAL_PROGRAM_REPORT_SCOPES: readonly HermesDashboardDataScope[] = [
-  { program_report: "NR700" },
+  { program_report: "NR700", program_report_match: "contains" },
 ]
 
 export interface HermesDashboardConfig {
@@ -109,14 +109,7 @@ export function getHermesSiteDataEndpoint(
   supplementalDataScopes?: readonly HermesDashboardDataScope[]
 ): string {
   const params = appendDataScopeToSearchParams(new URLSearchParams({ mode }), dataScope)
-
-  supplementalDataScopes?.forEach((scope) => {
-    const programReport = Array.isArray(scope.program_report)
-      ? scope.program_report[0]
-      : scope.program_report
-    if (programReport) params.append("supplemental_program_report", programReport)
-  })
-
+  appendSupplementalScopesToSearchParams(params, supplementalDataScopes)
   return `/api/hermes-5g/site-data?${params.toString()}`
 }
 
@@ -128,7 +121,13 @@ export function appendSupplementalScopesToSearchParams(
     const programReport = Array.isArray(scope.program_report)
       ? scope.program_report[0]
       : scope.program_report
-    if (programReport) params.append("supplemental_program_report", programReport)
+    if (!programReport) return
+
+    params.append("supplemental_program_report", programReport)
+    params.append(
+      "supplemental_program_report_match",
+      scope.program_report_match === "contains" ? "contains" : "eq"
+    )
   })
   return params
 }

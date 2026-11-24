@@ -4,7 +4,10 @@ import { normalizeRanScoreForHermesFilter } from '@/lib/hermes-ran-score-filter'
 import {
   dataScopeToSiteDataFilters,
   getDataScopeCacheKey,
+  getSupplementalScopesCacheKey,
   parseDataScopeFromSearchParams,
+  parseSupplementalScopesFromSearchParams,
+  type HermesDashboardDataScope,
 } from '@/lib/hermes-dashboard-scope'
 import {
   setCache,
@@ -74,6 +77,8 @@ const MINIMAL_COLUMNS = [
   'patp_accepted_af',  // PATP stats
   'readiness_2600_af', // NR 2600 readiness milestone
   'activation_2600_af', // NR 2600 activation milestone
+  'readiness_700_af',  // NR 700 readiness milestone (NR 2600 dashboard)
+  'activation_700_af', // NR 700 activation milestone (NR 2600 dashboard)
   'ftr_submit', // NR 2600 FTR milestone
   'issue_category',    // TopIssue - client-side calculation
   'site_id',           // Search filter (shared with export)
@@ -150,6 +155,8 @@ function mapDataToFrontend(filteredData: any[], mode: 'full' | 'minimal' = 'full
       patp_accepted_af: row.patp_accepted_af || null,
       readiness_2600_af: row.readiness_2600_af || null,
       activation_2600_af: row.activation_2600_af || null,
+      readiness_700_af: row.readiness_700_af || null,
+      activation_700_af: row.activation_700_af || null,
       ftr_submit: row.ftr_submit || null,
       issue_category: row.issue_category || null,
       site_id: row.site_id || null,
@@ -237,13 +244,14 @@ async function fetchDataFromDatabase(
 }
 
 async function fetchSupplementalDataFromDatabase(
-  supplementalProgramReports: string[]
+  supplementalScopes: HermesDashboardDataScope[]
 ): Promise<any[]> {
-  if (supplementalProgramReports.length === 0) return []
+  if (supplementalScopes.length === 0) return []
 
   const rows: any[] = []
-  for (const programReport of supplementalProgramReports) {
-    const { data } = await getSiteData5G({ program_report: [programReport] }, {})
+  for (const scope of supplementalScopes) {
+    const scopeFilters = dataScopeToSiteDataFilters(scope)
+    const { data } = await getSiteData5G(scopeFilters, {})
     if (data?.length) rows.push(...data)
   }
   return rows
@@ -259,15 +267,9 @@ export async function GET(request: NextRequest) {
     const impTtps = searchParams.getAll('imp_ttp') || []
     const nanoClusters = searchParams.getAll('nano_cluster') || []
     const dataScope = parseDataScopeFromSearchParams(searchParams)
-    const supplementalProgramReports = searchParams
-      .getAll("supplemental_program_report")
-      .map((value) => value.trim())
-      .filter(Boolean)
+    const supplementalScopes = parseSupplementalScopesFromSearchParams(searchParams)
     const scopeKey = getDataScopeCacheKey(dataScope)
-    const supplementalScopeKey =
-      supplementalProgramReports.length > 0
-        ? supplementalProgramReports.map((value) => `pr:eq:${value}`).join("|")
-        : "none"
+    const supplementalScopeKey = getSupplementalScopesCacheKey(supplementalScopes)
 
     // Mode: 'minimal' for dashboard (smaller payload), 'full' for detailed views
     const mode = (searchParams.get('mode') || 'minimal') as 'full' | 'minimal'
@@ -316,7 +318,7 @@ export async function GET(request: NextRequest) {
 
     const [dataResult, supplementalRows] = await Promise.all([
       fetchDataFromDatabase(dataScope),
-      fetchSupplementalDataFromDatabase(supplementalProgramReports),
+      fetchSupplementalDataFromDatabase(supplementalScopes),
     ])
     const stats = calculateStatsFromData(dataResult.data)
 

@@ -1,5 +1,6 @@
 import {
   countExtraMilestones,
+  describeExtraMilestoneScope,
   getExtraMatrixMilestones,
   isMilestoneAchieved,
   resolveMilestoneColumns,
@@ -98,7 +99,7 @@ export function computeHermesMatrixExportStats(
     label: milestone.label,
     count: extraCounts[milestone.key] ?? 0,
     column: milestone.column,
-    scope: milestone.programReport ? `program_report = ${milestone.programReport}` : mainScope,
+    scope: milestone.programReport ? describeExtraMilestoneScope(milestone) : mainScope,
   }))
 
   const activatedIndex = baseMetrics.findIndex(

@@ -6,7 +6,7 @@ SCOPE PROGRAM (program_report)
 | Scope              | Aturan program_report                          | Dipakai untuk                          |
 |--------------------|------------------------------------------------|----------------------------------------|
 | Program utama 13k  | Berisi "13k" (semua status WBS)                | Semua angka matrix kecuali 700         |
-| Program NR700      | Persis "NR700"                                 | Readiness 700 & Activated 700 saja     |
+| Program NR700      | Berisi "NR700" (contains)                      | Readiness 700 & Activated 700 saja     |
 
 
 TABEL MATRIX — LABEL, KOLOM SUMBER, & SCOPE
@@ -22,8 +22,8 @@ Site dihitung "selesai" jika kolom tanggal/status-nya sudah terisi (tidak kosong
 | 5  | READINESS 2600     | readiness_2600_af | 13k            |
 | 6  | ACTIVATED 2600     | activation_2600_af| 13k            |
 | 7  | FTR                | ftr_submit        | 13k            |
-| 8  | READINESS 700      | ic_000040_af      | NR700          |
-| 9  | ACTIVATED 700      | rfs_af            | NR700          |
+| 8  | READINESS 700      | ic_000040_af      | NR700 (contains)|
+| 9  | ACTIVATED 700      | rfs_af            | NR700 (contains)|
 | 10 | RFA                | ready_for_acpt_date | 13k          |
 | 11 | SSV Released       | rfc_approved      | 13k            |
 | 12 | FATP               | fatp_accepted_af  | 13k            |
@@ -34,6 +34,7 @@ Site dihitung "selesai" jika kolom tanggal/status-nya sudah terisi (tidak kosong
 
 Catatan singkat:
 - INSTALL (13k) dan READINESS 700 (NR700) pakai kolom yang sama (ic_000040_af), tapi beda program.
+- ACTIVATED 700 memakai rfs_af pada program_report yang contain "NR700".
 - Label "SSV Released" = kolom rfc_approved.
 - Angka di layar = angka di export Excel (termasuk saat difilter).
 
@@ -54,4 +55,4 @@ FILTER DI DASHBOARD (mempengaruhi angka matrix & export)
 
 Scope program 13k selalu aktif di dashboard NR 2600 (tidak bisa dimatikan lewat filter).
 
-Updated: 2026-09-02
+Updated: 2026-11-24
