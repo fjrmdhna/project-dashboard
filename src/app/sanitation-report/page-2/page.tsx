@@ -38,7 +38,7 @@ const NETGEAR_CARDS: CardDef[] = [
     excludeNotSent: true,
     /** of-Y locked to Page 1 MPS Fully Approved (same module rows). */
     ofFromPage1MpsFullyApproved: true,
-            hint: 'PMIS → Netgear outbound. Big number / Sent = Fully Approved keys with a real (non-backfill) export. The "of" number is Page 1 MPS Fully Approved minus Backfill (no ACK expected), so Sent + Not Sent = of. Backfill keys (file_name starts with backfill-) are excluded from of and listed separately under the card. ACK detail is on MPS Approved ACK.',
+    hint: 'PMIS → Netgear outbound. Big number / Sent = Fully Approved keys with a real (non-backfill) export. The "of" number is Page 1 MPS Fully Approved minus Backfill (no ACK expected), so Sent + Not Sent = of. Backfill keys (file_name starts with backfill-) are excluded from of and listed separately under the card. ACK detail is on MPS Approved ACK.',
   },
   {
     key: 'netgearMpsApprovedAck',
@@ -47,29 +47,23 @@ const NETGEAR_CARDS: CardDef[] = [
     /** Same outbound source as Sent; big number = received ACK only. */
     hint: 'ACK for keys with a real (non-backfill) Netgear export. Backfill exports are excluded. Big number = ACK already received (Success + Error). "of" = Sent count from MPS Approved Sent. Breakdown still shows Waiting ACK.',
   },
-  {
-    key: 'netgearTaggingMos',
-    title: 'Tagging MOS',
-    tone: 'violet',
-    hint: 'Netgear MOS tagging. Big number = system keys that have MOS and MPS Approved ACK Success. "of" = all keys with MPS ACK Success (same source as MPS Approved ACK). Normal MOS statuses are for that Success slice; Anomaly rows = MOS keys without MPS ACK Success (Waiting ACK / ACK Error / no export).',
-  },
+  // After ACK: GREEN first, then MOS (ops order from Bari).
   {
     key: 'netgearTaggingGreen',
     title: 'Tagging GREEN',
     tone: 'orange',
     hint: 'Netgear GREEN tagging (PO+line mapped to system key). Big number = keys that have GREEN and MPS Approved ACK Success. "of" = all keys with MPS ACK Success (same source as MPS Approved ACK). Normal GREEN statuses are for that Success slice; Anomaly rows = GREEN keys without MPS ACK Success (Waiting ACK / ACK Error / no export).',
   },
+  {
+    key: 'netgearTaggingMos',
+    title: 'Tagging MOS',
+    tone: 'violet',
+    hint: 'Netgear MOS tagging. Big number = system keys that have MOS and MPS Approved ACK Success. "of" = all keys with MPS ACK Success (same source as MPS Approved ACK). Normal MOS statuses are for that Success slice; Anomaly rows = MOS keys without MPS ACK Success (Waiting ACK / ACK Error / no export).',
+  },
 ]
 
+/** Fusion row: GR Material → Site Transfer → GI → GR Service → Fixed Asset. */
 const FUSION_CARDS: CardDef[] = [
-  {
-    key: 'siteTransfer',
-    title: 'Site Transfer',
-    tone: 'orange',
-    excludeNotSent: true,
-    showAmounts: true,
-    hint: 'Oracle Fusion INTINV-007 (material). Same universe and status rules as Page 1 Site Transfer. Rp = material-line MPS PO value (qty × latest IDR net price); transfer lines use transferred qty × price.',
-  },
   {
     key: 'matcGr',
     title: 'GR Material',
@@ -77,6 +71,14 @@ const FUSION_CARDS: CardDef[] = [
     excludeNotSent: true,
     showAmounts: true,
     hint: 'Oracle Fusion INTINV-005 material files for Fully Approved MATC/BABT system keys. Rp = material-line MPS PO value only (qty × latest IDR net price). Status: Not Sent / Waiting ACK / ACK Success / ACK Error.',
+  },
+  {
+    key: 'siteTransfer',
+    title: 'Site Transfer',
+    tone: 'orange',
+    excludeNotSent: true,
+    showAmounts: true,
+    hint: 'Oracle Fusion INTINV-007 (material). Same universe and status rules as Page 1 Site Transfer. Rp = material-line MPS PO value (qty × latest IDR net price); transfer lines use transferred qty × price.',
   },
   {
     key: 'patpGi',
