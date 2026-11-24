@@ -337,11 +337,15 @@ const PATP_QUERIES = (() => {
         count(*) filter (where k.ack_status = 'ERROR') err,
         count(*) filter (where k.ack_status = 'SUCCESS') ok
       from gi_i i left join gi_ack k on k.interface_id_ref = i.id group by i.sk),
-    gr_i as materialized (
-      select distinct i.id, ba.sk from b_an ba
-      join oracle_fusion_intinv_005_interface i
-        on (i.acceptance_number = ba.an or i.ba_reference = ba.an)
+    -- Interface di-materialize sekali; OR / regexp diganti UNION equality join (hash join, hasil sama).
+    gr_src as materialized (
+      select i.id, i.acceptance_number an, i.ba_reference br
+      from oracle_fusion_intinv_005_interface i
       where coalesce(i.file_type,'') ilike 'service%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
+    gr_i as materialized (
+      select g.id, ba.sk from b_an ba join gr_src g on g.an = ba.an
+      union
+      select g.id, ba.sk from b_an ba join gr_src g on g.br = ba.an),
     gr_ack as materialized (
       select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
       from oracle_fusion_intinv_005_ack a where a.interface_id_ref in (select id from gr_i)
@@ -351,12 +355,14 @@ const PATP_QUERIES = (() => {
         count(*) filter (where k.ack_status = 'ERROR') err,
         count(*) filter (where k.ack_status = 'SUCCESS') ok
       from gr_i i left join gr_ack k on k.interface_id_ref = i.id group by i.sk),
+    fa_src as materialized (
+      select i.id, i.receipt_number rn, regexp_replace(i.receipt_number, '_[0-9]+$', '') rs
+      from oracle_fusion_intppm_002_interface i
+      where i.receipt_number like 'PATP-%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
     fa as materialized (
-      select distinct i.id, ba.sk from b_an ba
-      join oracle_fusion_intppm_002_interface i
-        on i.receipt_number like 'PATP-%'
-       and coalesce(i.export_status,'') <> 'GATE_FILTERED'
-       and (i.receipt_number = ba.an or regexp_replace(i.receipt_number, '_[0-9]+$', '') = ba.an)),
+      select f.id, ba.sk from b_an ba join fa_src f on f.rn = ba.an
+      union
+      select f.id, ba.sk from b_an ba join fa_src f on f.rs = ba.an),
     fa_ack as materialized (
       select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
       from oracle_fusion_intppm_002_ack a where a.interface_id_ref in (select id from fa)
@@ -940,20 +946,6 @@ const Q = {
       where la.acceptance_number like 'PATP-%'
         and la.status like 'Acceptance Fully Approved%'
         and la.system_key in (select sk from patp_b)),
-    gr_patp as materialized (
-      select distinct i.id, ba.sk
-      from patp_an ba
-      join oracle_fusion_intinv_005_interface i
-        on (i.acceptance_number = ba.an or i.ba_reference = ba.an)
-      where coalesce(i.file_type,'') ilike 'service%'
-        and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
-    fa_patp as materialized (
-      select distinct i.id, ba.sk
-      from patp_an ba
-      join oracle_fusion_intppm_002_interface i
-        on i.receipt_number like 'PATP-%'
-       and coalesce(i.export_status,'') <> 'GATE_FILTERED'
-       and (i.receipt_number = ba.an or regexp_replace(i.receipt_number, '_[0-9]+$', '') = ba.an)),
     ba_done as materialized (
       select distinct bsa.ba
       from ba_sk_all bsa
@@ -972,6 +964,19 @@ const Q = {
       select i.id, nullif(trim(i.system_key),'') sk, i.po_numbers po, i.acceptance_number an, i.ba_reference br
       from oracle_fusion_intinv_005_interface i
       where coalesce(i.file_type,'') ilike 'service%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
+    -- PATP: gr_i dipakai ulang; OR / regexp diganti UNION equality join (hasil sama).
+    gr_patp as materialized (
+      select i.id, ba.sk from patp_an ba join gr_i i on i.an = ba.an
+      union
+      select i.id, ba.sk from patp_an ba join gr_i i on i.br = ba.an),
+    fa_psrc as materialized (
+      select i.id, i.receipt_number rn, regexp_replace(i.receipt_number, '_[0-9]+$', '') rs
+      from oracle_fusion_intppm_002_interface i
+      where i.receipt_number like 'PATP-%' and coalesce(i.export_status,'') <> 'GATE_FILTERED'),
+    fa_patp as materialized (
+      select f.id, ba.sk from patp_an ba join fa_psrc f on f.rn = ba.an
+      union
+      select f.id, ba.sk from patp_an ba join fa_psrc f on f.rs = ba.an),
     gr_match as materialized (
       select distinct i.id, bp.ba, i.an
       from gr_i i join ba_sk bs on bs.sk = i.sk join ba_po bp on bp.ba = bs.ba and bp.po = i.po
@@ -1157,7 +1162,7 @@ function assertReadOnly(sql) {
 async function makePgRunner() {
   const { default: pg } = await import('pg')
   // Pool kecil. connectionTimeout >= heavy statement timeout (antrian slot = connect time).
-  const poolSize = Math.min(6, Math.max(2, Number(process.env.SANITATION_PG_POOL) || 4))
+  const poolSize = Math.min(6, Math.max(2, Number(process.env.SANITATION_PG_POOL) || 6))
   const pool = new pg.Pool({
     connectionString: process.env.PMIS_DATABASE_URL,
     max: poolSize,
@@ -1375,6 +1380,8 @@ async function main() {
       'patpAll', 'patpFunnel', 'cacAll', 'fusionAll', 'baseline', 'endorsement',
       'patpScopeVal', 'netgearTaggingMos', 'netgearTaggingGreen', 'netgearMpsApproved',
     ])
+    // Perkiraan durasi menurun (dari log nyata) untuk urutan start job berat.
+    const HEAVY_ORDER = ['fusionAll', 'patpFunnel', 'patpAll', 'baseline', 'cacAll', 'netgearTaggingGreen', 'netgearTaggingMos', 'netgearMpsApproved', 'endorsement']
     // PG full run: patpScope sudah di patpAll — skip patpScopeVal agar tidak dobel PATP_BASE.
     const skipScopeVal = USE_PG && !onlySet
     const lightLimit = Math.max(1, Number(process.env.SANITATION_PG_CONCURRENCY) || 4)
@@ -1419,14 +1426,20 @@ async function main() {
           console.error(`[sanitation] ${name}: GAGAL (${timings[name]} ms) — ${e.message}`)
         }
       }
-      ;(HEAVY.has(name) ? heavyJobs : lightJobs).push(job)
+      ;(HEAVY.has(name) ? heavyJobs : lightJobs).push({ name, job })
     }
+    // Terlama dulu (LPT) → makespan terpendek dengan slot heavy terbatas.
+    const heavyRank = (n) => { const i = HEAVY_ORDER.indexOf(n); return i < 0 ? HEAVY_ORDER.length : i }
+    heavyJobs.sort((a, b) => heavyRank(a.name) - heavyRank(b.name))
     if (runner.parallel) {
-      if (lightJobs.length) await runWithConcurrency(lightJobs, lightLimit)
-      if (heavyJobs.length) await runWithConcurrency(heavyJobs, heavyLimit)
+      // Ringan dan berat jalan bersamaan (tidak menunggu wave ringan selesai dulu).
+      await Promise.all([
+        lightJobs.length ? runWithConcurrency(lightJobs.map((j) => j.job), lightLimit) : null,
+        heavyJobs.length ? runWithConcurrency(heavyJobs.map((j) => j.job), heavyLimit) : null,
+      ])
     } else {
-      for (const fn of lightJobs) await fn()
-      for (const fn of heavyJobs) await fn()
+      for (const { job } of lightJobs) await job()
+      for (const { job } of heavyJobs) await job()
     }
     // ACK = subset Sent (tanpa query kedua; data identik filter status).
     if ((!onlySet || onlySet.has('netgearMpsApproved') || onlySet.has('netgearMpsApprovedAck'))
