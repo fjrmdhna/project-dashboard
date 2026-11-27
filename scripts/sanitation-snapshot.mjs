@@ -18,7 +18,7 @@
  * Env: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Rahasia tidak pernah dicetak.
  */
 import { spawn, execSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -80,6 +80,27 @@ const CTE_SCOPE = `scope_po as materialized (select distinct po_number po from t
     where po in (select po from scope_po) and system_key is not null)`
 const withScope = (sql) => (/^\s*with\s/i.test(sql) ? sql.replace(/^\s*with\s+/i, `with ${CTE_SCOPE}, `) : `with ${CTE_SCOPE} ${sql}`)
 const IN_PO = (col) => `${col} in (select po from scope_po)`
+
+/** PO-AUC migration SKs di-skip scheduler INTINV-007 (ops kit). File lokal = salinan PMIS BE. */
+function loadMigrationSkCte() {
+  const paths = [
+    join(ROOT, 'scripts', 'data', 'po-auc-migration-sk.json'),
+    join(ROOT, '..', 'PMIS Code', 'be-pmis-aj-production', 'modules', 'oracle-fusion', 'po-auc-migration-sk.json'),
+  ]
+  for (const p of paths) {
+    if (!existsSync(p)) continue
+    try {
+      const keys = JSON.parse(readFileSync(p, 'utf8'))
+      if (!Array.isArray(keys) || !keys.length) continue
+      const lit = keys.map((k) => `'${String(k).replace(/'/g, "''")}'`).join(',')
+      return `mig_sk as materialized (select unnest(ARRAY[${lit}]::text[]) as sk),`
+    } catch {
+      /* coba path berikutnya */
+    }
+  }
+  return 'mig_sk as materialized (select null::text as sk where false),'
+}
+const MIG_SK_CTE = loadMigrationSkCte()
 // caf_detail.system_key bertipe jsonb array: CAF masuk scope bila salah satu system_key-nya ada di scope (di-unnest sekali, hash join).
 const CAF_SCOPE_CTE = `scope_caf as materialized (select distinct d0.caf_no from caf_detail d0
     cross join lateral jsonb_array_elements_text(d0.system_key) kk(v) join scope_sk s on s.sk = kk.v)`
@@ -615,58 +636,176 @@ const Q = {
     union all
     select * from res_mat`,
 
-  // Site Transfer (INTINV-007, khusus material) per system key di universe mpsMaterial (termasuk Reserved/Ready).
-  // Line transfer diambil dari semua transaksi system key; dedupe per (sk, po, line) memakai baris interface terbaru.
-  // Status dari ACK terbaru per baris (kolom i.ack_status tidak mencatat ERROR).
-  // a = qty transfer x net price PO terbaru (IDR); Not Sent = nilai line material yang belum ditransfer.
-  siteTransfer: `${MPS_SK_VAL(false)},
-      m as (select t.mps_transaction_id, max(nullif(t.vendor_code,'')) vc,
-          ${DT('greatest(max(t.created_date), max(okx.ut))')} d
-        from mps_transaction t join okx on okx.transaction_id = t.mps_transaction_id group by 1),
-      txsk as materialized (select distinct system_key from mapping_systemkey_po
-        where transaction_id is not null and transaction_id <> '' and system_key is not null),
-      u as materialized (
-        select val.system_key sk, m.vc v, m.d d, coalesce(val.a, 0) a
-        from val join m on m.mps_transaction_id = val.transaction_id where val.nm > 0
-        union all
-        select p.system_key, max(nullif(p.vendor_code,'')), ${DT('max(coalesce(p.update_time, p.create_time))')},
-          coalesce(sum(case when not ${IS_SVC('p')} and p.quanty_mapping ~ ${NUM_RE} then p.quanty_mapping::numeric * tp.np end), 0)
-        from mapping_systemkey_po p
-        left join lateral (select t.net_price::numeric np from transaction_po t where t.po_number = p.po and t.line_subline = p.material_line_item
-            and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
-          order by t.created_at desc, t.id desc limit 1) tp on true
-        where p.status_id in (1,2) and ${IN_PO('p.po')} and p.system_key is not null and p.system_key <> ''
-          and not exists (select 1 from txsk where txsk.system_key = p.system_key)
-        group by p.system_key
-        having count(*) filter (where not ${IS_SVC('p')}) > 0),
-      st_line as materialized (
-        select distinct on (mp.system_key, mp.po, mp.material_line_item)
-          i.id, mp.system_key sk, mp.po, mp.material_line_item li, i.quantity_gi q, i.created_at ct
-        from oracle_fusion_intinv_007_interface i
-        join mapping_systemkey_po mp on mp.mps_id = i.mps_id
-        where coalesce(i.export_status,'') <> 'GATE_FILTERED' and mp.system_key in (select sk from u)
-        order by mp.system_key, mp.po, mp.material_line_item, i.id desc),
-      st_ack as materialized (
-        select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
-        from oracle_fusion_intinv_007_ack a where a.interface_id_ref in (select id from st_line)
-        order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc),
-      st_agg as materialized (
-        select l.sk, count(*) lines,
-          count(*) filter (where k.ack_status = 'SUCCESS') ok,
-          count(*) filter (where k.ack_status = 'ERROR') err,
-          sum(case when l.q::text ~ ${NUM_RE} then l.q::numeric * tp.np end) a,
-          ${DT('max(l.ct)')} d
-        from st_line l
-        left join st_ack k on k.interface_id_ref = l.id
-        left join lateral (select t.net_price::numeric np from transaction_po t where t.po_number = l.po and t.line_subline = l.li
-            and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
-          order by t.created_at desc, t.id desc limit 1) tp on true
-        group by l.sk)
-    select v, s, d, count(*) n, coalesce(sum(a), 0)::bigint a from (
-      select u.v, coalesce(g.d, u.d) d,
-        case when g.sk is null then u.a else coalesce(g.a, 0) end a,
-        ${FUNNEL_STATUS} s
-      from u left join st_agg g on g.sk = u.sk) x group by 1,2,3`,
+  // Site Transfer (INTINV-007): universe = done export ∪ antrian scheduler PMIS
+  // (findMosReadyUnexportedKeys: Current≠Destination, MOS AF, Fusion PO, bukan migrasi AUC).
+  // Not Sent = antrian penuh (belum export ATAU dest berubah); Sent/ACK = export & tidak di antrian.
+  siteTransfer: `with ${MIG_SK_CTE}
+    fusion_line as materialized (
+      select distinct tp.po_number po, tp.line_subline li
+      from transaction_po tp
+      where tp.sync_source in ('fusion','sap-fusion')
+        and tp.po_number in (select po from scope_po)
+    ),
+    moving as materialized (
+      select distinct m.system_key sk, m.po, nullif(trim(m.mps_id),'') mps_id,
+        trim(m.material_line_item) li, trim(m.destination_subtask) dest,
+        nullif(m.vendor_code,'') vc,
+        case when m.quanty_mapping ~ ${NUM_RE} then m.quanty_mapping::numeric end qty
+      from mapping_systemkey_po m
+      join scope_po sp on sp.po = m.po
+      join fusion_line fl on fl.po = m.po and fl.li = trim(m.material_line_item)
+      where m.system_key is not null and m.system_key <> ''
+        and nullif(trim(m.current_subtask),'') is not null
+        and nullif(trim(m.destination_subtask),'') is not null
+        and trim(m.current_subtask) <> trim(m.destination_subtask)
+        and not exists (select 1 from mig_sk x where x.sk = m.system_key)
+    ),
+    mos as materialized (
+      select distinct sm.system_key sk
+      from sitelist_mt sm
+      where sm.system_key in (select distinct sk from moving)
+        and nullif(btrim(sm.content_column -> 0 ->> 'mos_af'), '') is not null
+        and nullif(btrim(sm.content_column -> 0 ->> 'mos_af'), '-') is not null
+    ),
+    moving_mos as materialized (
+      select m.* from moving m join mos on mos.sk = m.sk
+    ),
+    -- Eligibility (PMIS): semua baris non-ERROR, termasuk GATE_FILTERED.
+    sent_elig as materialized (
+      select nullif(trim(i.mps_id),'') mps_id,
+        nullif(trim(i.transaction_reference_oracle),'') xref,
+        trim(i.po) po, trim(i.material_line_item) li,
+        nullif(trim(i.transfer_inv_task_oracle),'') dest,
+        i.created_at ct
+      from oracle_fusion_intinv_007_interface i
+      where i.record_status is null or i.record_status <> 'ERROR'
+    ),
+    -- Card Sent/ACK: baris export nyata (bukan GATE_FILTERED).
+    sent007 as materialized (
+      select i.id, nullif(trim(i.mps_id),'') mps_id,
+        nullif(trim(i.transaction_reference_oracle),'') xref,
+        trim(i.po) po, trim(i.material_line_item) li,
+        i.quantity_gi q, i.created_at ct
+      from oracle_fusion_intinv_007_interface i
+      where coalesce(i.export_status,'') <> 'GATE_FILTERED'
+        and (i.record_status is null or i.record_status <> 'ERROR')
+    ),
+    sent_mps as materialized (
+      select distinct mps_id, po, li from sent_elig where mps_id is not null
+    ),
+    sent_ref as materialized (
+      select distinct xref, po, li from sent_elig where xref is not null
+    ),
+    last_dest_mps as materialized (
+      select distinct on (mps_id, po, li) mps_id, po, li, dest
+      from sent_elig where mps_id is not null and dest is not null
+      order by mps_id, po, li, ct desc nulls last
+    ),
+    last_dest_ref as materialized (
+      select distinct on (xref, po, li) xref, po, li, dest
+      from sent_elig where xref is not null and dest is not null
+      order by xref, po, li, ct desc nulls last
+    ),
+    needy as materialized (
+      select mm.sk, mm.vc, mm.po, mm.li, mm.qty
+      from moving_mos mm
+      left join sent_mps sm on sm.mps_id = mm.mps_id and sm.po = trim(mm.po) and sm.li = mm.li
+      left join sent_ref sr on sr.xref = mm.sk and sr.po = trim(mm.po) and sr.li = mm.li
+      left join last_dest_mps ldm on ldm.mps_id = mm.mps_id and ldm.po = trim(mm.po) and ldm.li = mm.li
+      left join last_dest_ref ldr on ldr.xref = mm.sk and ldr.po = trim(mm.po) and ldr.li = mm.li
+      where not (
+        (sm.mps_id is not null or sr.xref is not null)
+        and (
+          (ldm.dest is not null and ldm.dest = mm.dest)
+          or (ldr.dest is not null and ldr.dest = mm.dest)
+        )
+      )
+    ),
+    -- Antrian scheduler PMIS (findMosReadyUnexportedKeys, tanpa limit/rotasi).
+    waiting_sk as materialized (
+      select n.sk, max(n.vc) vc from needy n group by n.sk
+    ),
+    sent_sk as materialized (
+      select distinct mp.system_key sk
+      from sent007 i
+      join mapping_systemkey_po mp on mp.mps_id = i.mps_id
+      where mp.system_key is not null and mp.system_key <> ''
+        and ${IN_PO('mp.po')}
+      union
+      select distinct xref from sent007
+      where xref is not null and xref in (select sk from moving)
+    ),
+    -- Sent card = sudah export & tidak lagi di antrian (hindari dobel hitung).
+    done_sk as materialized (
+      select s.sk from sent_sk s
+      where s.sk not in (select sk from waiting_sk)
+    ),
+    po_price as materialized (
+      select distinct on (t.po_number, t.line_subline)
+        t.po_number po, t.line_subline li, t.net_price::numeric np
+      from transaction_po t
+      where t.po_number in (
+          select distinct po from needy
+          union
+          select distinct po from sent007
+        )
+        and upper(trim(coalesce(t.currency,''))) = 'IDR' and t.net_price ~ ${NUM_RE}
+      order by t.po_number, t.line_subline, t.created_at desc nulls last, t.id desc
+    ),
+    wait_val as materialized (
+      select n.sk, coalesce(sum(n.qty * pp.np), 0) a,
+        to_char(current_date, 'YYYY-MM-DD') d
+      from needy n
+      left join po_price pp on pp.po = n.po and pp.li = n.li
+      group by n.sk
+    ),
+    st_line as materialized (
+      select distinct on (mp.system_key, i.po, i.li)
+        i.id, mp.system_key sk, i.po, i.li, i.q, i.ct
+      from sent007 i
+      join mapping_systemkey_po mp on mp.mps_id = i.mps_id
+      where mp.system_key in (select sk from done_sk)
+      order by mp.system_key, i.po, i.li, i.id desc
+    ),
+    st_ack as materialized (
+      select distinct on (a.interface_id_ref) a.interface_id_ref, a.ack_status
+      from oracle_fusion_intinv_007_ack a where a.interface_id_ref in (select id from st_line)
+      order by a.interface_id_ref, a.processing_date desc nulls last, a.id desc
+    ),
+    st_agg as materialized (
+      select l.sk, count(*) lines,
+        count(*) filter (where k.ack_status = 'SUCCESS') ok,
+        count(*) filter (where k.ack_status = 'ERROR') err,
+        sum(case when l.q::text ~ ${NUM_RE} then l.q::numeric * pp.np end) a,
+        ${DT('max(l.ct)')} d
+      from st_line l
+      left join st_ack k on k.interface_id_ref = l.id
+      left join po_price pp on pp.po = l.po and pp.li = l.li
+      group by l.sk
+    ),
+    vendor_sk as materialized (
+      select p.system_key sk, max(nullif(p.vendor_code,'')) v
+      from mapping_systemkey_po p
+      where p.system_key in (select sk from done_sk) and ${IN_PO('p.po')}
+      group by p.system_key
+    ),
+    u as materialized (
+      select sk.sk, vs.v,
+        coalesce(g.d, to_char(current_date, 'YYYY-MM-DD')) d,
+        coalesce(g.a, 0) a,
+        case when g.lines is null then 'Waiting ACK'
+             when g.err > 0 then 'ACK Error'
+             when g.ok = g.lines then 'ACK Success'
+             else 'Waiting ACK' end as st
+      from done_sk sk
+      left join st_agg g on g.sk = sk.sk
+      left join vendor_sk vs on vs.sk = sk.sk
+      union all
+      select w.sk, w.vc, coalesce(wv.d, to_char(current_date, 'YYYY-MM-DD')), coalesce(wv.a, 0), 'Not Sent'
+      from waiting_sk w
+      left join wait_val wv on wv.sk = w.sk
+    )
+    select v, st as s, d, count(*) n, coalesce(sum(a), 0)::bigint a from u group by 1,2,3`,
 
   // Reserved/Ready: 1 system key = 1 baris (unik global). System key yang sudah punya transaksi MPS dikeluarkan.
   // Rp = sum(quanty_mapping x net_price PO terbaru, IDR) semua line; a_svc = service lines only (untuk of-Y CAC).
@@ -1033,7 +1172,67 @@ const Q = {
         count(distinct f.id) filter (where k.ack_status = 'SUCCESS') ok
       from fa_all f
       left join fa_ack k on k.interface_id_ref = f.id
-      group by f.sk)
+      group by f.sk),
+    -- Not Sent GR Service: satu alasan per system key (prioritas scheduler).
+    ns as materialized (
+      select u.sk, u.v, u.d, coalesce(mv.a_svc, 0) a
+      from u
+      left join mps_val mv on mv.sk = u.sk
+      where not exists (select 1 from g_gr g where g.sk = u.sk)),
+    ns_line as materialized (
+      select ns.sk,
+        bool_or(${IS_SVC('p')}) has_svc,
+        bool_or(not ${IS_SVC('p')}) has_mat,
+        bool_or(p.po is not null and p.po not in (select po from scope_po)) has_out_po
+      from ns
+      join sk on sk.system_key = ns.sk
+      join mapping_systemkey_po p on p.system_key = sk.system_key and p.transaction_id = sk.transaction_id
+      group by ns.sk
+      union all
+      select ns.sk,
+        bool_or(${IS_SVC('p')}),
+        bool_or(not ${IS_SVC('p')}),
+        bool_or(p.po is not null and p.po not in (select po from scope_po))
+      from ns
+      join mapping_systemkey_po p on p.system_key = ns.sk
+      where not exists (select 1 from sk where sk.system_key = ns.sk)
+        and p.status_id in (1,2) and ${IN_PO('p.po')}
+      group by ns.sk),
+    ns_mps_fa as materialized (
+      select distinct on (sk.system_key) sk.system_key sk,
+        coalesce(ms.name = 'MPS Fully Approved', false) mps_fa
+      from sk
+      join ns on ns.sk = sk.system_key
+      join mps_transaction t on t.mps_transaction_id = sk.transaction_id
+      left join mps_status ms on ms.id = t.status_approval
+      order by sk.system_key, t.id desc),
+    ns_gi_ok as materialized (
+      select distinct i.system_key sk
+      from oracle_fusion_intinv_006_interface i
+      join ns on ns.sk = i.system_key
+      where coalesce(i.export_status,'') <> 'GATE_FILTERED'
+        and exists (
+          select 1 from oracle_fusion_intinv_006_ack a
+          where a.interface_id_ref = i.id and a.ack_status = 'SUCCESS')),
+    ns_reason as materialized (
+      select ns.sk, ns.v, ns.d, ns.a,
+        case
+          when not coalesce(l.has_svc, false) then 'No service line'
+          when coalesce(l.has_out_po, false) then 'Non-Fusion PO'
+          when exists (select 1 from sk where sk.system_key = ns.sk)
+            and not coalesce(mf.mps_fa, false) then 'MPS not Fully Approved'
+          when not coalesce(l.has_mat, false)
+            and not exists (select 1 from cac_b c where c.sk = ns.sk)
+            then 'Awaiting CAC (service-only)'
+          when coalesce(l.has_mat, false)
+            and not exists (select 1 from patp_b p where p.sk = ns.sk)
+            and not exists (select 1 from ns_gi_ok g where g.sk = ns.sk)
+            then 'Missing send gate'
+          else 'Other / not yet exported'
+        end s
+      from ns
+      left join ns_line l on l.sk = ns.sk
+      left join ns_mps_fa mf on mf.sk = ns.sk)
     select 'fusionGr' k, v, s, d, count(*) n, sum(a)::bigint a from (
       select u.v, u.d, coalesce(mv.a_svc, 0) a, ${FUNNEL_STATUS} s
       from u
@@ -1043,7 +1242,9 @@ const Q = {
       select u.v, u.d, coalesce(mv.a_all, 0) a, ${FUNNEL_STATUS} s
       from u
       left join mps_val mv on mv.sk = u.sk
-      left join g_fa g on g.sk = u.sk) y group by 2,3,4`,
+      left join g_fa g on g.sk = u.sk) y group by 2,3,4
+    union all select 'fusionGrNotSent' k, v, s, d, count(*) n, sum(a)::bigint a from (
+      select v, s, d, a from ns_reason) z group by 2,3,4`,
 
   // 1 system key = 1 hitungan; status approval SK pada endorsement TERBARU.
   endorsement: `with e as materialized (
@@ -1377,11 +1578,11 @@ async function main() {
       : null
     // Query berat: timeout longgar. Wave 1 = ringan (cepat paralel), wave 2 = berat (aman).
     const HEAVY = new Set([
-      'patpAll', 'patpFunnel', 'cacAll', 'fusionAll', 'baseline', 'endorsement',
+      'patpAll', 'patpFunnel', 'cacAll', 'fusionAll', 'baseline', 'endorsement', 'siteTransfer',
       'patpScopeVal', 'netgearTaggingMos', 'netgearTaggingGreen', 'netgearMpsApproved',
     ])
     // Perkiraan durasi menurun (dari log nyata) untuk urutan start job berat.
-    const HEAVY_ORDER = ['fusionAll', 'patpFunnel', 'patpAll', 'baseline', 'cacAll', 'netgearTaggingGreen', 'netgearTaggingMos', 'netgearMpsApproved', 'endorsement']
+    const HEAVY_ORDER = ['fusionAll', 'patpFunnel', 'patpAll', 'baseline', 'cacAll', 'siteTransfer', 'netgearTaggingGreen', 'netgearTaggingMos', 'netgearMpsApproved', 'endorsement']
     // PG full run: patpScope sudah di patpAll — skip patpScopeVal agar tidak dobel PATP_BASE.
     const skipScopeVal = USE_PG && !onlySet
     const lightLimit = Math.max(1, Number(process.env.SANITATION_PG_CONCURRENCY) || 4)
@@ -1440,6 +1641,9 @@ async function main() {
     } else {
       for (const { job } of lightJobs) await job()
       for (const { job } of heavyJobs) await job()
+    }
+    if (DRY && process.env.SANITATION_DUMP_RAW) {
+      writeFileSync(process.env.SANITATION_DUMP_RAW, JSON.stringify(raw))
     }
     // ACK = subset Sent (tanpa query kedua; data identik filter status).
     if ((!onlySet || onlySet.has('netgearMpsApproved') || onlySet.has('netgearMpsApprovedAck'))
@@ -1502,6 +1706,7 @@ async function main() {
     // Page 2 Fixed Asset / GR Service = PATP ∪ CAC (dari fusionAll; fallback nama lama).
     fusionFa: toRows(fusionPart('fusionFa').length ? fusionPart('fusionFa') : (raw.fusionFa || [])),
     fusionGr: toRows(fusionPart('fusionGr').length ? fusionPart('fusionGr') : (raw.fusionGr || [])),
+    fusionGrNotSent: toRows(fusionPart('fusionGrNotSent')),
     endorsement: toRows(raw.endorsement),
     caf: toRows(raw.caf),
     crRelocation: toRows(raw.cr),

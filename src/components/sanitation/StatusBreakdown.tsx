@@ -5,6 +5,13 @@ import { fmt } from './ModuleCard'
 import { formatIdr, formatIdrFull, pct, type StatusItem } from '@/lib/sanitation-report/aggregate'
 import { BAR_ORDER, COLOR, TONE_BG, TONE_GROUP } from './tones'
 
+export type StatusDrilldown = {
+  title: string
+  statuses: StatusItem[]
+  /** Shown when statuses is empty (e.g. old snapshot). */
+  emptyHint?: string
+}
+
 /** Prefiks panjang dipotong di UI; label penuh tetap di tooltip. */
 function shortStatusLabel(label: string): string {
   {
@@ -32,19 +39,22 @@ function Row({
   total,
   className = 'flex',
   showAmountCol,
+  onClick,
 }: {
   s: StatusItem
   total: number
   className?: string
   /** Cadangkan kolom Rp agar sejajar antar-card (kosong jika status tidak punya amount). */
   showAmountCol?: boolean
+  onClick?: () => void
 }) {
   const shown = shortStatusLabel(s.label)
-  return (
-    <li className={`${className} min-w-0 items-center gap-1 text-[10px] leading-3 text-slate-700`}>
+  const body = (
+    <>
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${TONE_BG[s.tone]}`} aria-hidden />
       <span className="min-w-0 flex-1 truncate" title={s.label}>
         {shown}
+        {onClick ? <span className="ml-0.5 text-teal-700">→</span> : null}
       </span>
       <span className="w-11 shrink-0 text-right font-bold tabular-nums text-slate-900">{fmt(s.count)}</span>
       <span className="w-7 shrink-0 text-right tabular-nums text-slate-500">{pct(s.count, total)}</span>
@@ -56,6 +66,24 @@ function Row({
           {s.amount !== undefined ? formatIdr(s.amount) : ''}
         </span>
       )}
+    </>
+  )
+  if (onClick) {
+    return (
+      <li className={`${className} min-w-0`}>
+        <button
+          type="button"
+          onClick={onClick}
+          className="flex w-full min-w-0 items-center gap-1 rounded text-left text-[10px] leading-3 text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
+        >
+          {body}
+        </button>
+      </li>
+    )
+  }
+  return (
+    <li className={`${className} min-w-0 items-center gap-1 text-[10px] leading-3 text-slate-700`}>
+      {body}
     </li>
   )
 }
@@ -137,6 +165,7 @@ export function StatusBreakdown({
   showBarAmounts = true,
   showAmountCol: showAmountColProp,
   anomalyPrefix,
+  statusDrilldowns,
 }: {
   statuses: StatusItem[]
   total: number
@@ -148,15 +177,23 @@ export function StatusBreakdown({
   showAmountCol?: boolean
   /** Prefiks label anomali — digroup di bawah daftar utama dengan heading Anomalies. */
   anomalyPrefix?: string
+  /** Optional click drilldown per status label (e.g. Not Sent → reason list). */
+  statusDrilldowns?: Record<string, StatusDrilldown>
 }) {
   const [open, setOpen] = useState(false)
+  const [drillLabel, setDrillLabel] = useState<string | null>(null)
   const id = useId()
+  const drill = drillLabel ? statusDrilldowns?.[drillLabel] : undefined
   useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    if (!open && !drillLabel) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (drillLabel) setDrillLabel(null)
+      else setOpen(false)
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [open])
+  }, [open, drillLabel])
 
   if (!total) return <p className="text-[10px] text-slate-500">No transactions for the selected vendors.</p>
 
@@ -170,15 +207,24 @@ export function StatusBreakdown({
     barStatuses.reduce((sum, s) => sum + s.count, 0),
   )
   const anomalyTotal = anomalies.reduce((sum, s) => sum + s.count, 0)
+  const drillTotal = drill?.statuses.reduce((sum, s) => sum + s.count, 0) ?? 0
+  const drillShowAmount = drill?.statuses.some((s) => s.amount !== undefined) ?? false
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-0.5 overflow-hidden">
+    <div className="relative flex h-full min-h-0 flex-col gap-0.5 overflow-hidden">
       <StatusBar statuses={barStatuses} total={barTotal} showAmounts={showBarAmounts} />
       {/* Status normal boleh ter-clip; grup Anomalies + All statuses tetap terlihat di bawah. */}
       <div className="min-h-0 flex-1 overflow-hidden">
         <ul className="space-y-0.5">
           {main.map((s) => (
-            <Row key={s.label} s={s} total={barTotal} showAmountCol={showAmountCol} className="flex" />
+            <Row
+              key={s.label}
+              s={s}
+              total={barTotal}
+              showAmountCol={showAmountCol}
+              className="flex"
+              onClick={statusDrilldowns?.[s.label] ? () => setDrillLabel(s.label) : undefined}
+            />
           ))}
         </ul>
       </div>
@@ -235,7 +281,13 @@ export function StatusBreakdown({
           <div className="min-h-0 flex-1 space-y-1 overflow-auto">
             <ul className="space-y-1">
               {main.map((s) => (
-                <Row key={s.label} s={s} total={total} showAmountCol={showAmountCol} />
+                <Row
+                  key={s.label}
+                  s={s}
+                  total={total}
+                  showAmountCol={showAmountCol}
+                  onClick={statusDrilldowns?.[s.label] ? () => { setOpen(false); setDrillLabel(s.label) } : undefined}
+                />
               ))}
             </ul>
             {anomalies.length > 0 && (
@@ -247,6 +299,45 @@ export function StatusBreakdown({
                   ))}
                 </ul>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {drill && (
+        <div
+          role="dialog"
+          aria-label={drill.title}
+          className="absolute inset-0 z-20 flex flex-col bg-white pl-3 pr-3 pt-1.5 pb-2"
+        >
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-[10px] font-bold uppercase tracking-wider text-slate-700">
+              {drill.title}
+            </span>
+            <button
+              type="button"
+              autoFocus
+              onClick={() => setDrillLabel(null)}
+              aria-label="Close"
+              className="rounded px-1.5 text-sm font-bold text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600"
+            >
+              ×
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 space-y-1 overflow-auto">
+            {drill.statuses.length === 0 ? (
+              <p className="text-[10px] text-slate-500">{drill.emptyHint || 'No breakdown available.'}</p>
+            ) : (
+              <ul className="space-y-1">
+                {drill.statuses.map((s) => (
+                  <Row
+                    key={s.label}
+                    s={s}
+                    total={drillTotal || s.count}
+                    showAmountCol={drillShowAmount}
+                  />
+                ))}
+              </ul>
             )}
           </div>
         </div>

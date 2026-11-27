@@ -51,6 +51,8 @@ export type SanitationSnapshot = {
     fusionFa?: Row[]
     /** Page 2 GR Service — PATP ∪ CAC Fully Approved, merged INTINV-005 service lines, MPS service Rp. */
     fusionGr?: Row[]
+    /** Page 2 GR Service Not Sent — reason breakdown (mutually exclusive labels). */
+    fusionGrNotSent?: Row[]
     fatpScope?: Row[]
     patpScope?: Row[]
     /** Page 2 Netgear — optional until snapshot refresh includes them. */

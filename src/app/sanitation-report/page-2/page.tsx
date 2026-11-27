@@ -78,7 +78,7 @@ const FUSION_CARDS: CardDef[] = [
     tone: 'orange',
     excludeNotSent: true,
     showAmounts: true,
-    hint: 'Oracle Fusion INTINV-007 (material). Same universe and status rules as Page 1 Site Transfer. Rp = material-line MPS PO value (qty × latest IDR net price); transfer lines use transferred qty × price.',
+    hint: 'Oracle Fusion INTINV-007. Same rules as Page 1: universe = done exports ∪ PMIS scheduler queue (MOS AF, Current≠Destination, Fusion PO). Not Sent = full scheduler queue (never exported or destination changed). Rp = transfer qty × price (sent) or needy-line PO value (Not Sent).',
   },
   {
     key: 'patpGi',
@@ -94,7 +94,7 @@ const FUSION_CARDS: CardDef[] = [
     tone: 'teal',
     excludeNotSent: true,
     showAmounts: true,
-    hint: 'Oracle Fusion INTINV-005 service files for Fully Approved PATP ∪ CAC system keys (each key once). Service lines from both sources are merged, then rolled up per key (ACK Error > Waiting ACK > ACK Success > Not Sent). Rp = service-line MPS PO value only. Page 1 PATP/CAC mini-funnels stay separate.',
+    hint: 'Oracle Fusion INTINV-005 service files for Fully Approved PATP ∪ CAC system keys (each key once). Service lines from both sources are merged, then rolled up per key (ACK Error > Waiting ACK > ACK Success > Not Sent). Click Not Sent for reason breakdown. Rp = service-line MPS PO value only. Page 1 PATP/CAC mini-funnels stay separate.',
   },
   {
     key: 'fusionFa',
@@ -327,6 +327,17 @@ function Section({
                 showBarAmounts={showRp}
                 showAmountCol={showRp}
                 anomalyPrefix={sentAnomalyPrefix}
+                statusDrilldowns={
+                  c.key === 'fusionGr'
+                    ? {
+                        'Not Sent': {
+                          title: 'GR Service · Not Sent reasons',
+                          statuses: aggregate(snap.modules.fusionGrNotSent ?? [], vendorSet, range).statuses,
+                          emptyHint: 'Awaiting snapshot refresh',
+                        },
+                      }
+                    : undefined
+                }
               />
             </ModuleCard>
           )
